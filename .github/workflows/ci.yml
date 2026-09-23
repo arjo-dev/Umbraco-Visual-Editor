@@ -99,10 +99,17 @@ jobs:
           Umbraco__CMS__Unattended__UnattendedUserPassword="$ADMIN_PASSWORD" \
           TestSite__ApiUser__ClientSecret="$CLIENT_SECRET" \
             nohup dotnet run -c Release --no-build --no-launch-profile > "$RUNNER_TEMP/site.log" 2>&1 &
-          for i in $(seq 1 90); do
-            # Poll the status API, not a page: no page may be rendered (and cached) before the leak check.
-            if curl -sfk "$SITE_URL/umbraco/management/api/v1/server/status" | jq -e '.serverStatus == "Run"' > /dev/null 2>&1; then
-              echo "Site up after ~$((i * 2))s"; exit 0
+          # Poll the API, never a page: no page may be rendered (and cached) before the leak check.
+          # With Hosting:Debug=false, Umbraco runs package migrations (Clean, uSync first boot) in the background after
+          # reporting "Run", so wait until the dev API user exists and the uSync-imported Playground document is there.
+          api="$SITE_URL/umbraco/management/api/v1"
+          for i in $(seq 1 120); do
+            token="$(curl -sfk -X POST "$api/security/back-office/token" \
+              -d grant_type=client_credentials -d client_id=umbraco-back-office-mcp \
+              --data-urlencode "client_secret=$CLIENT_SECRET" 2>/dev/null | jq -r '.access_token // empty' 2>/dev/null || true)"
+            if [ -n "$token" ] && curl -sfk -o /dev/null -H "Authorization: Bearer $token" \
+                "$api/document/5e1d6a3b-7c42-4f0e-9a51-0b3c2d4e5f67"; then
+              echo "Site ready after ~$((i * 2))s"; exit 0
             fi
             sleep 2
           done

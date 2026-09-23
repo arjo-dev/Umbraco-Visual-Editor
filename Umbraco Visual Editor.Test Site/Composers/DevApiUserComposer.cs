@@ -39,6 +39,7 @@ public class DevApiUserOptions
 
 public class EnsureDevApiUserHandler(
     IHostEnvironment hostEnvironment,
+    IHostApplicationLifetime lifetime,
     IRuntimeState runtimeState,
     Microsoft.Extensions.Options.IOptions<DevApiUserOptions> options,
     IUserService userService,
@@ -46,16 +47,60 @@ public class EnsureDevApiUserHandler(
     ILogger<EnsureDevApiUserHandler> logger)
     : INotificationAsyncHandler<UmbracoApplicationStartedNotification>
 {
-    public async Task HandleAsync(UmbracoApplicationStartedNotification notification, CancellationToken cancellationToken)
+    private static readonly TimeSpan Timeout = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(2);
+
+    public Task HandleAsync(UmbracoApplicationStartedNotification notification, CancellationToken cancellationToken)
     {
-        DevApiUserOptions settings = options.Value;
-        if (!hostEnvironment.IsDevelopment()
-            || runtimeState.Level != RuntimeLevel.Run
-            || string.IsNullOrWhiteSpace(settings.ClientSecret))
+        if (!hostEnvironment.IsDevelopment() || string.IsNullOrWhiteSpace(options.Value.ClientSecret))
         {
-            return;
+            return Task.CompletedTask;
         }
 
+        // With Hosting:Debug=false, Umbraco runs unattended package migrations (Clean, uSync first boot) in a background
+        // service *after* the app has started, so the runtime may not be ready yet. Wait for it off the startup path.
+        _ = Task.Run(() => EnsureWhenRunningAsync(lifetime.ApplicationStopping), CancellationToken.None);
+        return Task.CompletedTask;
+    }
+
+    private async Task EnsureWhenRunningAsync(CancellationToken stopping)
+    {
+        DateTime deadline = DateTime.UtcNow + Timeout;
+        while (!stopping.IsCancellationRequested && DateTime.UtcNow < deadline)
+        {
+            if (runtimeState.Level == RuntimeLevel.Run)
+            {
+                try
+                {
+                    await EnsureAsync();
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    // e.g. the database is busy with the background migrations; try again shortly.
+                    logger.LogDebug(ex, "Dev API user not created yet, retrying");
+                }
+            }
+
+            try
+            {
+                await Task.Delay(RetryDelay, stopping);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+        }
+
+        if (!stopping.IsCancellationRequested)
+        {
+            logger.LogWarning("Gave up creating the dev API user after {Timeout}", Timeout);
+        }
+    }
+
+    private async Task EnsureAsync()
+    {
+        DevApiUserOptions settings = options.Value;
         if (await clientCredentialsManager.FindUserAsync(settings.ClientId) is not null)
         {
             return;
@@ -82,7 +127,7 @@ public class EnsureDevApiUserHandler(
             }
         }
 
-        var saved = await clientCredentialsManager.SaveAsync(user.Key, settings.ClientId, settings.ClientSecret);
+        var saved = await clientCredentialsManager.SaveAsync(user.Key, settings.ClientId, settings.ClientSecret!);
         if (saved.Success)
         {
             logger.LogInformation("Created dev API user {Email} with client id {ClientId}", settings.Email, settings.ClientId);
