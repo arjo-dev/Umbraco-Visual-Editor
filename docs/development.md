@@ -67,3 +67,19 @@ The site is the [Clean starter kit](https://github.com/prjseal/Clean-Starter-Kit
 ## Changing the schema or content
 
 uSync writes each item you save in the backoffice to `uSync/v18`. Commit those files along with your change. Run a full export from the uSync dashboard (Settings → uSync) if something is missing.
+
+## CI
+
+[`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs on every pull request and on pushes to `main`. It:
+
+1. Installs, lints, format-checks, type-checks and builds the client.
+2. Builds the solution with `dotnet build` and runs `dotnet test`.
+3. Runs a smoke test: installs the Test Site from scratch, with throwaway credentials, and checks that:
+   - the home page and both playground variants render;
+   - the dev API user can get a token;
+   - the Management API lists the `Arjo.VisualEditor` manifest;
+   - the first boot left the working tree unchanged.
+
+If the smoke test fails, the site log is uploaded as the `test-site-log` artifact.
+
+Client sources are kept LF (see `.gitattributes`), so `npm run format:check` behaves the same on Windows as in CI.

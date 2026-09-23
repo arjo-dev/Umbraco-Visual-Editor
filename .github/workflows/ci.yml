@@ -1,0 +1,132 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  CLIENT_DIR: src/Arjo.VisualEditor/Client
+  SITE_DIR: Umbraco Visual Editor.Test Site
+  SITE_URL: http://localhost:5000
+
+jobs:
+  build:
+    name: Build, lint & test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: ${{ env.CLIENT_DIR }}/package-lock.json
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Packages.props') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      # ---- Client ----
+      - name: Install client dependencies
+        working-directory: ${{ env.CLIENT_DIR }}
+        run: npm ci --no-audit --no-fund
+
+      - name: Lint
+        working-directory: ${{ env.CLIENT_DIR }}
+        run: npm run lint
+
+      - name: Check formatting
+        working-directory: ${{ env.CLIENT_DIR }}
+        run: npm run format:check
+
+      - name: Type-check and build client
+        working-directory: ${{ env.CLIENT_DIR }}
+        run: npm run build
+
+      # ---- .NET ----
+      # The client is already built above, so skip the csproj's npm build.
+      - name: Build solution
+        run: dotnet build "Umbraco Visual Editor.slnx" -c Release -p:SkipClientBuild=true
+
+      - name: Test
+        run: dotnet test "Umbraco Visual Editor.slnx" -c Release --no-build
+
+      # ---- Smoke test: fresh install of the Test Site ----
+      - name: Start Test Site (fresh install)
+        working-directory: ${{ env.SITE_DIR }}
+        run: |
+          # Throwaway credentials for this run only; masked in logs.
+          ADMIN_PASSWORD="$(openssl rand -base64 24)"
+          CLIENT_SECRET="$(openssl rand -base64 24)"
+          echo "::add-mask::$ADMIN_PASSWORD"
+          echo "::add-mask::$CLIENT_SECRET"
+          echo "CLIENT_SECRET=$CLIENT_SECRET" >> "$GITHUB_ENV"
+          ASPNETCORE_ENVIRONMENT=Development \
+          ASPNETCORE_URLS="$SITE_URL" \
+          Umbraco__CMS__Unattended__UnattendedUserPassword="$ADMIN_PASSWORD" \
+          TestSite__ApiUser__ClientSecret="$CLIENT_SECRET" \
+            nohup dotnet run -c Release --no-build --no-launch-profile > "$RUNNER_TEMP/site.log" 2>&1 &
+          for i in $(seq 1 90); do
+            if curl -sf -o /dev/null "$SITE_URL/"; then echo "Site up after ~$((i * 2))s"; exit 0; fi
+            sleep 2
+          done
+          echo "::error::Test Site did not start"; tail -n 100 "$RUNNER_TEMP/site.log"; exit 1
+
+      - name: Smoke test pages and Management API
+        run: |
+          set -euo pipefail
+          check_page() {
+            local html
+            html="$(curl -sf "$SITE_URL$1")" || { echo "::error::$1 did not return 200"; exit 1; }
+            grep -q "$2" <<< "$html" || { echo "::error::$1 is missing '$2'"; exit 1; }
+            echo "✓ $1 contains '$2'"
+          }
+          check_page / '<h1>'
+          check_page /playground/ 'Visual Editor Playground'
+          check_page /playground/ 'data-area-alias="right"'
+          check_page /da/legeplads/ 'Visual Editor Legeplads'
+
+          token="$(curl -sf -X POST "$SITE_URL/umbraco/management/api/v1/security/back-office/token" \
+            -d grant_type=client_credentials -d client_id=umbraco-back-office-mcp \
+            --data-urlencode "client_secret=$CLIENT_SECRET" | jq -r .access_token)"
+          [ -n "$token" ] && [ "$token" != null ] || { echo "::error::Dev API user could not get a token"; exit 1; }
+          echo "✓ dev API user authenticated"
+
+          curl -sf -H "Authorization: Bearer $token" "$SITE_URL/umbraco/management/api/v1/manifest/manifest/private" \
+            | jq -e '.[] | select(.name == "Arjo.VisualEditor")' > /dev/null \
+            || { echo "::error::Arjo.VisualEditor manifest not registered"; exit 1; }
+          echo "✓ Arjo.VisualEditor manifest registered"
+
+      - name: Working tree unchanged by first boot
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            git status --short
+            echo "::error::First boot modified tracked files (uSync export-on-save?)"
+            exit 1
+          fi
+
+      - name: Upload site log
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-site-log
+          path: ${{ runner.temp }}/site.log
+          if-no-files-found: ignore
