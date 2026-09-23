@@ -6,7 +6,7 @@ namespace Arjo.VisualEditor.Rendering;
 /// Wraps a document's draft <see cref="IPublishedContent"/> and replaces selected properties with
 /// <see cref="OverlayPublishedProperty"/> instances built from unsaved editor values.
 /// </summary>
-internal sealed class OverlayPublishedContent : PublishedContentWrapped
+public sealed class OverlayPublishedContent : PublishedContentWrapped
 {
     private readonly Dictionary<string, IPublishedProperty> _overrides;
 
