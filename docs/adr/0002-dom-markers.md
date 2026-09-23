@@ -97,13 +97,13 @@ It emits `<!--uve:p:ID-->` comments in edit mode and nothing on the live site.
 ## Consequences and follow-ups
 
 - **Protocol (#12):** the canvas runtime, not `canvas-debug.js`, sends the resolved targets to the backoffice. Payload per marker: kind, owner key, `ownerIsBlock`, alias and culture, plus rects on request.
-- **#15** should:
-  - fold `BlockKeys` into the session;
-  - turn off partial caching for render sessions;
-  - ship a real canvas script in place of the debug one.
+- **#15: shared caches (done).** Two ways markers could leak to live visitors were found and fixed. Both were reproduced on the Test Site with `Hosting:Debug=false`, and CI now guards against both.
+  - **Published cache.** The first version marked any content with the edited document's key that was created during a render session. If the session was the first request to load the *live* page (e.g. via navigation), HybridCache cached the marked model and served it to everyone. Now only our `OverlayPublishedContent` is marked, and block elements only while our own properties convert values (`MarkingScope`).
+  - **Partial-view cache** (`Html.CachedPartialAsync`). `EditModeRuntimeCache` makes render sessions bypass it, so session output is never stored and live output is never shown in the canvas.
+- **Still to do:** ship a real canvas script in place of the debug one (#17).
 - **#17:** move `markers.ts` into the canvas runtime, and add a `MutationObserver` so markers are re-resolved after DOM patches (#18).
 - **#20 (inline text):** a marker from a text node whose parent contains only that value can be edited in place. If the value was transformed (the text doesn't equal the stored value), fall back to the side panel.
 - **#24:** blocks rendered without partials, using the nearest common ancestor of the block's property markers.
 - **#38 (compatibility):** check the `🟡`/`❌` rows on a second site, and record the limits in the README.
 - **Stega characters and layout:** zero-width characters could in theory affect line breaking before the runtime strips them. No effect seen on the Test Site.
-- **Not verified in this spike:** InMemoryAuto model reloading while the model factory is decorated. The decorator delegates `IAutoPublishedModelFactory` and should be fine, but it's worth checking in #15 by changing a document type while the site is running.
+- **InMemoryAuto: verified in #15.** A property added to the Playground document type appeared on the typed model within seconds, with the model factory decorated.

@@ -75,7 +75,7 @@ jobs:
         run: dotnet build "Umbraco Visual Editor.slnx" -c Release -p:SkipClientBuild=true
 
       - name: Test
-        run: dotnet test "Umbraco Visual Editor.slnx" -c Release --no-build
+        run: dotnet test --solution "Umbraco Visual Editor.slnx" -c Release --no-build
 
       # ---- Smoke test: fresh install of the Test Site ----
       # The backoffice token endpoint (OpenIddict) only accepts HTTPS, so serve the site with a dev certificate.
