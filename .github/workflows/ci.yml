@@ -61,6 +61,14 @@ jobs:
         working-directory: ${{ env.CLIENT_DIR }}
         run: npm run build
 
+      - name: Install Chromium for client unit tests
+        working-directory: ${{ env.CLIENT_DIR }}
+        run: npx playwright install --with-deps chromium
+
+      - name: Client unit tests
+        working-directory: ${{ env.CLIENT_DIR }}
+        run: npm test
+
       # ---- .NET ----
       # The client is already built above, so skip the csproj's npm build.
       - name: Build solution

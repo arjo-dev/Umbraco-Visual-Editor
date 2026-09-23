@@ -5,13 +5,22 @@ import { UMB_PROPERTY_DATASET_CONTEXT } from '@umbraco-cms/backoffice/property';
 import type { UmbElementValueModel } from '@umbraco-cms/backoffice/content';
 import { postRenderSession } from '../api/index.js';
 import { ARJO_VISUAL_MODE_CONTEXT, type ArjoVisualModeContext } from '../visual-mode/visual-mode.context.js';
+import {
+	createHostChannel,
+	createNonce,
+	withNonce,
+	type CanvasMessage,
+	type HostChannel,
+	type TargetRef,
+} from '../protocol/index.js';
 
 const RENDER_DEBOUNCE_MS = 300;
 
 /**
- * Prototype visual mode (spikes #9-#11): a document workspace view that renders the document with its *unsaved*
- * workspace values in an iframe, re-rendering as they change. While it is showing, visual mode is active, which
- * hides the section sidebar/tree (see docs/adr/0003-backoffice-integration.md). The real canvas is #16.
+ * Prototype visual mode (spikes #9-#11, protocol #12): a document workspace view that renders the document with its
+ * *unsaved* workspace values in an iframe, re-rendering as they change. While it is showing, visual mode is active,
+ * which hides the section sidebar/tree (docs/adr/0003-backoffice-integration.md). It talks to the canvas over the
+ * protocol in ../protocol (docs/protocol.md). The real canvas host is #16.
  */
 @customElement('arjo-visual-preview-workspace-view')
 export class ArjoVisualPreviewWorkspaceViewElement extends UmbLitElement {
@@ -19,6 +28,9 @@ export class ArjoVisualPreviewWorkspaceViewElement extends UmbLitElement {
 	@state() private _status: 'idle' | 'rendering' | 'error' = 'idle';
 	@state() private _error?: string;
 	@state() private _lastRenderMs?: number;
+	@state() private _connected = false;
+	@state() private _targetCount?: number;
+	@state() private _selected: TargetRef | null = null;
 
 	#documentKey?: string;
 	#culture: string | null = null;
@@ -27,6 +39,8 @@ export class ArjoVisualPreviewWorkspaceViewElement extends UmbLitElement {
 	#requestId = 0;
 	#restoreScrollY = 0;
 	#visualMode?: ArjoVisualModeContext;
+	readonly #nonce = createNonce();
+	#channel?: HostChannel;
 
 	constructor() {
 		super();
@@ -67,7 +81,39 @@ export class ArjoVisualPreviewWorkspaceViewElement extends UmbLitElement {
 		// Before super: that tears down this element's context consumers and controllers.
 		this.#visualMode?.setActive(false);
 		clearTimeout(this.#timer);
+		this.#channel?.close();
+		this.#channel = undefined;
 		super.disconnectedCallback();
+	}
+
+	override updated() {
+		// The iframe exists once the first render URL arrives; open the channel to it once.
+		const iframe = this.#iframe;
+		if (iframe && !this.#channel) {
+			this.#channel = createHostChannel({
+				iframe,
+				nonce: this.#nonce,
+				onMessage: (message) => this.#onCanvasMessage(message),
+				onConnect: () => {
+					this._connected = true;
+					// A re-render is a fresh page: give it the current selection again.
+					this.#channel?.send({ type: 'setSelection', target: this._selected });
+				},
+				onInvalid: (data) => console.warn('[Arjo.VisualEditor] ignored invalid canvas message', data),
+			});
+		}
+	}
+
+	#onCanvasMessage(message: CanvasMessage) {
+		switch (message.type) {
+			case 'ready':
+				this._targetCount = message.targets.length;
+				break;
+			case 'select':
+				this._selected = message.target;
+				this.#channel?.send({ type: 'setSelection', target: message.target });
+				break;
+		}
 	}
 
 	#scheduleRender() {
@@ -104,7 +150,7 @@ export class ArjoVisualPreviewWorkspaceViewElement extends UmbLitElement {
 		}
 
 		this.#restoreScrollY = this.#iframe?.contentWindow?.scrollY ?? 0;
-		this._url = data.url;
+		this._url = withNonce(data.url, this.#nonce);
 		this._lastRenderMs = Math.round(performance.now() - started);
 	}
 
@@ -118,6 +164,13 @@ export class ArjoVisualPreviewWorkspaceViewElement extends UmbLitElement {
 		this._status = 'idle';
 	}
 
+	#describe(target: TargetRef) {
+		const owner = target.ownerIsBlock ? `block ${target.ownerKey.slice(0, 8)}` : 'page';
+		return target.kind === 'Block'
+			? owner
+			: `${owner} → ${target.alias}${target.culture ? ` (${target.culture})` : ''}`;
+	}
+
 	override render() {
 		return html`
 			<div class="bar">
@@ -125,6 +178,10 @@ export class ArjoVisualPreviewWorkspaceViewElement extends UmbLitElement {
 				${this.#culture ? html`<uui-tag look="outline">${this.#culture}</uui-tag>` : nothing}
 				${this._status === 'rendering' ? html`<uui-loader-circle></uui-loader-circle>` : nothing}
 				${this._lastRenderMs !== undefined ? html`<small>session ${this._lastRenderMs} ms</small>` : nothing}
+				<small
+					>${this._connected ? `canvas connected · ${this._targetCount ?? 0} targets` : 'canvas not connected'}</small
+				>
+				${this._selected ? html`<uui-tag look="primary">Selected: ${this.#describe(this._selected)}</uui-tag>` : nothing}
 				${this._url ? html`<a href=${this._url} target="_blank" rel="noopener">Open in new tab</a>` : nothing}
 			</div>
 			${this._status === 'error' ? html`<uui-box><p class="error">${this._error}</p></uui-box>` : nothing}
@@ -145,6 +202,7 @@ export class ArjoVisualPreviewWorkspaceViewElement extends UmbLitElement {
 		.bar {
 			display: flex;
 			align-items: center;
+			flex-wrap: wrap;
 			gap: var(--uui-size-space-3);
 		}
 

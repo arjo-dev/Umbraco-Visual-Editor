@@ -47,7 +47,11 @@ npm run watch
 
 Pass `-p:SkipClientBuild=true` to `dotnet build`/`dotnet run` so the two builds don't overlap.
 
-Other client scripts: `npm run lint`, `npm run format`, `npm run check` (type-check), and `npm run generate-client` (regenerates the API client from the running site).
+Other client scripts:
+
+- `npm test`: unit tests in headless Chromium. Run `npx playwright install chromium` once first. `npm run test:watch` re-runs them as you edit.
+- `npm run lint`, `npm run format`, and `npm run check` (type-check).
+- `npm run generate-client`: regenerates the API client from the running site.
 
 ## Test content
 
@@ -72,7 +76,7 @@ uSync writes each item you save in the backoffice to `uSync/v18`. Commit those f
 
 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs on every pull request and on pushes to `main`. It:
 
-1. Installs, lints, format-checks, type-checks and builds the client.
+1. Installs, lints, format-checks, type-checks, builds and unit-tests the client.
 2. Builds the solution with `dotnet build` and runs `dotnet test`.
 3. Runs a smoke test: installs the Test Site from scratch, with throwaway credentials, and checks that:
    - the home page and both playground variants render;
