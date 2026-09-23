@@ -1,0 +1,11 @@
+<Project>
+  <!--
+    The Clean package's buildTransitive targets copy its Views and wwwroot assets into this project on every build,
+    overwriting the committed copies (and dirtying the tree on Linux, where the package's CRLF files differ from the
+    LF files in git). The committed files are the source of truth, so turn those copies off. Directory.Build.targets
+    is imported after NuGet package targets, so these empty definitions win.
+    When upgrading Clean, copy its updated Views/wwwroot from the package by hand.
+  -->
+  <Target Name="CopyCleanAssets" />
+  <Target Name="CopyCleanViews" />
+</Project>
