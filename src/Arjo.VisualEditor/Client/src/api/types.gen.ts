@@ -11,6 +11,7 @@ export type RenderSessionRequestModel = {
     culture: null | string;
     segment: null | string;
     values: Array<RenderValueModel>;
+    variants?: null | Array<RenderVariantModel>;
 };
 
 export type RenderSessionResponseModel = {
@@ -23,6 +24,12 @@ export type RenderValueModel = {
     culture: null | string;
     segment: null | string;
     value: JsonElement;
+};
+
+export type RenderVariantModel = {
+    culture: null | string;
+    segment: null | string;
+    name: string;
 };
 
 export type GetPingData = {

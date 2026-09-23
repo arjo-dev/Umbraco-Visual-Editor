@@ -35,6 +35,7 @@ export class ArjoVisualPreviewWorkspaceViewElement extends UmbLitElement {
 	#documentKey?: string;
 	#culture: string | null = null;
 	#values?: Array<UmbElementValueModel>;
+	#variantNames: Array<{ culture: string | null; segment: string | null; name: string }> = [];
 	#timer?: ReturnType<typeof setTimeout>;
 	#requestId = 0;
 	#restoreScrollY = 0;
@@ -66,6 +67,11 @@ export class ArjoVisualPreviewWorkspaceViewElement extends UmbLitElement {
 			});
 			this.observe(workspace.values, (values) => {
 				this.#values = values;
+				this.#scheduleRender();
+			});
+			// Names aren't property values; send them too so unsaved renames show.
+			this.observe(workspace.variants, (variants) => {
+				this.#variantNames = variants.map((v) => ({ culture: v.culture, segment: v.segment, name: v.name }));
 				this.#scheduleRender();
 			});
 		});
@@ -134,6 +140,7 @@ export class ArjoVisualPreviewWorkspaceViewElement extends UmbLitElement {
 				culture: this.#culture,
 				segment: null,
 				values: this.#values.map((v) => ({ alias: v.alias, culture: v.culture, segment: v.segment, value: v.value })),
+				variants: this.#variantNames,
 			},
 		});
 
