@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { GetPingData, GetPingErrors, GetPingResponses } from './types.gen';
+import type { GetPingData, GetPingErrors, GetPingResponses, PostRenderSessionData, PostRenderSessionErrors, PostRenderSessionResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -22,4 +22,14 @@ export const getPing = <ThrowOnError extends boolean = false>(options?: Options<
     security: [{ scheme: 'bearer', type: 'http' }],
     url: '/umbraco/arjovisualeditor/api/v1/ping',
     ...options
+});
+
+export const postRenderSession = <ThrowOnError extends boolean = false>(options: Options<PostRenderSessionData, ThrowOnError>): RequestResult<PostRenderSessionResponses, PostRenderSessionErrors, ThrowOnError> => (options.client ?? client).post<PostRenderSessionResponses, PostRenderSessionErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/umbraco/arjovisualeditor/api/v1/render-session',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
 });
