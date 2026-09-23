@@ -91,16 +91,50 @@ jobs:
           echo "::add-mask::$ADMIN_PASSWORD"
           echo "::add-mask::$CLIENT_SECRET"
           echo "CLIENT_SECRET=$CLIENT_SECRET" >> "$GITHUB_ENV"
+          # Hosting:Debug=false like production: Umbraco only uses its partial-view cache when not debugging,
+          # and the render-session leak check below needs that cache active.
           ASPNETCORE_ENVIRONMENT=Development \
           ASPNETCORE_URLS="$SITE_URL" \
+          Umbraco__CMS__Hosting__Debug=false \
           Umbraco__CMS__Unattended__UnattendedUserPassword="$ADMIN_PASSWORD" \
           TestSite__ApiUser__ClientSecret="$CLIENT_SECRET" \
             nohup dotnet run -c Release --no-build --no-launch-profile > "$RUNNER_TEMP/site.log" 2>&1 &
           for i in $(seq 1 90); do
-            if curl -sfk -o /dev/null "$SITE_URL/"; then echo "Site up after ~$((i * 2))s"; exit 0; fi
+            # Poll the status API, not a page: no page may be rendered (and cached) before the leak check.
+            if curl -sfk "$SITE_URL/umbraco/management/api/v1/server/status" | jq -e '.serverStatus == "Run"' > /dev/null 2>&1; then
+              echo "Site up after ~$((i * 2))s"; exit 0
+            fi
             sleep 2
           done
           echo "::error::Test Site did not start"; tail -n 100 "$RUNNER_TEMP/site.log"; exit 1
+
+      # Runs before any live page is requested: a render session on a cold cache must not leak its markers or
+      # unsaved values into what live visitors get (published model cache, cached partials).
+      - name: Render session does not leak into live pages
+        run: |
+          set -euo pipefail
+          api="$SITE_URL/umbraco/management/api/v1"
+          token="$(curl -sfk -X POST "$api/security/back-office/token" \
+            -d grant_type=client_credentials -d client_id=umbraco-back-office-mcp \
+            --data-urlencode "client_secret=$CLIENT_SECRET" | jq -r .access_token)"
+          doc=5e1d6a3b-7c42-4f0e-9a51-0b3c2d4e5f67 # Visual Editor Playground
+          body="$(curl -sfk -H "Authorization: Bearer $token" "$api/document/$doc" | jq --arg doc "$doc" '{
+            documentKey: $doc, culture: "en-US", segment: null,
+            values: [.values[] | if .alias == "title" and .culture == "en-US" then .value = "LEAKCHECK" else . end]
+          }')"
+          url="$(curl -sfk -X POST -H "Authorization: Bearer $token" -H "Content-Type: application/json" \
+            -d "$body" "$SITE_URL/umbraco/arjovisualeditor/api/v1/render-session" | jq -r .url)"
+          session="$(curl -sfk "$SITE_URL$url")"
+          grep -q 'LEAKCHECK' <<< "$session" || { echo "::error::Render session did not show the unsaved title"; exit 1; }
+          grep -q 'uve:b:' <<< "$session" || { echo "::error::Render session has no block markers"; exit 1; }
+          echo "✓ render session shows unsaved values with markers"
+          for path in /playground/ / /about/; do
+            live="$(curl -sfk "$SITE_URL$path")"
+            if grep -qE 'LEAKCHECK|uve:[pb]:|&#x2063;|uve-markers' <<< "$live"; then
+              echo "::error::$path contains edit-mode markers or unsaved values from a render session"; exit 1
+            fi
+            echo "✓ $path is clean"
+          done
 
       - name: Smoke test pages and Management API
         run: |
