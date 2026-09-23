@@ -16,6 +16,8 @@ dotnet run --launch-profile Umbraco.Web.UI
 
 The site runs at `https://localhost:44394`, and the backoffice is at `/umbraco`. Log in as `admin@example.com` with the password you set above.
 
+The admin password setting is required on **every** start, not just the first. Umbraco validates the unattended settings each time and won't boot if the name and email are set without a password. User secrets persist, so you only set it once.
+
 On first boot, with no database, the site:
 
 1. **Installs Umbraco without prompting**, into SQLite at `umbraco/Data/Umbraco.sqlite.db`. The admin account comes from `appsettings.Development.json` plus your user secret.
@@ -24,6 +26,8 @@ On first boot, with no database, the site:
 4. **Creates the API user** used by the [Umbraco MCP server](mcp.md), if `TestSite:ApiUser:ClientSecret` is set.
 
 To start again from scratch, stop the site and delete `umbraco/Data`.
+
+On that first boot only, uSync's export-on-save is switched off (see `Program.cs`). Otherwise Clean's migration would overwrite the committed uSync files before they're imported. Restart the site once before you edit content that you want exported.
 
 The passwords and secrets above can also be supplied as environment variables, which is what CI uses:
 
