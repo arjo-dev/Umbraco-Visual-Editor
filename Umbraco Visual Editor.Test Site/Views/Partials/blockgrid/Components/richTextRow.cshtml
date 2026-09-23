@@ -1,0 +1,12 @@
+@inherits UmbracoViewPage<BlockGridItem>
+@using Umbraco.Cms.Core.Models.Blocks
+
+@{
+    var row = Model.Content as RichTextRow;
+    var settings = Model.Settings as RichTextRowSettings;
+    if (settings?.Hide ?? false) { return; }
+}
+
+<div class="richtext">
+    @row?.RichContent
+</div>

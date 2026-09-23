@@ -1,0 +1,6 @@
+@inherits UmbracoViewPage<BlockGridItem>
+@using Umbraco.Cms.Core.Models.Blocks
+
+<div class="playground-two-column">
+    @await Html.GetBlockGridItemAreasHtmlAsync(Model)
+</div>

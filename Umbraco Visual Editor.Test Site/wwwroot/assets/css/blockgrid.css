@@ -1,0 +1,28 @@
+/* Minimal Block Grid layout, based on Umbraco's default block grid stylesheet. */
+.umb-block-grid__layout-container,
+.umb-block-grid__area-container {
+	display: grid;
+	grid-template-columns: repeat(var(--umb-block-grid--grid-columns, 12), minmax(0, 1fr));
+	gap: 1.5rem;
+}
+
+.umb-block-grid__area-container {
+	--umb-block-grid--grid-columns: var(--umb-block-grid--area-grid-columns, 12);
+}
+
+.umb-block-grid__layout-item {
+	grid-column-end: span min(var(--umb-block-grid--item-column-span, 12), var(--umb-block-grid--grid-columns, 12));
+	grid-row: span var(--umb-block-grid--item-row-span, 1);
+}
+
+.umb-block-grid__area {
+	grid-column-end: span var(--umb-block-grid--area-column-span, 12);
+	grid-row: span var(--umb-block-grid--area-row-span, 1);
+}
+
+@media (max-width: 768px) {
+	.umb-block-grid__layout-item,
+	.umb-block-grid__area {
+		grid-column-end: span var(--umb-block-grid--grid-columns, 12);
+	}
+}

@@ -1,10 +1,11 @@
-<Project Sdk="Microsoft.NET.Sdk.Web">
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <RootNamespace>Umbraco_Visual_Editor.Test_Site</RootNamespace>
     <CompressionEnabled>false</CompressionEnabled> <!-- Disable compression. E.g. for umbraco backoffice files. These files should be precompressed by node and not let dotnet handle it -->
+    <UserSecretsId>d451c31b-4702-4b38-b666-4043701d9771</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>
