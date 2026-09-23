@@ -14,6 +14,7 @@
       }
     }
   },
+  "enabledMcpjsonServers": ["umbraco"],
   "enabledPlugins": {
     "umbraco-cms-backoffice-skills@umbraco-backoffice-marketplace": true,
     "umbraco-cms-backoffice-testing-skills@umbraco-backoffice-marketplace": true,
