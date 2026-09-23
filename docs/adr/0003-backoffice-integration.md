@@ -14,7 +14,7 @@ Editors switch a document into a visual mode and back. The README says visual mo
 
 ## Decision
 
-1. **The visual editor is a `workspaceView` on `Umb.Workspace.Document`**: a "Visual editor" tab next to Content and Info, at route `…/view/visual-editor`.
+1. **The visual editor is a `workspaceView` on `Umb.Workspace.Document`**: a "Visual editor" tab between Content and Info (weight 150; Content is 200, Info 100), at route `…/view/visual-editor`. Documents still open on Content.
    - Workspace views are rendered by Umbraco inside the document workspace, and inside the variant pane when there's a split view. So the view consumes the **same** `UMB_DOCUMENT_WORKSPACE_CONTEXT`, and the **same** per-variant `UMB_PROPERTY_DATASET_CONTEXT`, as the Content tab. Nothing is copied, so nothing can get out of sync.
    - The workspace header (name, variant selector, tabs) and footer (Save, Save & Publish, Preview, actions) stay, and they're Umbraco's own.
    - **Switching back** means clicking another tab. The route is deep-linkable, and browser Back works.
@@ -45,6 +45,7 @@ Editors switch a document into a visual mode and back. The README says visual mo
 ## Verification
 
 - [x] Builds, lints and type-checks against `@umbraco-cms/backoffice` 18.2.
-- [ ] Visual editor tab: the sidebar hides on entry and returns on leaving (another tab, another document, another section).
+- [x] Visual editor tab: the sidebar hides on entry and returns on leaving. Checked manually in the backoffice.
+  - The first version never brought the sidebar back. The context consumer reports `undefined` as the element disconnects, which cleared the stored context before `disconnectedCallback` could switch visual mode off. Fixed by switching off before `super.disconnectedCallback()` and ignoring `undefined`.
 - [ ] An unsaved edit in Content shows up in Visual editor. After switching back, Content still has it, and Save & Publish saves it.
 - [ ] Culture variant (da-DK) and split view (en-US + da-DK).
