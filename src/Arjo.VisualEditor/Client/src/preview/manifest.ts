@@ -6,8 +6,8 @@ export const manifests: Array<UmbExtensionManifest> = [
 		element: () => import('./visual-preview-workspace-view.element.js'),
 		weight: 500,
 		meta: {
-			label: 'Visual preview',
-			pathname: 'visual-preview',
+			label: 'Visual editor',
+			pathname: 'visual-editor',
 			icon: 'icon-display',
 		},
 		conditions: [

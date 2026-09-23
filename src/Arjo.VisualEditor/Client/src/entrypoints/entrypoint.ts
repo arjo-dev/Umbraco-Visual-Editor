@@ -1,8 +1,11 @@
 import type { UmbEntryPointOnInit, UmbEntryPointOnUnload } from '@umbraco-cms/backoffice/extension-api';
 import { UMB_AUTH_CONTEXT } from '@umbraco-cms/backoffice/auth';
 import { client } from '../api/client.gen.js';
+import { hideSidebarInVisualMode } from '../visual-mode/hide-chrome.js';
 
-export const onInit: UmbEntryPointOnInit = async (host) => {
+export const onInit: UmbEntryPointOnInit = async (host, extensionRegistry) => {
+	hideSidebarInVisualMode(extensionRegistry);
+
 	// Wire the generated API client into the backoffice auth context (base URL, bearer token refresh,
 	// default interceptors). onInit is awaited, so the client is configured before any of our elements use it.
 	const authContext = await host.getContext(UMB_AUTH_CONTEXT);
