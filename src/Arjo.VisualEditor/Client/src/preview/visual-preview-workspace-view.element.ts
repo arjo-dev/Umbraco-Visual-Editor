@@ -32,8 +32,11 @@ export class ArjoVisualPreviewWorkspaceViewElement extends UmbLitElement {
 		super();
 
 		this.consumeContext(ARJO_VISUAL_MODE_CONTEXT, (context) => {
+			// The consumer reports `undefined` as this element disconnects; keep the instance so we can still
+			// switch visual mode off in disconnectedCallback.
+			if (!context) return;
 			this.#visualMode = context;
-			if (this.isConnected) context?.setActive(true);
+			if (this.isConnected) context.setActive(true);
 		});
 
 		this.consumeContext(UMB_PROPERTY_DATASET_CONTEXT, (dataset) => {
@@ -60,10 +63,11 @@ export class ArjoVisualPreviewWorkspaceViewElement extends UmbLitElement {
 	}
 
 	override disconnectedCallback() {
-		super.disconnectedCallback();
-		clearTimeout(this.#timer);
 		// Leaving the view (another tab, another document, another section) restores the normal backoffice.
+		// Before super: that tears down this element's context consumers and controllers.
 		this.#visualMode?.setActive(false);
+		clearTimeout(this.#timer);
+		super.disconnectedCallback();
 	}
 
 	#scheduleRender() {
