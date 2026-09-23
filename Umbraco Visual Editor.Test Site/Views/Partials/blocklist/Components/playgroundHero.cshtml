@@ -1,0 +1,24 @@
+@inherits UmbracoViewPage<BlockListItem>
+@using Umbraco.Cms.Core.Models
+@using Umbraco.Cms.Core.Models.Blocks
+@*
+    Lives in blocklist/Components so it serves both Block List and Single Block: the single block
+    default partial falls back here, and it avoids the singleBlock/singleblock casing mismatch on Linux.
+*@
+@{
+    var headline = Model.Content.Value<string>("headline");
+    var text = Model.Content.Value<string>("text");
+    var image = Model.Content.Value<MediaWithCrops>("image");
+}
+
+<section class="playground-hero my-4 p-4 bg-light rounded">
+    @if (image is not null)
+    {
+        <img src="@image.GetCropUrl(800, 300)" alt="" class="img-fluid rounded mb-3">
+    }
+    <h2>@headline</h2>
+    @if (!string.IsNullOrWhiteSpace(text))
+    {
+        <p class="lead mb-0">@text</p>
+    }
+</section>

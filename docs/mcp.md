@@ -4,15 +4,18 @@ The repo configures the [Umbraco Developer MCP server](https://github.com/umbrac
 
 It authenticates as an Umbraco **API user**, so it can only do what that user's groups allow.
 
-## One-time setup
+## Setup
 
-1. Run the Test Site (`https://localhost:44394`) and log in to the backoffice.
-2. Go to **Users → Create → API User**. Name it `MCP` and add it to the **Administrators** group. This is fine for the local test site. Use a narrower group anywhere else.
-3. Open the user, choose **Add client credentials**, and set:
-   - **Client ID:** `umbraco-back-office-mcp` (Umbraco requires the `umbraco-back-office-` prefix)
-   - **Client secret:** any strong value
-4. Copy `.env.mcp.example` to `.env.mcp` and fill in the client ID and client secret. `.env.mcp` is gitignored.
-5. Restart Claude Code. The `umbraco` server is pre-approved in `.claude/settings.json`.
+1. Set a client secret for the Test Site. In Development, the site creates the API user `mcp@example.com` (in the Administrators group) with client ID `umbraco-back-office-mcp` when it starts:
+   ```bash
+   cd "Umbraco Visual Editor.Test Site"
+   dotnet user-secrets set "TestSite:ApiUser:ClientSecret" "<secret>"
+   ```
+   See [development.md](development.md) for the rest of the first-run setup.
+2. Copy `.env.mcp.example` to `.env.mcp` and set `UMBRACO_CLIENT_SECRET` to the same secret. `.env.mcp` is gitignored.
+3. Run the Test Site, then restart Claude Code. The `umbraco` server is pre-approved in `.claude/settings.json`.
+
+If the site was installed before this setup existed, it creates the user on its next start. You can also add client credentials to any API user yourself: go to Users, open the API user, and choose **Add client credentials**. The client ID must start with `umbraco-back-office-`.
 
 ## Configuration
 

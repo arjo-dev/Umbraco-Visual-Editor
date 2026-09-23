@@ -1,0 +1,36 @@
+﻿@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage
+@using Clean.Core.Models.ViewModels
+@using Umbraco.Cms.Core.Models
+@*
+    Visual Editor test page: exercises every property shape the editor must support
+    (text, rich text, media, single block, block list, block grid with nested areas, culture variants).
+*@
+@{
+    Layout = "master.cshtml";
+}
+
+@await Html.PartialAsync("~/Views/Partials/pageHeader.cshtml",
+    new PageHeaderViewModel(Model.Name, Model.Value<string>("title"), Model.Value<string>("subtitle"), Model.Value<MediaWithCrops>("heroImage")))
+
+<article class="mb-4">
+    <div class="container px-4 px-lg-5">
+        <div class="row gx-4 gx-lg-5 justify-content-center">
+            <div class="col-md-10 col-lg-8 col-xl-7">
+                @await Html.GetBlockHtmlAsync(Model, "hero")
+
+                <div class="richtext">
+                    @Model.Value("body")
+                </div>
+
+                @await Html.GetBlockListHtmlAsync(Model, "blocks")
+            </div>
+        </div>
+        <div class="row gx-4 gx-lg-5 justify-content-center">
+            <div class="col-lg-10">
+                @await Html.GetBlockGridHtmlAsync(Model, "grid")
+            </div>
+        </div>
+    </div>
+</article>
+
+<link href="/assets/css/blockgrid.css" rel="stylesheet" asp-append-version="true" />
