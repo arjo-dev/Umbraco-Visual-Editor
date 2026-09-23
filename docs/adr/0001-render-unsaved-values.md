@@ -64,15 +64,17 @@ The timings are for a local dev machine and a small page. They show the overlay 
 
 ## Consequences and follow-ups
 
-- **Renames are not overlaid (#15).** The page's name, and per-culture names, come from the stored draft, because names aren't properties. `OverlayPublishedContent` should override `Name`/`Cultures` from the workspace's variant names.
-- **Never-saved documents can't render (#15).** A document created in the workspace but not yet saved has no draft to overlay, so the endpoint returns 404. Options: save once before entering visual mode, which is the simplest, or build a synthetic base from the content type.
+- **Renames: done in #15.**
+  - The request takes the workspace's variant names, and `OverlayPublishedContent` overrides `Name` for the current culture, so `Model.Name` shows unsaved renames.
+  - `Cultures` isn't virtual in 18.2, so code reading `Cultures[culture].Name` still sees the stored name.
+- **Never-saved documents can't render.** A document created in the workspace but not yet saved has no draft to overlay, so the endpoint returns 404 and the view asks the editor to save once. #13 should hide or disable the toggle for unsaved documents. A synthetic base built from the content type remains an option if that turns out to be too restrictive.
 - **Token URL is a bearer capability (#34).** The render URL is a normal front-end request with no backoffice auth, so anyone holding the token can view that unsaved snapshot for up to 10 minutes. The token is a random GUID bound to one document and snapshot. Hardening for the security review:
   - `Cache-Control: no-store` and `X-Robots-Tag: noindex` on render responses;
   - binding the session to the creating user (the key is already recorded) via a same-site cookie;
   - shorter expiry.
-- **In-memory store is single-server (#15).** A load-balanced backoffice needs `IDistributedCache` or sticky sessions.
+- **Session store: done in #15.** It uses `IDistributedCache`, registered in-memory by default, so sites that register Redis or SQL Server distributed caching get load-balanced render sessions.
 - **Re-rendering strategy (#18).** Each change posts the full value set, which is simple and stateless. If payloads get large, send only changed properties and merge them over the previous session.
 - **Other nodes render as published.** Navigation, `Children()` and pickers resolve other content from the published cache. That's right for editing one page. Showing *other pages'* drafts would need preview mode for the render request.
-- **Page output caching.** Clean's `CachedPartialAsync` navigation is cached by partial name, so it won't reflect an unsaved rename of this page. `#38` should document caching behaviour for other sites.
+- **Shared caches: done in #15.** Render sessions bypass the partial-view cache (`EditModeRuntimeCache`), so cached partials render fresh with the editor's values and never store session output. See ADR 0002 for the published-cache side.
 - **Delivery API values are not overlaid.** `GetDeliveryApiValue` falls back to the stored value. It isn't used when rendering Razor.
 - **Markers.** How the rendered DOM maps back to properties and blocks is decided separately in #10. The overlay is where edit-mode markers can be injected, because it already controls property values for this request only.

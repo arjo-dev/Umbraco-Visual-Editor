@@ -1,3 +1,4 @@
+using Arjo.VisualEditor.Markers;
 using Umbraco.Cms.Core.Models.PublishedContent;
 using Umbraco.Cms.Core.PropertyEditors;
 using Umbraco.Extensions;
@@ -74,7 +75,9 @@ internal sealed class OverlayPublishedProperty : IPublishedProperty
         var key = Key(culture, segment);
         if (!_objects.TryGetValue(key, out var value))
         {
-            value = PropertyType.ConvertInterToObject(_owner, PropertyCacheLevel.None, GetInter(key, source), preview: true);
+            // Inside the marking scope: blocks created by this conversion belong to the canvas (see MarkingScope).
+            value = MarkingScope.Run(() =>
+                PropertyType.ConvertInterToObject(_owner, PropertyCacheLevel.None, GetInter(key, source), preview: true));
             _objects[key] = value;
         }
 
@@ -85,7 +88,7 @@ internal sealed class OverlayPublishedProperty : IPublishedProperty
     {
         if (!_inters.TryGetValue(key, out var inter))
         {
-            inter = PropertyType.ConvertSourceToInter(_owner, source, preview: true);
+            inter = MarkingScope.Run(() => PropertyType.ConvertSourceToInter(_owner, source, preview: true));
             _inters[key] = inter;
         }
 

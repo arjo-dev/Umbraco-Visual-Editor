@@ -14,6 +14,10 @@
     <PackageTags>umbraco;umbraco-marketplace;visual-editor</PackageTags>
   </PropertyGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Arjo.VisualEditor.Tests" />
+  </ItemGroup>
+
   <!-- Central package management - no versions -->
   <ItemGroup>
     <PackageReference Include="Umbraco.Cms.Api.Common" />

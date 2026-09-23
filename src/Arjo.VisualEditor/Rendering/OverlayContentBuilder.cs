@@ -46,7 +46,8 @@ public sealed class OverlayContentBuilder(
         }
 
         // Re-apply the ModelsBuilder model so strongly typed views (UmbracoViewPage<Home>) still bind.
-        return (IPublishedContent)modelFactory.CreateModel(new OverlayPublishedContent(draft, overrides));
+        var overlay = new OverlayPublishedContent(draft, overrides, session.Variants ?? [], variationContextAccessor);
+        return (IPublishedContent)modelFactory.CreateModel(overlay);
     }
 
     /// <summary>

@@ -1,12 +1,16 @@
+using Arjo.VisualEditor.Rendering;
 using Microsoft.AspNetCore.Http;
 using Umbraco.Cms.Core.Models.PublishedContent;
 
 namespace Arjo.VisualEditor.Markers;
 
 /// <summary>
-/// Decorates the site's <see cref="IPublishedModelFactory"/>. During edit-mode requests only, the edited document
-/// and each of its block elements (block converters create elements through this factory) are wrapped so their properties
-/// emit markers, before the site's own ModelsBuilder model is applied on top.
+/// Decorates the site's <see cref="IPublishedModelFactory"/>. During edit-mode requests only, the edited document's
+/// overlay (<see cref="OverlayPublishedContent"/>) and the block elements converted from its values (block converters
+/// create elements through this factory) are wrapped so their properties emit markers, before the site's own
+/// ModelsBuilder model is applied on top.
+/// Anything else created during the request is left alone, in particular models Umbraco builds for its shared
+/// published cache (e.g. the live page, loaded by navigation): marking those would leak markers to live visitors.
 /// Implements <see cref="IAutoPublishedModelFactory"/> by delegation so InMemoryAuto model reloading keeps working.
 /// </summary>
 internal sealed class MarkingPublishedModelFactory(
@@ -21,16 +25,16 @@ internal sealed class MarkingPublishedModelFactory(
         EditModeRequest? editMode = EditModeRequest.Get(httpContextAccessor.HttpContext);
         if (editMode is not null && element is not MarkedPublishedContent and not MarkedPublishedElement)
         {
-            if (element is IPublishedContent content)
+            if (element is OverlayPublishedContent overlay)
             {
-                // Only the edited document; other pages (navigation, pickers) render unmarked.
-                if (content.Key == editMode.Session.DocumentKey)
-                {
-                    element = new MarkedPublishedContent(content, editMode.Markers, variationContextAccessor);
-                }
+                // Only our in-memory overlay of the edited document, never a cached published instance of it.
+                element = new MarkedPublishedContent(overlay, editMode.Markers, variationContextAccessor);
             }
-            else if (editMode.BlockKeys.Contains(element.Key))
+            else if (element is not IPublishedContent
+                && MarkingScope.IsActive
+                && editMode.BlockKeys.Contains(element.Key))
             {
+                // A block converted from the overlay's (or a marked block's) values during this request.
                 element = new MarkedPublishedElement(element, editMode.Markers, variationContextAccessor);
             }
         }

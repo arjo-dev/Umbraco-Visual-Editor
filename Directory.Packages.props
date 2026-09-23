@@ -22,6 +22,11 @@
     <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.11" />
   </ItemGroup>
 
+  <!-- Tests (tests/) -->
+  <ItemGroup>
+    <PackageVersion Include="xunit.v3" Version="4.0.1" />
+  </ItemGroup>
+
   <!-- Test Site -->
   <ItemGroup>
     <PackageVersion Include="Umbraco.Cms" Version="$(UmbracoVersion)" />

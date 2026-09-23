@@ -47,6 +47,8 @@ npm run watch
 
 Pass `-p:SkipClientBuild=true` to `dotnet build`/`dotnet run` so the two builds don't overlap.
 
+.NET tests live in `tests/` (xUnit v3). Run them with `dotnet test --solution "Umbraco Visual Editor.slnx"`. `global.json` opts `dotnet test` into Microsoft.Testing.Platform, which xUnit v3 needs on the .NET 10 SDK.
+
 Other client scripts:
 
 - `npm test`: unit tests in headless Chromium. Run `npx playwright install chromium` once first. `npm run test:watch` re-runs them as you edit.
@@ -77,8 +79,9 @@ uSync writes each item you save in the backoffice to `uSync/v18`. Commit those f
 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs on every pull request and on pushes to `main`. It:
 
 1. Installs, lints, format-checks, type-checks, builds and unit-tests the client.
-2. Builds the solution with `dotnet build` and runs `dotnet test`.
-3. Runs a smoke test: installs the Test Site from scratch, with throwaway credentials, and checks that:
+2. Builds the solution with `dotnet build` and runs the .NET tests.
+3. Runs a smoke test: installs the Test Site from scratch, with throwaway credentials and `Hosting:Debug=false` like production, and checks that:
+   - a render session, done before any page is visited, leaks no markers or unsaved values into live pages;
    - the home page and both playground variants render;
    - the dev API user can get a token;
    - the Management API lists the `Arjo.VisualEditor` manifest;

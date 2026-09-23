@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Umbraco.Cms.Core.Cache;
 using Umbraco.Cms.Core.Composing;
 using Umbraco.Cms.Core.DependencyInjection;
 using Umbraco.Cms.Core.Models.PublishedContent;
@@ -25,6 +26,32 @@ public class MarkersComposer : IComposer
             }));
 
         DecorateModelFactory(builder.Services);
+        DecorateAppCaches(builder.Services);
+    }
+
+    // Render sessions must never read or fill the shared partial view cache (see EditModeRuntimeCache).
+    private static void DecorateAppCaches(IServiceCollection services)
+    {
+        ServiceDescriptor? existing = services.LastOrDefault(d => d.ServiceType == typeof(AppCaches));
+        if (existing is null)
+        {
+            return;
+        }
+
+        services.Remove(existing);
+        services.Add(new ServiceDescriptor(
+            typeof(AppCaches),
+            sp =>
+            {
+                var inner = (AppCaches)(existing.ImplementationInstance
+                    ?? existing.ImplementationFactory?.Invoke(sp)
+                    ?? ActivatorUtilities.CreateInstance(sp, existing.ImplementationType!));
+                return new AppCaches(
+                    new EditModeRuntimeCache(inner.RuntimeCache, sp.GetRequiredService<IHttpContextAccessor>()),
+                    inner.RequestCache,
+                    inner.IsolatedCaches);
+            },
+            existing.Lifetime));
     }
 
     // Wrap whichever IPublishedModelFactory is registered (ModelsBuilder's, or InMemoryAuto's in development).

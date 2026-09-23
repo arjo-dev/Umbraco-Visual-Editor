@@ -9,7 +9,9 @@ public class RenderingComposer : IComposer
 {
     public void Compose(IUmbracoBuilder builder)
     {
-        builder.Services.AddMemoryCache();
+        // Default in-memory store; a site that registers its own IDistributedCache (Redis, SQL Server, ...) gets
+        // load-balanced render sessions for free.
+        builder.Services.AddDistributedMemoryCache();
         builder.Services.AddSingleton<RenderSessionStore>();
         builder.Services.AddSingleton<OverlayContentBuilder>();
 

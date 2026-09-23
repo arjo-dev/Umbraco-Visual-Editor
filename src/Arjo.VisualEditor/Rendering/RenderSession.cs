@@ -1,10 +1,13 @@
 using System.Text.Json;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Distributed;
 
 namespace Arjo.VisualEditor.Rendering;
 
 /// <summary>An editor-format property value, as the backoffice document workspace holds it.</summary>
 public sealed record RenderValue(string Alias, string? Culture, string? Segment, JsonElement Value);
+
+/// <summary>The (possibly unsaved) name of one variant of the document.</summary>
+public sealed record RenderVariantName(string? Culture, string? Segment, string Name);
 
 /// <summary>A snapshot of unsaved workspace values to render, addressed by an unguessable token.</summary>
 public sealed record RenderSession(
@@ -13,28 +16,49 @@ public sealed record RenderSession(
     string? Culture,
     string? Segment,
     IReadOnlyList<RenderValue> Values,
+    IReadOnlyList<RenderVariantName> Variants,
     Guid UserKey);
 
-/// <summary>Short-lived, in-memory store of render sessions.</summary>
-public sealed class RenderSessionStore(IMemoryCache cache)
+/// <summary>
+/// Short-lived store of render sessions. Uses <see cref="IDistributedCache"/> so load-balanced backoffices work
+/// with whatever distributed cache the site registers (Redis, SQL Server, ...); the default is in-memory.
+/// </summary>
+public sealed class RenderSessionStore(IDistributedCache cache)
 {
     private static readonly TimeSpan Lifetime = TimeSpan.FromMinutes(10);
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
-    public RenderSession Create(Guid documentKey, string? culture, string? segment, IEnumerable<RenderValue> values, Guid userKey)
+    public async Task<RenderSession> CreateAsync(
+        Guid documentKey,
+        string? culture,
+        string? segment,
+        IEnumerable<RenderValue> values,
+        IEnumerable<RenderVariantName> variants,
+        Guid userKey,
+        CancellationToken cancellationToken = default)
     {
-        // Clone JSON so it outlives the request body it was parsed from.
         var session = new RenderSession(
             Guid.NewGuid(),
             documentKey,
             culture,
             segment,
-            values.Select(v => v with { Value = v.Value.Clone() }).ToList(),
+            values.ToList(),
+            variants.ToList(),
             userKey);
-        cache.Set(Key(session.Token), session, new MemoryCacheEntryOptions { SlidingExpiration = Lifetime });
+
+        await cache.SetAsync(
+            Key(session.Token),
+            JsonSerializer.SerializeToUtf8Bytes(session, JsonOptions),
+            new DistributedCacheEntryOptions { SlidingExpiration = Lifetime },
+            cancellationToken);
         return session;
     }
 
-    public RenderSession? Get(Guid token) => cache.TryGetValue(Key(token), out RenderSession? s) ? s : null;
+    public async Task<RenderSession?> GetAsync(Guid token, CancellationToken cancellationToken = default)
+    {
+        var bytes = await cache.GetAsync(Key(token), cancellationToken);
+        return bytes is null ? null : JsonSerializer.Deserialize<RenderSession>(bytes, JsonOptions);
+    }
 
     private static string Key(Guid token) => $"Arjo.VisualEditor.RenderSession.{token:N}";
 }

@@ -37,7 +37,11 @@ internal sealed class MarkedProperty(
 
     public object? GetValue(string? culture = null, string? segment = null)
     {
-        var value = inner.GetValue(culture, segment);
+        // Our overlay values, and blocks we created, convert inside the marking scope so their nested blocks are marked.
+        // A page property not overlaid is the cached draft: converting it must not mark (and so pollute) shared caches.
+        var value = inner is Rendering.OverlayPublishedProperty || ownerIsBlock
+            ? MarkingScope.Run(() => inner.GetValue(culture, segment))
+            : inner.GetValue(culture, segment);
         switch (value)
         {
             case string text when text.Length > 0 && TextEditors.Contains(PropertyType.EditorAlias):
