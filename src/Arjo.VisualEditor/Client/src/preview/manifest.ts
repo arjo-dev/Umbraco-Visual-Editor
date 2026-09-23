@@ -4,10 +4,11 @@ export const manifests: Array<UmbExtensionManifest> = [
 		alias: 'Arjo.VisualEditor.WorkspaceView.Preview',
 		name: 'Arjo Visual Editor Preview Workspace View',
 		element: () => import('./visual-preview-workspace-view.element.js'),
-		weight: 500,
+		// After Content (200), before Info (100): documents still open on Content.
+		weight: 150,
 		meta: {
-			label: 'Visual preview',
-			pathname: 'visual-preview',
+			label: 'Visual editor',
+			pathname: 'visual-editor',
 			icon: 'icon-display',
 		},
 		conditions: [

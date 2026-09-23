@@ -4,12 +4,14 @@ import { UMB_DOCUMENT_WORKSPACE_CONTEXT } from '@umbraco-cms/backoffice/document
 import { UMB_PROPERTY_DATASET_CONTEXT } from '@umbraco-cms/backoffice/property';
 import type { UmbElementValueModel } from '@umbraco-cms/backoffice/content';
 import { postRenderSession } from '../api/index.js';
+import { ARJO_VISUAL_MODE_CONTEXT, type ArjoVisualModeContext } from '../visual-mode/visual-mode.context.js';
 
 const RENDER_DEBOUNCE_MS = 300;
 
 /**
- * Development harness for spike #9: renders the document with its *unsaved* workspace values in an iframe and
- * re-renders as they change. The real canvas (#16) and toggle (#13) replace this.
+ * Prototype visual mode (spikes #9-#11): a document workspace view that renders the document with its *unsaved*
+ * workspace values in an iframe, re-rendering as they change. While it is showing, visual mode is active, which
+ * hides the section sidebar/tree (see docs/adr/0003-backoffice-integration.md). The real canvas is #16.
  */
 @customElement('arjo-visual-preview-workspace-view')
 export class ArjoVisualPreviewWorkspaceViewElement extends UmbLitElement {
@@ -24,9 +26,18 @@ export class ArjoVisualPreviewWorkspaceViewElement extends UmbLitElement {
 	#timer?: ReturnType<typeof setTimeout>;
 	#requestId = 0;
 	#restoreScrollY = 0;
+	#visualMode?: ArjoVisualModeContext;
 
 	constructor() {
 		super();
+
+		this.consumeContext(ARJO_VISUAL_MODE_CONTEXT, (context) => {
+			// The consumer reports `undefined` as this element disconnects; keep the instance so we can still
+			// switch visual mode off in disconnectedCallback.
+			if (!context) return;
+			this.#visualMode = context;
+			if (this.isConnected) context.setActive(true);
+		});
 
 		this.consumeContext(UMB_PROPERTY_DATASET_CONTEXT, (dataset) => {
 			this.#culture = dataset?.getVariantId().culture ?? null;
@@ -46,9 +57,17 @@ export class ArjoVisualPreviewWorkspaceViewElement extends UmbLitElement {
 		});
 	}
 
+	override connectedCallback() {
+		super.connectedCallback();
+		this.#visualMode?.setActive(true);
+	}
+
 	override disconnectedCallback() {
-		super.disconnectedCallback();
+		// Leaving the view (another tab, another document, another section) restores the normal backoffice.
+		// Before super: that tears down this element's context consumers and controllers.
+		this.#visualMode?.setActive(false);
 		clearTimeout(this.#timer);
+		super.disconnectedCallback();
 	}
 
 	#scheduleRender() {
@@ -102,7 +121,7 @@ export class ArjoVisualPreviewWorkspaceViewElement extends UmbLitElement {
 	override render() {
 		return html`
 			<div class="bar">
-				<uui-tag look="secondary">Spike #9 preview · unsaved values</uui-tag>
+				<uui-tag look="secondary">Visual editor prototype · unsaved values</uui-tag>
 				${this.#culture ? html`<uui-tag look="outline">${this.#culture}</uui-tag>` : nothing}
 				${this._status === 'rendering' ? html`<uui-loader-circle></uui-loader-circle>` : nothing}
 				${this._lastRenderMs !== undefined ? html`<small>session ${this._lastRenderMs} ms</small>` : nothing}
