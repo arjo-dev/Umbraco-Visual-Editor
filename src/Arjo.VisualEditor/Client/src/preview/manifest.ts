@@ -1,5 +1,5 @@
 import { ARJO_VISUAL_EDITOR_AVAILABLE_CONDITION_ALIAS } from '../visual-mode/constants.js';
-import { VISUAL_EDITOR_VIEW_PATHNAME } from '../visual-mode/preference.js';
+import { VISUAL_EDITOR_VIEW_PATHNAME } from '../visual-mode/routes.js';
 
 export const manifests: Array<UmbExtensionManifest> = [
 	{
@@ -19,7 +19,7 @@ export const manifests: Array<UmbExtensionManifest> = [
 				alias: 'Umb.Condition.WorkspaceAlias',
 				match: 'Umb.Workspace.Document',
 			},
-			// Hidden for documents that can't render yet: never saved, or no template.
+			// Hidden for documents without a template (nothing to render); unsaved documents get a message instead.
 			{ alias: ARJO_VISUAL_EDITOR_AVAILABLE_CONDITION_ALIAS },
 		],
 	},

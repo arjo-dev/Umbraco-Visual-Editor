@@ -20,11 +20,4 @@ export const manifests: Array<UmbExtensionManifest> = [
 		name: 'Arjo Visual Editor Available Condition',
 		api: () => import('./visual-editor-available.condition.js'),
 	},
-	{
-		type: 'workspaceContext',
-		alias: 'Arjo.VisualEditor.WorkspaceContext.OpenPreferredMode',
-		name: 'Arjo Visual Editor Open Preferred Mode Workspace Context',
-		api: () => import('./open-preferred-mode.workspace-context.js'),
-		conditions: [{ alias: 'Umb.Condition.WorkspaceAlias', match: 'Umb.Workspace.Document' }],
-	},
 ];
