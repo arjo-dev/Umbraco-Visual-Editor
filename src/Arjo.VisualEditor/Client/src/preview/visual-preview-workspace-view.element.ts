@@ -5,6 +5,8 @@ import { UMB_PROPERTY_DATASET_CONTEXT } from '@umbraco-cms/backoffice/property';
 import type { UmbElementValueModel } from '@umbraco-cms/backoffice/content';
 import { postRenderSession } from '../api/index.js';
 import { ARJO_VISUAL_MODE_CONTEXT, type ArjoVisualModeContext } from '../visual-mode/visual-mode.context.js';
+import { UMB_CURRENT_USER_CONTEXT } from '@umbraco-cms/backoffice/current-user';
+import { setPreferredMode, VISUAL_EDITOR_VIEW_PATHNAME, viewInPath } from '../visual-mode/preference.js';
 import {
 	createHostChannel,
 	createNonce,
@@ -42,6 +44,9 @@ export class ArjoVisualPreviewWorkspaceViewElement extends UmbLitElement {
 	#visualMode?: ArjoVisualModeContext;
 	readonly #nonce = createNonce();
 	#channel?: HostChannel;
+	#userKey?: string;
+	/** The document URL this view was opened on, to tell "switched tab" from "left the document". */
+	#documentBase?: string;
 
 	constructor() {
 		super();
@@ -52,6 +57,13 @@ export class ArjoVisualPreviewWorkspaceViewElement extends UmbLitElement {
 			if (!context) return;
 			this.#visualMode = context;
 			if (this.isConnected) context.setActive(true);
+		});
+
+		this.consumeContext(UMB_CURRENT_USER_CONTEXT, (currentUser) => {
+			this.observe(currentUser?.unique, (unique) => {
+				this.#userKey = unique ?? undefined;
+				if (this.isConnected) setPreferredMode(this.#userKey, 'visual');
+			});
 		});
 
 		this.consumeContext(UMB_PROPERTY_DATASET_CONTEXT, (dataset) => {
@@ -80,12 +92,21 @@ export class ArjoVisualPreviewWorkspaceViewElement extends UmbLitElement {
 	override connectedCallback() {
 		super.connectedCallback();
 		this.#visualMode?.setActive(true);
+		this.#documentBase = viewInPath(location.pathname)?.base;
+		// Opening visual mode makes it this user's preference (#13).
+		setPreferredMode(this.#userKey, 'visual');
 	}
 
 	override disconnectedCallback() {
 		// Leaving the view (another tab, another document, another section) restores the normal backoffice.
 		// Before super: that tears down this element's context consumers and controllers.
 		this.#visualMode?.setActive(false);
+		// Switching to another tab of the same document means the user chose the standard editor. Leaving the document
+		// or the section says nothing about their preference.
+		const now = viewInPath(location.pathname);
+		if (now && now.base === this.#documentBase && now.view && now.view !== VISUAL_EDITOR_VIEW_PATHNAME) {
+			setPreferredMode(this.#userKey, 'content');
+		}
 		clearTimeout(this.#timer);
 		this.#channel?.close();
 		this.#channel = undefined;
@@ -181,6 +202,14 @@ export class ArjoVisualPreviewWorkspaceViewElement extends UmbLitElement {
 	override render() {
 		return html`
 			<div class="bar">
+				<uui-button
+					look="outline"
+					compact
+					label="Standard editor"
+					href=${this.#documentBase ? `${this.#documentBase}/view/content` : nothing}
+				>
+					<uui-icon name="icon-arrow-left"></uui-icon> Standard editor
+				</uui-button>
 				<uui-tag look="secondary">Visual editor prototype · unsaved values</uui-tag>
 				${this.#culture ? html`<uui-tag look="outline">${this.#culture}</uui-tag>` : nothing}
 				${this._status === 'rendering' ? html`<uui-loader-circle></uui-loader-circle>` : nothing}
