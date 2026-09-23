@@ -1,0 +1,33 @@
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageFloatingVersionsEnabled>true</CentralPackageFloatingVersionsEnabled>
+    <!-- Single source of truth for the Umbraco version used by the extension and the Test Site. -->
+    <UmbracoVersion>18.2.0</UmbracoVersion>
+    <!--
+      Default must match UmbracoAppLocalIcuVersion in the Test Site csproj. Defined here too because this file
+      is imported before the main project's own PropertyGroup runs, so under CPM the PackageVersion below needs
+      its own fallback to stay in sync with the RuntimeHostConfigurationOption value set from the same property.
+    -->
+    <UmbracoAppLocalIcuVersion Condition="'$(UmbracoAppLocalIcuVersion)' == ''">72.1.0.3</UmbracoAppLocalIcuVersion>
+  </PropertyGroup>
+
+  <!-- Extension (src/Arjo.VisualEditor) -->
+  <ItemGroup>
+    <PackageVersion Include="Umbraco.Cms.Api.Common" Version="$(UmbracoVersion)" />
+    <PackageVersion Include="Umbraco.Cms.Api.Management" Version="$(UmbracoVersion)" />
+    <PackageVersion Include="Umbraco.Cms.Web.Common" Version="$(UmbracoVersion)" />
+    <PackageVersion Include="Umbraco.Cms.Web.Website" Version="$(UmbracoVersion)" />
+    <!-- See the comment in Arjo.VisualEditor.csproj for why this is referenced directly. -->
+    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.11" />
+  </ItemGroup>
+
+  <!-- Test Site -->
+  <ItemGroup>
+    <PackageVersion Include="Umbraco.Cms" Version="$(UmbracoVersion)" />
+    <PackageVersion Include="Umbraco.Cms.DevelopmentMode.Backoffice" Version="$(UmbracoVersion)" />
+    <PackageVersion Include="Clean" Version="8.0.1" />
+    <PackageVersion Include="uSync" Version="18.1.4" />
+    <PackageVersion Include="Microsoft.ICU.ICU4C.Runtime" Version="$(UmbracoAppLocalIcuVersion)" />
+  </ItemGroup>
+</Project>

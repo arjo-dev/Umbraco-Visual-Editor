@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "umbraco": {
+      "type": "stdio",
+      "command": "cmd",
+      "args": ["/c", "npx", "-y", "@umbraco-cms/mcp-dev@18", "--env", ".env.mcp"],
+      "env": {
+        "UMBRACO_BASE_URL": "https://localhost:44394",
+        "NODE_TLS_REJECT_UNAUTHORIZED": "0",
+        "UMBRACO_TOOL_MODES": "content,content-modeling,front-end,media,translation,system,health"
+      }
+    }
+  }
+}
