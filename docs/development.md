@@ -83,3 +83,7 @@ uSync writes each item you save in the backoffice to `uSync/v18`. Commit those f
 If the smoke test fails, the site log is uploaded as the `test-site-log` artifact.
 
 Client sources are kept LF (see `.gitattributes`), so `npm run format:check` behaves the same on Windows as in CI.
+
+## Upgrading Clean
+
+The Clean package normally copies its views and `wwwroot` assets into the site on every build. The Test Site's `Directory.Build.targets` turns that off, so the committed copies stay the source of truth. When you upgrade Clean, copy any updated files from the package (`~/.nuget/packages/clean/<version>/Views` and `/wwwroot`) by hand, then review the diff.
