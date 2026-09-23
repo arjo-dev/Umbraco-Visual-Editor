@@ -1,0 +1,14 @@
+{
+	"id": "Arjo.VisualEditor",
+	"name": "Arjo.VisualEditor",
+	"version": "0.0.0",
+	"allowTelemetry": true,
+	"extensions": [
+		{
+			"name": "Arjo Visual Editor Bundle",
+			"alias": "Arjo.VisualEditor.Bundle",
+			"type": "bundle",
+			"js": "/App_Plugins/ArjoVisualEditor/arjo-visual-editor.js"
+		}
+	]
+}

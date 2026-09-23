@@ -1,0 +1,81 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <StaticWebAssetBasePath>/</StaticWebAssetBasePath>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <PackageId>Arjo.VisualEditor</PackageId>
+    <Product>Arjo.VisualEditor</Product>
+    <Title>Arjo Visual Editor</Title>
+    <Description>A visual, drag-and-drop editing experience for Umbraco content that renders the real front end.</Description>
+    <PackageTags>umbraco;umbraco-marketplace;visual-editor</PackageTags>
+  </PropertyGroup>
+
+  <!-- Central package management - no versions -->
+  <ItemGroup>
+    <PackageReference Include="Umbraco.Cms.Api.Common" />
+    <PackageReference Include="Umbraco.Cms.Api.Management" />
+    <PackageReference Include="Umbraco.Cms.Web.Common" />
+    <PackageReference Include="Umbraco.Cms.Web.Website" />
+
+    <!--
+      Microsoft.AspNetCore.OpenApi is available transitively from the Umbraco packages above, but we
+      take a direct dependency here because extension code directly uses types from this package
+      (IOpenApiDocumentTransformer, IOpenApiOperationTransformer, etc.) and from Microsoft.OpenApi
+      (OpenApiInfo). Without a direct reference, this project's Microsoft.AspNetCore.OpenApi version
+      is determined solely by NuGet's transitive resolution, which can resolve to a different version
+      than the host site project (e.g. a newer patch). When that happens, the different
+      Microsoft.OpenApi versions can conflict at runtime, causing custom OpenAPI documents registered
+      by the extension to fail to appear.
+    -->
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Don't include the client folder as part of packaging nuget build -->
+    <Content Remove="Client\**" />
+    <None Remove="Client\node_modules\**" />
+
+    <!-- However make the Umbraco-package.json included for dotnet pack or nuget package and visible to the solution -->
+    <None Include="Client\public\umbraco-package.json" Pack="false" />
+  </ItemGroup>
+
+  <!--
+    Client build: `dotnet build` restores npm packages and runs `npm run build` (tsc + vite) when client
+    sources change, emitting into wwwroot/App_Plugins/ArjoVisualEditor. Pass -p:SkipClientBuild=true to skip
+    (e.g. when running `npm run watch` yourself).
+  -->
+  <PropertyGroup>
+    <SkipClientBuild Condition="'$(SkipClientBuild)' == ''">false</SkipClientBuild>
+    <ClientDir>$(MSBuildProjectDirectory)\Client\</ClientDir>
+    <ClientOutputDir>wwwroot\App_Plugins\ArjoVisualEditor\</ClientOutputDir>
+    <ClientBuildStamp>$(BaseIntermediateOutputPath)client-build.stamp</ClientBuildStamp>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ClientRestoreInputs Include="Client\package.json;Client\package-lock.json" />
+    <ClientBuildInputs Include="Client\src\**\*;Client\public\**\*;Client\package.json;Client\package-lock.json;Client\tsconfig.json;Client\vite.config.ts" />
+  </ItemGroup>
+
+  <Target Name="RestoreClient" Condition="'$(SkipClientBuild)' != 'true'" Inputs="@(ClientRestoreInputs)" Outputs="$(ClientDir)node_modules\.package-lock.json">
+    <Exec Command="npm ci --no-audit --no-fund" WorkingDirectory="$(ClientDir)" />
+  </Target>
+
+  <Target Name="BuildClient" Condition="'$(SkipClientBuild)' != 'true'" DependsOnTargets="RestoreClient" BeforeTargets="AssignTargetPaths" Inputs="@(ClientBuildInputs)" Outputs="$(ClientBuildStamp)">
+    <Exec Command="npm run build" WorkingDirectory="$(ClientDir)" />
+    <Touch Files="$(ClientBuildStamp)" AlwaysCreate="true" />
+  </Target>
+
+  <!-- Files created during the build weren't there when wwwroot was globbed at evaluation time, so add them now. -->
+  <Target Name="IncludeClientOutput" AfterTargets="BuildClient" BeforeTargets="AssignTargetPaths">
+    <ItemGroup>
+      <_ClientOutputFiles Include="$(ClientOutputDir)**\*" />
+      <Content Remove="@(_ClientOutputFiles)" />
+      <Content Include="@(_ClientOutputFiles)" />
+    </ItemGroup>
+  </Target>
+
+</Project>

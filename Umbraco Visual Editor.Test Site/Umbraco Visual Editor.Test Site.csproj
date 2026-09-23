@@ -47,6 +47,10 @@
     <Content Update="appsettings.Local.json" CopyToPublishDirectory="Never" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\src\Arjo.VisualEditor\Arjo.VisualEditor.csproj" />
+  </ItemGroup>
+
   <PropertyGroup>
     <!-- Remove RazorCompileOnBuild and RazorCompileOnPublish when not using ModelsMode InMemoryAuto -->
     <RazorCompileOnBuild>false</RazorCompileOnBuild>

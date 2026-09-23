@@ -1,0 +1,22 @@
+{
+  "extraKnownMarketplaces": {
+    "umbraco-backoffice-marketplace": {
+      "source": {
+        "source": "git",
+        "url": "https://github.com/umbraco/Umbraco-CMS-Backoffice-Skills.git",
+        "ref": "main"
+      }
+    },
+    "claude-plugins-official": {
+      "source": {
+        "source": "github",
+        "repo": "anthropics/claude-plugins-official"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "umbraco-cms-backoffice-skills@umbraco-backoffice-marketplace": true,
+    "umbraco-cms-backoffice-testing-skills@umbraco-backoffice-marketplace": true,
+    "frontend-design@claude-plugins-official": true
+  }
+}
