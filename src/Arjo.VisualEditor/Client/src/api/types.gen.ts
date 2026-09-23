@@ -4,6 +4,27 @@ export type ClientOptions = {
     baseUrl: 'https://localhost:44394/' | (string & {});
 };
 
+export type JsonElement = unknown;
+
+export type RenderSessionRequestModel = {
+    documentKey: string;
+    culture: null | string;
+    segment: null | string;
+    values: Array<RenderValueModel>;
+};
+
+export type RenderSessionResponseModel = {
+    token: string;
+    url: string;
+};
+
+export type RenderValueModel = {
+    alias: string;
+    culture: null | string;
+    segment: null | string;
+    value: JsonElement;
+};
+
 export type GetPingData = {
     body?: never;
     path?: never;
@@ -26,3 +47,34 @@ export type GetPingResponses = {
 };
 
 export type GetPingResponse = GetPingResponses[keyof GetPingResponses];
+
+export type PostRenderSessionData = {
+    body: RenderSessionRequestModel;
+    path?: never;
+    query?: never;
+    url: '/umbraco/arjovisualeditor/api/v1/render-session';
+};
+
+export type PostRenderSessionErrors = {
+    /**
+     * The resource is protected and requires an authentication token
+     */
+    401: unknown;
+    /**
+     * The authenticated user does not have access to this resource
+     */
+    403: unknown;
+    /**
+     * Not Found
+     */
+    404: unknown;
+};
+
+export type PostRenderSessionResponses = {
+    /**
+     * OK
+     */
+    200: RenderSessionResponseModel;
+};
+
+export type PostRenderSessionResponse = PostRenderSessionResponses[keyof PostRenderSessionResponses];
