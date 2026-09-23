@@ -41,9 +41,8 @@ public class EnsureDevApiUserHandler(
     IHostEnvironment hostEnvironment,
     IHostApplicationLifetime lifetime,
     IRuntimeState runtimeState,
+    IServiceScopeFactory scopeFactory,
     Microsoft.Extensions.Options.IOptions<DevApiUserOptions> options,
-    IUserService userService,
-    IBackOfficeUserClientCredentialsManager clientCredentialsManager,
     ILogger<EnsureDevApiUserHandler> logger)
     : INotificationAsyncHandler<UmbracoApplicationStartedNotification>
 {
@@ -66,18 +65,24 @@ public class EnsureDevApiUserHandler(
     private async Task EnsureWhenRunningAsync(CancellationToken stopping)
     {
         DateTime deadline = DateTime.UtcNow + Timeout;
+        Exception? lastError = null;
         while (!stopping.IsCancellationRequested && DateTime.UtcNow < deadline)
         {
             if (runtimeState.Level == RuntimeLevel.Run)
             {
                 try
                 {
-                    await EnsureAsync();
+                    // A fresh scope per attempt: this runs after the notification's own scope has been disposed.
+                    using IServiceScope scope = scopeFactory.CreateScope();
+                    await EnsureAsync(
+                        scope.ServiceProvider.GetRequiredService<IUserService>(),
+                        scope.ServiceProvider.GetRequiredService<IBackOfficeUserClientCredentialsManager>());
                     return;
                 }
                 catch (Exception ex)
                 {
                     // e.g. the database is busy with the background migrations; try again shortly.
+                    lastError = ex;
                     logger.LogDebug(ex, "Dev API user not created yet, retrying");
                 }
             }
@@ -94,11 +99,11 @@ public class EnsureDevApiUserHandler(
 
         if (!stopping.IsCancellationRequested)
         {
-            logger.LogWarning("Gave up creating the dev API user after {Timeout}", Timeout);
+            logger.LogWarning(lastError, "Gave up creating the dev API user after {Timeout}", Timeout);
         }
     }
 
-    private async Task EnsureAsync()
+    private async Task EnsureAsync(IUserService userService, IBackOfficeUserClientCredentialsManager clientCredentialsManager)
     {
         DevApiUserOptions settings = options.Value;
         if (await clientCredentialsManager.FindUserAsync(settings.ClientId) is not null)
