@@ -1,15 +1,28 @@
-import { css, customElement, html, nothing, property } from '@umbraco-cms/backoffice/external/lit';
+import { css, customElement, html, nothing, property, state } from '@umbraco-cms/backoffice/external/lit';
+import type { PropertyValues } from '@umbraco-cms/backoffice/external/lit';
 import { UmbLitElement } from '@umbraco-cms/backoffice/lit-element';
 import type { TargetRef } from '../protocol/index.js';
 import './visual-editor-property-editor.element.js';
+import './visual-editor-page-settings.element.js';
 
 /**
- * Visual editor side panel: edits what is selected on the canvas. A document property gets the CMS's own property
- * editor (#19). Blocks and their properties arrive with block editing (#25); page settings with #22.
+ * Visual editor side panel, with two views:
+ * - **Selection:** edits what is selected on the canvas. A document property gets the CMS's own property editor
+ *   (#19); blocks and their properties arrive with block editing (#25).
+ * - **Page settings:** the properties the page doesn't show (#22).
+ * Selecting something on the canvas switches to Selection.
  */
 @customElement('arjo-visual-editor-side-panel')
 export class ArjoVisualEditorSidePanelElement extends UmbLitElement {
 	@property({ attribute: false }) selected: TargetRef | null = null;
+	/** Aliases of the document properties shown on the page; undefined until the canvas has connected. */
+	@property({ attribute: false }) visibleAliases?: ReadonlySet<string>;
+
+	@state() private _view: 'selection' | 'settings' = 'selection';
+
+	protected override willUpdate(changed: PropertyValues<this>) {
+		if (changed.has('selected') && this.selected) this._view = 'selection';
+	}
 	/** Editable areas the canvas found, or undefined before it has connected. */
 	@property({ attribute: false }) targetCount?: number;
 	/** Content tab URL of the document (`.../view/content`), for "Show in standard editor". */
@@ -44,7 +57,25 @@ export class ArjoVisualEditorSidePanelElement extends UmbLitElement {
 
 	override render() {
 		return html`
-			<uui-box headline="Selection">${this.#renderSelection()}</uui-box>
+			<uui-tab-group>
+				<uui-tab
+					label="Selection"
+					?active=${this._view === 'selection'}
+					@click=${() => (this._view = 'selection')}
+				></uui-tab>
+				<uui-tab
+					label="Page settings"
+					?active=${this._view === 'settings'}
+					@click=${() => (this._view = 'settings')}
+				></uui-tab>
+			</uui-tab-group>
+			${
+				this._view === 'settings'
+					? html`<arjo-visual-editor-page-settings
+							.visibleAliases=${this.visibleAliases}
+						></arjo-visual-editor-page-settings>`
+					: html`<uui-box headline="Selection">${this.#renderSelection()}</uui-box>`
+			}
 			${
 				this.targetCount !== undefined
 					? html`<p class="status">${this.targetCount} editable areas on this page</p>`
@@ -68,6 +99,13 @@ export class ArjoVisualEditorSidePanelElement extends UmbLitElement {
 
 		p {
 			margin: 0;
+		}
+
+		/* The tab group is made for workspace headers and takes 100% of the height; here it's a row at the top. */
+		uui-tab-group {
+			flex: none;
+			height: auto;
+			border-bottom: 1px solid var(--uui-color-border);
 		}
 
 		.heading {

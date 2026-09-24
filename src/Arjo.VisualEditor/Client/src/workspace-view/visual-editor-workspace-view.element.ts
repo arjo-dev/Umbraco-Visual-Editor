@@ -16,12 +16,16 @@ import {
 } from '../protocol/index.js';
 import { deviceFor, sizeFor, type VisualEditorDeviceAlias } from './devices.js';
 import { ArjoInlineEditController } from './inline-edit.controller.js';
+import { clampPanelWidth, PANEL_DEFAULT_WIDTH } from './panel-width.js';
 import './visual-editor-toolbar.element.js';
 import './visual-editor-side-panel.element.js';
 import './visual-editor-canvas.element.js';
 
 const RENDER_DEBOUNCE_MS = 300;
 const PANEL_STORAGE_KEY = 'arjo.visualEditor.panelOpen';
+const PANEL_WIDTH_STORAGE_KEY = 'arjo.visualEditor.panelWidth';
+/** Arrow keys on the resize handle move it this far (Shift: further). */
+const PANEL_KEY_STEP = 16;
 /** Chosen device and per-device sizes are remembered for the browser session. */
 const PREVIEW_STORAGE_KEY = 'arjo.visualEditor.preview';
 
@@ -41,6 +45,8 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 	@state() private _status: 'idle' | 'rendering' | 'error' = 'idle';
 	@state() private _error?: string;
 	@state() private _targetCount?: number;
+	/** Document properties the canvas found on the page; the rest are listed under Page settings (#22). */
+	@state() private _visibleAliases?: ReadonlySet<string>;
 	@state() private _selected: TargetRef | null = null;
 	/** Never saved: there's no draft to render yet (render sessions overlay it, ADR 0001). */
 	@state() private _isNew = false;
@@ -50,6 +56,9 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 	/** The user wants the content tree visible in visual mode (remembered by the visual mode context). */
 	@state() private _treeVisible = false;
 	@state() private _panelOpen = readPanelOpen();
+	@state() private _panelWidth = readPanelWidth();
+	/** The panel edge is being dragged: the canvas stops taking pointer events so the drag isn't lost to the iframe. */
+	@state() private _resizing = false;
 	@state() private _scale = 1;
 
 	#documentKey?: string;
@@ -154,6 +163,9 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 		switch (message.type) {
 			case 'ready':
 				this._targetCount = message.targets.length;
+				this._visibleAliases = new Set(
+					message.targets.filter((t) => !t.ownerIsBlock && t.alias).map((t) => t.alias as string),
+				);
 				break;
 			case 'rendered':
 				if (message.url !== this.#pendingRender) break; // an older render; a newer one is on its way
@@ -203,6 +215,45 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 		} catch {
 			// A convenience only.
 		}
+	}
+
+	#setPanelWidth(width: number) {
+		this._panelWidth = clampPanelWidth(width, this.getBoundingClientRect().width);
+		try {
+			localStorage.setItem(PANEL_WIDTH_STORAGE_KEY, String(this._panelWidth));
+		} catch {
+			// A per-browser convenience only.
+		}
+	}
+
+	#onResizeStart(event: PointerEvent) {
+		if (event.button !== 0) return;
+		event.preventDefault();
+		const handle = event.currentTarget as HTMLElement;
+		const startX = event.clientX;
+		const startWidth = this._panelWidth;
+		handle.setPointerCapture(event.pointerId);
+		this._resizing = true;
+
+		// The panel is on the right, so dragging left makes it wider.
+		const onMove = (e: PointerEvent) => this.#setPanelWidth(startWidth + startX - e.clientX);
+		const onEnd = () => {
+			this._resizing = false;
+			handle.removeEventListener('pointermove', onMove);
+			handle.removeEventListener('pointerup', onEnd);
+			handle.removeEventListener('pointercancel', onEnd);
+		};
+		handle.addEventListener('pointermove', onMove);
+		handle.addEventListener('pointerup', onEnd);
+		handle.addEventListener('pointercancel', onEnd);
+	}
+
+	#onResizeKey(event: KeyboardEvent) {
+		const step = event.shiftKey ? PANEL_KEY_STEP * 4 : PANEL_KEY_STEP;
+		if (event.key === 'ArrowLeft') this.#setPanelWidth(this._panelWidth + step);
+		else if (event.key === 'ArrowRight') this.#setPanelWidth(this._panelWidth - step);
+		else return;
+		event.preventDefault();
 	}
 
 	#setPanelOpen(open: boolean) {
@@ -303,15 +354,29 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 				@toggle-tree=${() => this.#visualMode?.setShowTree(!this._treeVisible)}
 				@toggle-panel=${() => this.#setPanelOpen(!this._panelOpen)}
 			></arjo-visual-editor-toolbar>
-			<div class="body">
+			<div class="body ${this._resizing ? 'resizing' : ''}">
 				<div class="canvas">${this.#renderCanvas()}</div>
 				${
 					this._panelOpen
-						? html`<arjo-visual-editor-side-panel
-								.selected=${this._selected}
-								.targetCount=${this._targetCount}
-								.contentHref=${this.#documentBase ? `${this.#documentBase}/view/content` : undefined}
-							></arjo-visual-editor-side-panel>`
+						? html`<div
+									class="resizer"
+									role="separator"
+									aria-orientation="vertical"
+									aria-label="Resize side panel"
+									aria-valuenow=${this._panelWidth}
+									tabindex="0"
+									title="Drag to resize; double-click to reset"
+									@pointerdown=${this.#onResizeStart}
+									@keydown=${this.#onResizeKey}
+									@dblclick=${() => this.#setPanelWidth(PANEL_DEFAULT_WIDTH)}
+								></div>
+								<arjo-visual-editor-side-panel
+									style="width: ${this._panelWidth}px"
+									.selected=${this._selected}
+									.targetCount=${this._targetCount}
+									.visibleAliases=${this._visibleAliases}
+									.contentHref=${this.#documentBase ? `${this.#documentBase}/view/content` : undefined}
+								></arjo-visual-editor-side-panel>`
 						: nothing
 				}
 			</div>
@@ -346,8 +411,38 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 		}
 
 		arjo-visual-editor-side-panel {
-			width: 360px;
 			flex: none;
+			min-width: 0;
+			/* A remembered width can be too wide for a smaller window: always leave the canvas room (CANVAS_MIN_WIDTH). */
+			max-width: calc(100% - 320px);
+		}
+
+		/* The panel's left edge; wider than it looks so it's easy to grab. */
+		.resizer {
+			flex: none;
+			width: 6px;
+			margin: 0 -3px;
+			position: relative;
+			z-index: 1;
+			cursor: col-resize;
+			touch-action: none;
+		}
+
+		.resizer:hover,
+		.resizer:focus-visible,
+		.resizing .resizer {
+			background: var(--uui-color-interactive-emphasis);
+			outline: none;
+		}
+
+		.resizing,
+		.resizing * {
+			cursor: col-resize;
+			user-select: none;
+		}
+
+		.resizing .canvas {
+			pointer-events: none;
 		}
 
 		.message {
@@ -374,6 +469,15 @@ function readPreview(): { device: VisualEditorDeviceAlias; sizes: Partial<Record
 		return { device, sizes };
 	} catch {
 		return { device: 'desktop', sizes: {} };
+	}
+}
+
+function readPanelWidth() {
+	try {
+		const stored = Number(localStorage.getItem(PANEL_WIDTH_STORAGE_KEY));
+		return stored > 0 ? stored : PANEL_DEFAULT_WIDTH;
+	} catch {
+		return PANEL_DEFAULT_WIDTH;
 	}
 }
 
