@@ -72,7 +72,8 @@ Block positions use `{ ownerKey, propertyAlias, areaKey | null, index }`.
 |---|---|---|
 | `render` | `url` | Patch in a newer render-session page (#18); answered by `rendered` |
 | `highlight` | `target \| null` | Emphasise a target, e.g. while hovering its field in the side panel |
-| `setSelection` | `target \| null` | The selected target (the host is the source of truth) |
+| `setSelection` | `target \| null`, `reveal?: boolean` | The selected target (the host is the source of truth); `reveal` scrolls it into view |
+| `setErrors` | `errors: { target, message }[]` | Validation errors to mark on the page (#23); replaces the previous set, and is sent again whenever a page connects |
 | `setReadonly` | `readonly: boolean` | Turn editing affordances off or on (#31) |
 | `beginInlineEdit` | `target`, `maxLength: number | null`, `multiline: boolean` | Go ahead with an `inlineEditStart`. Only sent when the text matches the stored value, the property is TextBox/TextArea and the user may edit it; otherwise the side panel opens. |
 | `setDevice` | `width: number \| null` | Emulated viewport width in CSS px; `null` is full width (#16) |
@@ -80,8 +81,8 @@ Block positions use `{ ownerKey, propertyAlias, areaKey | null, index }`.
 ## Status
 
 The message *set* is the initial one from #12.
-- **The canvas runtime** (`canvas/runtime.ts`, served as `canvas-runtime.js`, #17) sends `ready`, `rendered`, `hover`, `select` and the inline edit messages, and handles `render`, `setSelection`, `highlight`, `setReadonly` and `beginInlineEdit`.
-- **The Visual editor view** handles `ready`, `rendered`, `select` and the inline edit messages, and sends `render`, `setSelection`, `setDevice` and `beginInlineEdit`.
+- **The canvas runtime** (`canvas/runtime.ts`, served as `canvas-runtime.js`, #17) sends `ready`, `rendered`, `hover`, `select` and the inline edit messages, and handles `render`, `setSelection`, `highlight`, `setReadonly`, `setErrors` and `beginInlineEdit`.
+- **The Visual editor view** handles `ready`, `rendered`, `select` and the inline edit messages, and sends `render`, `setSelection`, `setDevice`, `setErrors` and `beginInlineEdit`.
 - **Inline editing (#20):** while text is edited in place, the host writes each `inlineEdit` to the workspace but holds back re-renders, and the canvas defers any `render` it receives. Both catch up at `inlineEditEnd`. A cancelled edit puts back the value the host had when it sent `beginInlineEdit`.
 - **Not used yet:** the block messages arrive with the issues listed above.
 
