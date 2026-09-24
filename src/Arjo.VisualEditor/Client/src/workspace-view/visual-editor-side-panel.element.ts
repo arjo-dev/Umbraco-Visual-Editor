@@ -101,6 +101,13 @@ export class ArjoVisualEditorSidePanelElement extends UmbLitElement {
 			margin: 0;
 		}
 
+		/* The tab group is made for workspace headers and takes 100% of the height; here it's a row at the top. */
+		uui-tab-group {
+			flex: none;
+			height: auto;
+			border-bottom: 1px solid var(--uui-color-border);
+		}
+
 		.heading {
 			font-weight: 700;
 		}
