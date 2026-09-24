@@ -87,9 +87,9 @@ The message *set* is the initial one from #12.
 - **The Visual editor view** handles `ready`, `rendered`, `select` and the inline edit messages, and sends `render`, `setSelection`, `setDevice`, `setErrors` and `beginInlineEdit`.
 - **Inline editing (#20):** while text is edited in place, the host writes each `inlineEdit` to the workspace but holds back re-renders, and the canvas defers any `render` it receives. Both catch up at `inlineEditEnd`. A cancelled edit puts back the value the host had when it sent `beginInlineEdit`.
 - **Rich text (#57, ADR 0004):**
-  - The host runs the editor itself. It creates the same Tiptap editor as the Content tab and mounts it on the marked element in the frame; the toolbar is in the side panel.
+  - The host runs the editor itself. It creates the same Tiptap editor as the Content tab and mounts it on the marked element in the frame; the toolbar floats over the page, above the text.
   - Edits are written to the workspace as they're made. Re-renders wait, as for inline text.
-  - Editing ends when something else is selected, when Escape is pressed (cancel), or when the side panel closes. The host then sends `richTextEditing` with `active: false` and renders the stored markup through the template again.
+  - Editing ends when something else is selected, or when Escape is pressed (cancel). The host then sends `richTextEditing` with `active: false` and renders the stored markup through the template again.
 - **Not used yet:** the block messages arrive with the issues listed above.
 
 Add new messages here and in `messages.ts` together, with tests.

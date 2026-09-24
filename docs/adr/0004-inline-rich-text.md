@@ -52,14 +52,14 @@ Each finding is checked by the spike tests (`spike/tiptap-in-frame.test.ts`, `sp
 - **Mount target:**
   - When the rich text region is the only content of its parent element, the editor takes over that element (`element: { mount }`).
   - Otherwise it uses a wrapper element placed where the region is. Selectors that rely on direct children may then style the content slightly differently.
-- **Toolbar:** `umb-tiptap-toolbar` (and the statusbar) are bound to the editor and shown **in the side panel**. They stay in the backoffice, where their Lit elements, popovers and modals work. A floating toolbar near the element can come later.
+- **Toolbar:** `umb-tiptap-toolbar` (and the statusbar) are bound to the editor and **float over the page, above the text** (the statusbar goes below it). They stay in the backoffice, where their Lit elements, popovers and modals work, in a layer laid over the canvas. They're positioned from the edited element's box in the frame and the canvas's scale.
 - **Value flow:**
   - Loads `markup` from the workspace value and writes `{ markup: editor.getHTML(), blocks }` back through the same path as inline text (#20, `property-values.ts`). This covers document properties and block properties.
   - Re-renders wait while editing; this protocol already exists for #20.
   - When editing ends, the canvas re-renders the stored markup through the template. That turns links back into URLs and brings back rendered blocks.
 - **Starting and ending:** starting and ending follow #20: `inlineEditStart`, a go-ahead from the host, then commit on blur or Escape.
   - Rich text needs its own go-ahead message, because the host drives the editor, not the canvas.
-  - Blur must ignore focus moving into the side panel toolbar.
+  - Blur must ignore focus moving into the toolbar.
 - **Focus:** always `view.dom.focus()`, never Tiptap's `focus()` command.
 
 ### Blocks in the RTE and other Lit node views
@@ -72,12 +72,12 @@ If the data type enables an extension whose node view is a Lit element that we d
 
 - **Style fidelity is exact**, because it's the page. The data type's RTE content stylesheets (`rte-content.css`, configured stylesheets) aren't applied. On the canvas, the site's CSS is the point.
 - **The Content tab and the canvas share one editor implementation.** Behaviour, extensions and permissions don't drift.
-- **Cross-window use has sharp edges.** prosemirror-view creates nodes with the global `document`; they're adopted into the frame when inserted, which works. Extensions that position UI with `window` (bubble or floating menus) position against the backoffice window. They need checking one by one, and the toolbar in the side panel avoids most of them.
+- **Cross-window use has sharp edges.** prosemirror-view creates nodes with the global `document`; they're adopted into the frame when inserted, which works. Extensions that position UI with `window` (bubble or floating menus) position against the backoffice window. They need checking one by one, and keeping the toolbar in the backoffice avoids most of them.
 - **Readonly, permissions and validation** follow the property dataset, as in #19 and #20.
 - **Implemented in #57:**
-  - The canvas marks the mount element and asks with `richTextEditStart`. The host (`rich-text/visual-editor-rich-text-editor.element.ts`) creates the editor on it and shows the toolbar in the side panel.
+  - The canvas marks the mount element and asks with `richTextEditStart`. The host (`rich-text/visual-editor-rich-text-editor.element.ts`) creates the editor on it and floats the toolbar above the text (`rich-text/toolbar-position.ts`).
   - Tiptap's `focus` command is replaced (`rich-text/frame-focus.ts`), because toolbar buttons call `chain().focus()` after focus has left the frame.
-  - Editing ends when something else is selected, when Escape is pressed, or when the side panel closes. Blur doesn't end it: toolbar popovers and modals (link and media pickers) take focus out of the frame.
+  - Editing ends when something else is selected, or when Escape is pressed. Blur doesn't end it: toolbar popovers and modals (link and media pickers) take focus out of the frame.
   - **Not yet:** the plain-DOM node view for RTE blocks. Values containing blocks fall back to the side panel, and the block extension and block picker are left out when editing on the canvas. Extensions' own editor styles (`getStyles()`) aren't applied in the frame either.
 
 ## Options considered
