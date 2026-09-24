@@ -207,11 +207,18 @@ describe('canvas runtime', () => {
 		expect(selectionLabel(runtime).name).to.equal('Title');
 	});
 
-	it('is inert while read-only', () => {
+	it('still selects and hovers while read-only, but edits nothing from the page', () => {
 		handleHostMessage(runtime, { type: 'setReadonly', readonly: true });
 		click(doc, 'caption');
-		pointerOver(doc, 'caption');
-		expect(sent.filter((m) => m.type === 'select' || m.type === 'hover')).to.have.length(0);
+		pointerOver(doc, 'title');
+		expect(sent.filter((m) => m.type === 'select' || m.type === 'hover').map((m) => m.type)).to.deep.equal([
+			'select',
+			'hover',
+		]);
+		// No inline editing.
+		const win = doc.defaultView as typeof window;
+		doc.getElementById('title')!.dispatchEvent(new win.MouseEvent('dblclick', { bubbles: true, cancelable: true }));
+		expect(sent.some((m) => m.type === 'inlineEditStart')).to.equal(false);
 	});
 
 	it('draws the selection box over the element', async () => {
@@ -554,7 +561,9 @@ describe('canvas runtime', () => {
 					culture: null,
 				})!.ref,
 			});
-			expect(tools()).to.deep.equal([]);
+			// Read-only: only what doesn't change the page.
+			expect(tools()).to.deep.equal(['Copy']);
+			expect(runtime.overlay.host.shadowRoot!.querySelector('.box.selected .grip')).to.equal(null);
 		});
 
 		it('selects a block the host picked once a re-render brings it', async () => {

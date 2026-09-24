@@ -48,7 +48,10 @@ export interface CanvasRuntime {
 	showSelectionOf(ref: TargetRef | null, reveal?: boolean): void;
 	/** Validation errors to mark (#23). */
 	setErrors(errors: Array<{ target: TargetRef; message: string }>): void;
-	/** Read-only (e.g. no Update permission, #31): no hover or selection from the page. */
+	/**
+	 * Read-only (#31: no Update permission, in the recycle bin, locked, no access to the language): things can still
+	 * be hovered and selected (the side panel shows them, read-only), but nothing is edited from the page.
+	 */
 	setReadonly(readonly: boolean): void;
 	setHighlight(target: TargetRef | null): void;
 	/** Editing text in place (#20). */
@@ -327,7 +330,14 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 	 */
 	function blockTools(target: CanvasTarget): BlockTool[] | null {
 		const block = target.block;
-		if (readonly || !block) return null;
+		if (!block) return null;
+		// Read-only: nothing that changes the page; copying and looking at settings don't.
+		if (readonly) {
+			const tools: BlockTool[] = [];
+			if (block.editorAlias !== 'Umbraco.RichText') tools.push({ action: 'copy', label: 'Copy' });
+			if (block.settingsKey) tools.push({ action: 'settings', label: 'Settings' });
+			return tools;
+		}
 		const tools: BlockTool[] = [];
 		if (block.editorAlias === 'Umbraco.BlockList' || block.editorAlias === 'Umbraco.BlockGrid') {
 			const last = Math.max(
@@ -432,12 +442,12 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 	const onPointerOver = (event: PointerEvent) => {
 		// Over our own overlay (a drag handle, the toolbar): keep what's hovered, so its handle stays.
 		if (event.target === overlay.host || drag) return;
-		if (readonly || editing()?.contains(event.target as Node)) return;
+		if (editing()?.contains(event.target as Node)) return;
 		hover(hoverTarget(index.targetAt(event.target as Element), event.clientX, event.clientY));
 	};
 	const onPointerLeave = () => hover(null);
 	const onClick = (event: MouseEvent) => {
-		if (readonly || event.button !== 0) return;
+		if (event.button !== 0) return;
 		if (swallowClick) {
 			event.preventDefault();
 			event.stopPropagation();
@@ -467,7 +477,12 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 		event.stopPropagation();
 	};
 	const onKeyDown = (event: KeyboardEvent) => {
-		if (!selected || editing() || readonly) return;
+		if (!selected || editing()) return;
+		if (event.key === 'Escape') {
+			select(index.ancestorsOf(selected)[0] ?? null);
+			return;
+		}
+		if (readonly) return;
 		// Keyboard alternative to dragging (#26): Alt+Up/Down moves the selected block among its siblings.
 		if (event.altKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
 			const action = event.key === 'ArrowUp' ? 'moveUp' : 'moveDown';
@@ -477,9 +492,7 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 			}
 			return;
 		}
-		if (event.key === 'Escape') select(index.ancestorsOf(selected)[0] ?? null);
-		else if (event.key === 'Enter' && (requestInlineEdit(selected) || richText.request(selected)))
-			event.preventDefault();
+		if (event.key === 'Enter' && (requestInlineEdit(selected) || richText.request(selected))) event.preventDefault();
 	};
 
 	doc.addEventListener('pointerover', onPointerOver, true);
@@ -581,12 +594,12 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 			showErrors();
 		},
 		setReadonly(value) {
+			if (value === readonly) return;
 			readonly = value;
+			if (readonly) inline.cancel();
 			refreshPlaceholders();
-			if (readonly) {
-				hover(null);
-				inline.cancel();
-			}
+			// Redraw the selection: its tools and handles depend on it.
+			overlay.setSelection(selected, selected ? index.ancestorsOf(selected) : []);
 		},
 		setHighlight(ref) {
 			highlighted = ref;
