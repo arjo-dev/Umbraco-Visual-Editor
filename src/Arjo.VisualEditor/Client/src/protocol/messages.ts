@@ -40,7 +40,12 @@ export type CanvasMessage =
 	| { type: 'rendered'; url: string; ok: boolean }
 	| { type: 'hover'; target: TargetRef | null }
 	| { type: 'select'; target: TargetRef | null }
+	/** Asks to edit a text property in place (#20); `text` is what the element shows. Answered by `beginInlineEdit`. */
+	| { type: 'inlineEditStart'; target: TargetRef; text: string }
+	/** The text being edited in place changed. */
 	| { type: 'inlineEdit'; target: TargetRef; value: string }
+	/** Editing in place finished: committed (blur, Enter) or `cancelled` (Escape; the host restores the value). */
+	| { type: 'inlineEditEnd'; target: TargetRef; cancelled: boolean }
 	| { type: 'blockMove'; blockKey: string; to: BlockPosition }
 	| { type: 'blockInsertRequest'; at: BlockPosition }
 	| { type: 'scroll'; x: number; y: number };
@@ -53,6 +58,8 @@ export type HostMessage =
 	| { type: 'highlight'; target: TargetRef | null }
 	| { type: 'setSelection'; target: TargetRef | null }
 	| { type: 'setReadonly'; readonly: boolean }
+	/** Go ahead with an `inlineEditStart`. Not sent when it can't be edited in place (the side panel is used instead). */
+	| { type: 'beginInlineEdit'; target: TargetRef; maxLength: number | null; multiline: boolean }
 	/** Emulated viewport width in CSS pixels; null for the full width. */
 	| { type: 'setDevice'; width: number | null };
 
@@ -96,7 +103,9 @@ const canvasValidators: Record<CanvasMessageType, (m: Obj) => boolean> = {
 	rendered: (m) => isStr(m.url) && typeof m.ok === 'boolean',
 	hover: (m) => isNullableTarget(m.target),
 	select: (m) => isNullableTarget(m.target),
+	inlineEditStart: (m) => isTargetRef(m.target) && isStr(m.text),
 	inlineEdit: (m) => isTargetRef(m.target) && isStr(m.value),
+	inlineEditEnd: (m) => isTargetRef(m.target) && typeof m.cancelled === 'boolean',
 	blockMove: (m) => isStr(m.blockKey) && isBlockPosition(m.to),
 	blockInsertRequest: (m) => isBlockPosition(m.at),
 	scroll: (m) => isNum(m.x) && isNum(m.y),
@@ -107,6 +116,10 @@ const hostValidators: Record<HostMessageType, (m: Obj) => boolean> = {
 	highlight: (m) => isNullableTarget(m.target),
 	setSelection: (m) => isNullableTarget(m.target),
 	setReadonly: (m) => typeof m.readonly === 'boolean',
+	beginInlineEdit: (m) =>
+		isTargetRef(m.target) &&
+		(m.maxLength === null || (isIndex(m.maxLength) && m.maxLength > 0)) &&
+		typeof m.multiline === 'boolean',
 	setDevice: (m) => m.width === null || (isNum(m.width) && m.width > 0),
 };
 

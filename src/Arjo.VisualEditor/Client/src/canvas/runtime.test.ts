@@ -315,4 +315,111 @@ describe('canvas runtime', () => {
 			expect(doc.getElementById('title')!.textContent).to.equal('Via message');
 		});
 	});
+
+	describe('inline editing', () => {
+		const titleRef = () => runtime.index.targets.find((t) => t.ref.alias === 'title')!.ref;
+		const title = () => doc.getElementById('title')!;
+		const ofType = <T extends CanvasMessage['type']>(type: T) =>
+			sent.filter((m): m is Extract<CanvasMessage, { type: T }> => m.type === type);
+		const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+		function doubleClick(id: string) {
+			const win = doc.defaultView as typeof window;
+			doc.getElementById(id)!.dispatchEvent(new win.MouseEvent('dblclick', { bubbles: true, cancelable: true }));
+		}
+
+		function type(text: string) {
+			const win = doc.defaultView as typeof window;
+			title().textContent = text;
+			title().dispatchEvent(new win.InputEvent('input', { bubbles: true }));
+		}
+
+		function key(name: string) {
+			const win = doc.defaultView as typeof window;
+			title().dispatchEvent(new win.KeyboardEvent('keydown', { key: name, bubbles: true, cancelable: true }));
+		}
+
+		function begin(maxLength: number | null = 512, multiline = false) {
+			doubleClick('title');
+			handleHostMessage(runtime, { type: 'beginInlineEdit', target: titleRef(), maxLength, multiline });
+		}
+
+		it('asks the host on double-click, with the text the element shows', () => {
+			doubleClick('title');
+			expect(ofType('inlineEditStart')).to.deep.equal([{ type: 'inlineEditStart', target: titleRef(), text: 'Hello' }]);
+		});
+
+		it("doesn't ask for blocks", () => {
+			doubleClick('inner');
+			expect(ofType('inlineEditStart')).to.have.length(0);
+		});
+
+		it('asks on Enter when a text property is selected', () => {
+			click(doc, 'caption');
+			const win = doc.defaultView as typeof window;
+			doc.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Enter' }));
+			expect(ofType('inlineEditStart').map((m) => m.target.alias)).to.deep.equal(['caption']);
+		});
+
+		it('edits in place after the go-ahead, sending changes and committing on blur', async () => {
+			begin();
+			expect(title().getAttribute('contenteditable')).to.equal('plaintext-only');
+			expect(doc.activeElement).to.equal(title());
+
+			type('Hello world');
+			await wait(200);
+			expect(ofType('inlineEdit').map((m) => m.value)).to.deep.equal(['Hello world']);
+
+			type('Hello there');
+			title().blur();
+			expect(ofType('inlineEdit').map((m) => m.value)).to.deep.equal(['Hello world', 'Hello there']);
+			expect(ofType('inlineEditEnd')).to.deep.equal([{ type: 'inlineEditEnd', target: titleRef(), cancelled: false }]);
+			expect(title().hasAttribute('contenteditable')).to.equal(false);
+		});
+
+		it('Escape cancels: puts the text back, without selecting the parent', () => {
+			begin();
+			sent = [];
+			type('Oops');
+			key('Escape');
+			expect(title().textContent).to.equal('Hello');
+			expect(ofType('inlineEditEnd')).to.deep.equal([{ type: 'inlineEditEnd', target: titleRef(), cancelled: true }]);
+			expect(ofType('inlineEdit')).to.have.length(0);
+			expect(lastSelect()).to.equal(undefined);
+		});
+
+		it('keeps single-line text on one line, within the max length; Enter commits', () => {
+			begin(8, false);
+			type('Line one\nand two');
+			expect(title().textContent).to.equal('Line one');
+			key('Enter');
+			expect(ofType('inlineEdit').map((m) => m.value)).to.deep.equal(['Line one']);
+			expect(ofType('inlineEditEnd')).to.have.length(1);
+		});
+
+		it('lets the host know when it no longer wants a go-ahead', () => {
+			handleHostMessage(runtime, { type: 'beginInlineEdit', target: titleRef(), maxLength: null, multiline: false });
+			expect(ofType('inlineEditEnd')).to.have.length(1);
+			expect(title().hasAttribute('contenteditable')).to.equal(false);
+		});
+
+		it('holds back a re-render until editing ends', async () => {
+			const realFetch = window.fetch;
+			window.fetch = (async () =>
+				new Response(pageHtml({ title: 'From server' }), { headers: { 'content-type': 'text/html' } })) as typeof fetch;
+			try {
+				begin();
+				type('Typing');
+				expect(await runtime.render('/r/2')).to.equal(false);
+				expect(title().textContent).to.equal('Typing');
+
+				title().blur();
+				await wait(20);
+				expect(title().textContent).to.equal('From server');
+				expect(ofType('rendered')).to.deep.equal([{ type: 'rendered', url: '/r/2', ok: true }]);
+			} finally {
+				window.fetch = realFetch;
+			}
+		});
+	});
 });
