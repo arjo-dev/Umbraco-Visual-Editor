@@ -16,6 +16,7 @@ describe('parseCanvasMessage', () => {
 		{ type: 'richTextEditStart', target: title, mountId: 'rte-1' },
 		{ type: 'inlineEdit', target: title, value: 'New title' },
 		{ type: 'inlineEditEnd', target: title, cancelled: false },
+		{ type: 'blockAction', blockKey: 'block-1', action: 'duplicate' },
 		{ type: 'blockMove', blockKey: 'block-1', to: { ...position, areaKey: 'area-1', index: 2 } },
 		{ type: 'blockInsertRequest', at: position },
 		{ type: 'scroll', x: 0, y: 120.5 },
@@ -47,6 +48,7 @@ describe('parseCanvasMessage', () => {
 		['blockMove with a fractional index', { type: 'blockMove', blockKey: 'b', to: { ...position, index: 1.5 } }],
 		['rendered without ok', { type: 'rendered', url: '/__visual-editor/render/abc' }],
 		['inlineEditEnd without cancelled', { type: 'inlineEditEnd', target: title }],
+		['blockAction with an unknown action', { type: 'blockAction', blockKey: 'b', action: 'explode' }],
 		['scroll with NaN', { type: 'scroll', x: Number.NaN, y: 0 }],
 	];
 

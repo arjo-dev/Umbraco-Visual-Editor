@@ -11,6 +11,7 @@ import {
 	createNonce,
 	sameTarget,
 	withNonce,
+	type BlockAction,
 	type CanvasMessage,
 	type HostChannel,
 	type TargetRef,
@@ -19,6 +20,7 @@ import { deviceFor, sizeFor, type VisualEditorDeviceAlias } from './devices.js';
 import { ArjoInlineEditController, type RichTextSession } from './inline-edit.controller.js';
 import { clampPanelWidth, PANEL_DEFAULT_WIDTH } from './panel-width.js';
 import { ArjoValidationController, type VisualEditorError } from './validation.controller.js';
+import { ArjoBlockEditController } from './block-edit.controller.js';
 import '../rich-text/visual-editor-rich-text-editor.element.js';
 import type { ArjoVisualEditorSidePanelElement } from './visual-editor-side-panel.element.js';
 import './visual-editor-toolbar.element.js';
@@ -55,6 +57,8 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 	@state() private _targets: TargetRef[] = [];
 	/** Validation errors for the variant being edited (#23). */
 	@state() private _errors: VisualEditorError[] = [];
+	/** Which of the selected block's tabs the side panel shows (#25); the block toolbar's settings button picks 'settings'. */
+	@state() private _blockTab: 'content' | 'settings' = 'content';
 	/** Rich text being edited on the canvas (#57): its toolbar floats over the page, above the text. */
 	@state() private _richText?: RichTextSession & { mount: HTMLElement };
 	@state() private _selected: TargetRef | null = null;
@@ -84,6 +88,8 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 	#frame?: HTMLIFrameElement;
 	/** Editing text in place on the canvas (#20). */
 	#inline = new ArjoInlineEditController(this, (message) => this.#channel?.send(message));
+	/** Block toolbar actions: move, duplicate, delete (#25). */
+	#blocks = new ArjoBlockEditController(this);
 	/** Validation messages, placed on the page (#23). */
 	#validation = new ArjoValidationController(this, (errors) => this.#onErrors(errors));
 	/** The frame shows a normal render with the canvas runtime, so newer renders can be patched in (#18). */
@@ -183,6 +189,9 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 			case 'ready':
 				this._targetCount = message.targets.length;
 				this._targets = message.targets;
+				// A selection made before the page showed it (e.g. a block just duplicated) now gets its labels.
+				if (this._selected)
+					this._selected = message.targets.find((t) => sameTarget(t, this._selected)) ?? this._selected;
 				this._visibleAliases = new Set(
 					message.targets.filter((t) => !t.ownerIsBlock && t.alias).map((t) => t.alias as string),
 				);
@@ -216,14 +225,42 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 				// Renders wait while text is edited in place; catch up now.
 				this.#scheduleRender();
 				break;
+			case 'blockAction':
+				void this.#onBlockAction(message.blockKey, message.action);
+				break;
 			case 'select':
 				// Selecting something else on the page finishes editing rich text.
 				if (this._richText && !sameTarget(this._richText.target, message.target)) this.#endRichText(false);
 				this._selected = message.target;
+				this._blockTab = 'content';
 				this.#channel?.send({ type: 'setSelection', target: message.target });
 				if (message.target && !this._panelOpen) this.#setPanelOpen(true);
 				break;
 		}
+	}
+
+	/** A block toolbar button (#25): settings shows the block's settings; the rest change the document. */
+	async #onBlockAction(blockKey: string, action: BlockAction) {
+		const ref = (key: string): TargetRef =>
+			this._targets.find((t) => t.kind === 'Block' && t.ownerKey === key) ?? {
+				kind: 'Block',
+				ownerKey: key,
+				ownerIsBlock: true,
+				alias: null,
+				culture: null,
+			};
+		if (action === 'settings') {
+			this._selected = ref(blockKey);
+			this._blockTab = 'settings';
+			if (!this._panelOpen) this.#setPanelOpen(true);
+			return;
+		}
+		const selected = await this.#blocks.apply(blockKey, action, this.#culture);
+		if (selected === undefined) return;
+		this._selected = selected ? ref(selected) : null;
+		this._blockTab = 'content';
+		// A copy is on the page after the re-render; the canvas selects it then.
+		this.#channel?.send({ type: 'setSelection', target: this._selected });
 	}
 
 	/** Starts editing rich text on the canvas (#57): the editor mounts on the element the canvas marked. */
@@ -492,6 +529,8 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 									.errors=${this._errors}
 									.targets=${this._targets}
 									.richText=${this._richText}
+									.culture=${this.#culture}
+									.blockTab=${this._blockTab}
 									@show-error=${(e: CustomEvent<VisualEditorError>) => this.#showError(e.detail)}
 									.contentHref=${this.#documentBase ? `${this.#documentBase}/view/content` : undefined}
 								></arjo-visual-editor-side-panel>`

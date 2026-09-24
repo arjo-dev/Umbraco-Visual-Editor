@@ -6,6 +6,7 @@
  *   setSelection, highlight, setReadonly.
  * - Inline editing of plain text properties (#20, inline-edit.ts): double-click, or Enter on the selection. Rich text
  *   (#57, rich-text-edit.ts) the same way, with the backoffice's own editor mounted on the element.
+ * - A toolbar on the selected block (#25): move up/down, duplicate, delete, settings (the host changes the document).
  * - Live re-render (#18): a `render` message patches the newer page in (patch.ts) rather than reloading, then
  *   re-resolves the markers and keeps the selection, scroll position and focus.
  * Only active inside the visual editor (a nonce in the URL fragment); opening a render URL directly just shows the page.
@@ -15,7 +16,7 @@ import { readManifest, resolveMarkers } from './markers.js';
 import { InlineEditor, inlineEditableElement } from './inline-edit.js';
 import { RichTextEditState } from './rich-text-edit.js';
 import { guardNavigation } from './navigation.js';
-import { CanvasOverlay } from './overlay.js';
+import { CanvasOverlay, type BlockTool } from './overlay.js';
 import { fetchRender, patchDocument } from './patch.js';
 import { TargetIndex, type CanvasTarget } from './targets.js';
 
@@ -26,6 +27,11 @@ export interface CanvasRuntime {
 	select(target: CanvasTarget | null): void;
 	/** Show a selection made by the host, without reporting it back; `reveal` scrolls it into view. */
 	showSelection(target: CanvasTarget | null, reveal?: boolean): void;
+	/**
+	 * Shows the host's selection by reference. When it isn't on the page yet (a block just added), it is selected once
+	 * a re-render brings it.
+	 */
+	showSelectionOf(ref: TargetRef | null, reveal?: boolean): void;
 	/** Validation errors to mark (#23). */
 	setErrors(errors: Array<{ target: TargetRef; message: string }>): void;
 	/** Read-only (e.g. no Update permission, #31): no hover or selection from the page. */
@@ -56,7 +62,45 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 	/** A render that arrived while text was being edited in place; patched in once editing ends. */
 	let deferredRender: string | null = null;
 
-	const overlay = new CanvasOverlay(doc, { onBreadcrumb: (target) => select(target) });
+	const overlay = new CanvasOverlay(doc, {
+		onBreadcrumb: (target) => select(target),
+		blockTools: (target) => blockTools(target),
+		onBlockTool: (target, action) => channel?.send({ type: 'blockAction', blockKey: target.ref.ownerKey, action }),
+	});
+
+	/**
+	 * The block toolbar's buttons for a block, from where it sits (#24): list and grid blocks move and duplicate; rich
+	 * text blocks sit in the markup, so they only get their settings.
+	 */
+	function blockTools(target: CanvasTarget): BlockTool[] | null {
+		const block = target.block;
+		if (readonly || !block) return null;
+		const tools: BlockTool[] = [];
+		if (block.editorAlias === 'Umbraco.BlockList' || block.editorAlias === 'Umbraco.BlockGrid') {
+			const last = Math.max(
+				...index.targets
+					.map((t) => t.block)
+					.filter(
+						(b) =>
+							b &&
+							b.editorAlias === block.editorAlias &&
+							b.propertyAlias === block.propertyAlias &&
+							b.ownerKey === block.ownerKey &&
+							b.areaKey === block.areaKey &&
+							b.areaOwnerKey === block.areaOwnerKey,
+					)
+					.map((b) => b!.index),
+			);
+			tools.push(
+				{ action: 'moveUp', label: 'Move up', disabled: block.index === 0 },
+				{ action: 'moveDown', label: 'Move down', disabled: block.index >= last },
+				{ action: 'duplicate', label: 'Duplicate' },
+			);
+		}
+		if (block.settingsKey) tools.push({ action: 'settings', label: 'Settings' });
+		if (block.editorAlias !== 'Umbraco.RichText') tools.push({ action: 'delete', label: 'Delete' });
+		return tools;
+	}
 	/** Editing ended: patch in any render that waited for it. */
 	const catchUp = () => {
 		if (!deferredRender) return;
@@ -77,8 +121,12 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 		return true;
 	}
 
+	/** The selection the host wants but the page doesn't show yet (e.g. a block just duplicated). */
+	let awaited: TargetRef | null = null;
+
 	function select(target: CanvasTarget | null, notify = true) {
 		selected = target;
+		awaited = null;
 		overlay.setSelection(target, target ? index.ancestorsOf(target) : []);
 		if (notify) channel?.send({ type: 'select', target: target?.ref ?? null });
 	}
@@ -181,9 +229,11 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 		manifest = readManifest(doc)!;
 		index = new TargetIndex(resolveMarkers(manifest, doc));
 		// Targets are identified by what they point at, so the same things stay selected (unless they're gone).
-		const selectedRef = selected?.ref ?? null;
+		const selectedRef = selected?.ref ?? awaited;
 		selected = null;
-		select(index.find(selectedRef), false);
+		const found = index.find(selectedRef);
+		select(found, false);
+		if (!found) awaited = selectedRef;
 		hovered = null;
 		overlay.setHover(null);
 		overlay.setHighlight(index.find(highlighted));
@@ -211,6 +261,11 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 		showSelection(target, reveal) {
 			select(target, false);
 			if (reveal && target?.elements[0]) target.elements[0].scrollIntoView({ block: 'center', behavior: 'smooth' });
+		},
+		showSelectionOf(ref, reveal) {
+			const target = index.find(ref);
+			this.showSelection(target, reveal);
+			if (!target) awaited = ref;
 		},
 		setErrors(list) {
 			errors = list;
@@ -248,7 +303,7 @@ export function handleHostMessage(runtime: CanvasRuntime, message: HostMessage) 
 	switch (message.type) {
 		case 'setSelection':
 			// The host is the source of truth; don't echo its selection back.
-			runtime.showSelection(runtime.index.find(message.target), message.reveal);
+			runtime.showSelectionOf(message.target, message.reveal);
 			break;
 		case 'setErrors':
 			runtime.setErrors(message.errors);

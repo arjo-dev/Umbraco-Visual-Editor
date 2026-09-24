@@ -13,7 +13,7 @@ export interface PropertyValueModel {
 	value?: unknown;
 }
 
-interface BlockData {
+export interface BlockData {
 	key: string;
 	contentTypeKey: string;
 	values: PropertyValueModel[];
@@ -37,8 +37,12 @@ function isBlockData(v: unknown): v is BlockData {
 	return isObj(v) && typeof v.key === 'string' && typeof v.contentTypeKey === 'string' && Array.isArray(v.values);
 }
 
+/** A value's block editor value: itself, or a rich text value's `blocks`. */
+const blockValueOf = (value: unknown) => (isObj(value) && isObj(value.blocks) ? value.blocks : value);
+
 /** The block with content key `key` anywhere inside `value`. */
 function findBlock(value: unknown, key: string): BlockData | null {
+	value = blockValueOf(value);
 	if (!isObj(value) || !Array.isArray(value.contentData)) return null;
 	for (const block of value.contentData) {
 		if (!isBlockData(block)) continue;
@@ -88,25 +92,140 @@ export function withBlockPropertyValue(
 	alias: string,
 	culture: string | null,
 	newValue: unknown,
+	data: BlockDataKind = 'contentData',
 ): unknown {
+	return withBlockData(value, blockKey, data, (block) => ({
+		...block,
+		values: upsert(block.values, alias, culture, newValue),
+	}));
+}
+
+/** Block content, or block settings. */
+export type BlockDataKind = 'contentData' | 'settingsData';
+
+/** `values` with the value for `alias`/`culture` set, added when the block has no value for it yet. */
+function upsert(
+	values: PropertyValueModel[],
+	alias: string,
+	culture: string | null,
+	value: unknown,
+): PropertyValueModel[] {
+	const index = values.findIndex((v) => sameVariant(v, alias, culture));
+	if (index < 0) return [...values, { alias, culture, segment: null, value }];
+	const copy = [...values];
+	copy[index] = { ...values[index], value };
+	return copy;
+}
+
+/**
+ * A copy of block editor value `value` with the content (or settings) entry keyed `key` replaced by `update(entry)`,
+ * wherever it is: nested in other blocks' values, or in rich text. Only the objects on the way are copied; returns
+ * `value` itself when the entry isn't found.
+ */
+export function withBlockData(
+	value: unknown,
+	key: string,
+	data: BlockDataKind,
+	update: (entry: BlockData) => BlockData,
+): unknown {
+	// Rich text: the blocks are in its `blocks`.
+	if (isObj(value) && isObj(value.blocks)) {
+		const blocks = withBlockData(value.blocks, key, data, update);
+		return blocks === value.blocks ? value : { ...value, blocks };
+	}
 	if (!isObj(value) || !Array.isArray(value.contentData)) return value;
+
 	let changed = false;
-	const contentData = value.contentData.map((block: unknown) => {
-		if (!isBlockData(block)) return block;
-		const values = block.values.map((v) => {
-			if (block.key === blockKey) {
-				if (!sameVariant(v, alias, culture)) return v;
-				changed = true;
-				return { ...v, value: newValue };
-			}
-			const nested = withBlockPropertyValue(v.value, blockKey, alias, culture, newValue);
-			if (nested === v.value) return v;
-			changed = true;
-			return { ...v, value: nested };
+	const entries = (list: unknown) =>
+		Array.isArray(list)
+			? list.map((entry: unknown) => {
+					if (!isBlockData(entry)) return entry;
+					if (entry.key === key) {
+						changed = true;
+						return update(entry);
+					}
+					return entry;
+				})
+			: list;
+	const next: Record<string, unknown> = { ...value, [data]: entries(value[data]) };
+	if (changed) return next;
+
+	// Not here: look in the blocks' own values (nested block editors, rich text).
+	const contentData = value.contentData.map((entry: unknown) => {
+		if (!isBlockData(entry)) return entry;
+		const values = entry.values.map((v) => {
+			const nested = withBlockData(v.value, key, data, update);
+			return nested === v.value ? v : { ...v, value: nested };
 		});
-		return values.some((v, i) => v !== block.values[i]) ? { ...block, values } : block;
+		return values.some((v, i) => v !== entry.values[i]) ? { ...entry, values } : entry;
 	});
-	return changed ? { ...value, contentData } : value;
+	return contentData.some((entry, i) => entry !== (value.contentData as unknown[])[i])
+		? { ...value, contentData }
+		: value;
+}
+
+/** A block of the document, as the side panel edits it (#25). */
+export interface LocatedBlock {
+	/** The document property the block is in (a block editor, possibly with the block nested further down). */
+	property: PropertyValueModel;
+	content: BlockData;
+	/** Its settings, when its block type has them. */
+	settings: BlockData | null;
+}
+
+/** The layout item for `contentKey` (in a layout, or a grid area), for its settings key. */
+function findLayoutItem(node: unknown, contentKey: string): Record<string, unknown> | null {
+	if (Array.isArray(node)) {
+		for (const item of node) {
+			const found = findLayoutItem(item, contentKey);
+			if (found) return found;
+		}
+		return null;
+	}
+	if (!isObj(node)) return null;
+	if (node.contentKey === contentKey) return node;
+	for (const child of Object.values(node)) {
+		const found = findLayoutItem(child, contentKey);
+		if (found) return found;
+	}
+	return null;
+}
+
+/** The block editor value directly holding block `key` in its contentData, anywhere inside `value`. */
+function findBlockValue(value: unknown, key: string): Record<string, unknown> | null {
+	value = blockValueOf(value);
+	if (!isObj(value) || !Array.isArray(value.contentData)) return null;
+	if (value.contentData.some((entry) => isBlockData(entry) && entry.key === key)) return value;
+	for (const entry of value.contentData) {
+		if (!isBlockData(entry)) continue;
+		for (const v of entry.values) {
+			const found = findBlockValue(v.value, key);
+			if (found) return found;
+		}
+	}
+	return null;
+}
+
+/** Finds a block by content key: its content, its settings and the document property it is in. */
+export function locateBlock(
+	values: readonly PropertyValueModel[],
+	contentKey: string,
+	activeCulture: string | null,
+): LocatedBlock | null {
+	const rank = (v: PropertyValueModel) => ((v.culture ?? null) === activeCulture ? 0 : v.culture == null ? 1 : 2);
+	for (const property of [...values].sort((a, b) => rank(a) - rank(b))) {
+		const holder = findBlockValue(property.value, contentKey);
+		if (!holder) continue;
+		const content = (holder.contentData as unknown[]).find((e) => isBlockData(e) && e.key === contentKey) as BlockData;
+		const settingsKey = findLayoutItem(holder.layout, contentKey)?.settingsKey;
+		const settings =
+			typeof settingsKey === 'string' && Array.isArray(holder.settingsData)
+				? ((holder.settingsData as unknown[]).find((e) => isBlockData(e) && e.key === settingsKey) as
+						BlockData | undefined)
+				: undefined;
+		return { property, content, settings: settings ?? null };
+	}
+	return null;
 }
 
 /** Whether an element's text shows `value` as it is stored (the template didn't transform it). */
@@ -137,4 +256,34 @@ export function contentKeyOfSettings(values: readonly PropertyValueModel[], sett
 		return null;
 	};
 	return search(values.map((v) => v.value));
+}
+
+/**
+ * A copy of `value` with the block editor value that holds block `contentKey` replaced by `update(blockValue)`,
+ * wherever it is (nested in other blocks' values, or a rich text value's `blocks`). Returns `value` itself when the
+ * block isn't found or `update` changes nothing.
+ */
+export function withBlockEditorValue(
+	value: unknown,
+	contentKey: string,
+	update: (blockValue: Record<string, unknown>) => Record<string, unknown>,
+): unknown {
+	if (isObj(value) && isObj(value.blocks)) {
+		const blocks = withBlockEditorValue(value.blocks, contentKey, update);
+		return blocks === value.blocks ? value : { ...value, blocks };
+	}
+	if (!isObj(value) || !Array.isArray(value.contentData)) return value;
+	if (value.contentData.some((entry) => isBlockData(entry) && entry.key === contentKey)) return update(value);
+
+	const contentData = value.contentData.map((entry: unknown) => {
+		if (!isBlockData(entry)) return entry;
+		const values = entry.values.map((v) => {
+			const nested = withBlockEditorValue(v.value, contentKey, update);
+			return nested === v.value ? v : { ...v, value: nested };
+		});
+		return values.some((v, i) => v !== entry.values[i]) ? { ...entry, values } : entry;
+	});
+	return contentData.some((entry, i) => entry !== (value.contentData as unknown[])[i])
+		? { ...value, contentData }
+		: value;
 }

@@ -518,4 +518,64 @@ describe('canvas runtime', () => {
 			expect(selectionLabel(runtime).name).to.equal('Caption');
 		});
 	});
+
+	describe('block toolbar', () => {
+		const tools = () =>
+			[...runtime.overlay.host.shadowRoot!.querySelectorAll<HTMLButtonElement>('.box.selected .tool')].map(
+				(b) => `${b.getAttribute('aria-label')}${b.disabled ? ' (disabled)' : ''}`,
+			);
+
+		it("shows the selected block's actions, from where it sits", () => {
+			click(doc, 'inner');
+			// The only block in its list: nowhere to move; no settings.
+			expect(tools()).to.deep.equal(['Move up (disabled)', 'Move down (disabled)', 'Duplicate', 'Delete']);
+		});
+
+		it('sends the action for the block', () => {
+			click(doc, 'inner');
+			sent = [];
+			runtime.overlay.host.shadowRoot!.querySelector<HTMLButtonElement>('.tool.duplicate')!.click();
+			expect(sent).to.deep.equal([{ type: 'blockAction', blockKey: 'inner', action: 'duplicate' }]);
+		});
+
+		it('has no toolbar for blocks the server could not place, properties, or while read-only', () => {
+			click(doc, 'outer');
+			expect(tools()).to.deep.equal([]);
+			click(doc, 'caption');
+			expect(tools()).to.deep.equal([]);
+			handleHostMessage(runtime, { type: 'setReadonly', readonly: true });
+			handleHostMessage(runtime, {
+				type: 'setSelection',
+				target: runtime.index.find({
+					kind: 'Block',
+					ownerKey: 'inner',
+					ownerIsBlock: true,
+					alias: null,
+					culture: null,
+				})!.ref,
+			});
+			expect(tools()).to.deep.equal([]);
+		});
+
+		it('selects a block the host picked once a re-render brings it', async () => {
+			const realFetch = window.fetch;
+			const pages: Record<string, string> = {
+				'/r/without': pageHtml().replace(/<!--uve:b:3-->[\s\S]*<!--\/uve:b:3-->/, ''),
+				'/r/with': pageHtml(),
+			};
+			window.fetch = (async (input: RequestInfo | URL) =>
+				new Response(pages[String(input)], { headers: { 'content-type': 'text/html' } })) as typeof fetch;
+			try {
+				await runtime.render('/r/without');
+				const inner = { kind: 'Block' as const, ownerKey: 'inner', ownerIsBlock: true, alias: null, culture: null };
+				handleHostMessage(runtime, { type: 'setSelection', target: inner });
+				expect(selectionLabel(runtime).name).to.equal(null); // not on the page yet
+
+				await runtime.render('/r/with');
+				expect(selectionLabel(runtime).name).to.equal('Image Row');
+			} finally {
+				window.fetch = realFetch;
+			}
+		});
+	});
 });

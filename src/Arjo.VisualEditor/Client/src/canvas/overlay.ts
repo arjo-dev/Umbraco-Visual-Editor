@@ -3,11 +3,23 @@
  * layer (popover), with a shadow root: site CSS can't restyle it, our CSS can't leak into the site, and no site
  * z-index can cover it. Boxes follow their elements through scrolling, resizing and DOM changes.
  */
+import type { BlockAction } from '../protocol/index.js';
 import { targetLabel, type CanvasTarget } from './targets.js';
+
+/** A button of the block toolbar shown on a selected block (#25). */
+export interface BlockTool {
+	action: BlockAction;
+	label: string;
+	disabled?: boolean;
+}
 
 export interface OverlayOptions {
 	/** A breadcrumb entry (a parent block of the selection) was clicked. */
 	onBreadcrumb?: (target: CanvasTarget) => void;
+	/** The block toolbar's buttons for a selected block; none (or null) for no toolbar. */
+	blockTools?: (target: CanvasTarget) => BlockTool[] | null;
+	/** A block toolbar button was pressed. */
+	onBlockTool?: (target: CanvasTarget, action: BlockAction) => void;
 }
 
 const BLOCK_COLOR = '#f79c37';
@@ -145,6 +157,29 @@ export class CanvasOverlay {
 		return box;
 	}
 
+	#toolbar(target: CanvasTarget, tools: BlockTool[], inside: boolean) {
+		const bar = this.#doc.createElement('div');
+		bar.className = `tools${inside ? ' inside' : ''}`;
+		bar.setAttribute('role', 'toolbar');
+		bar.setAttribute('aria-label', `${targetLabel(target.ref)} actions`);
+		for (const tool of tools) {
+			const button = this.#doc.createElement('button');
+			button.type = 'button';
+			button.className = `tool ${tool.action}`;
+			button.title = tool.label;
+			button.setAttribute('aria-label', tool.label);
+			button.disabled = !!tool.disabled;
+			button.innerHTML = ICONS[tool.action];
+			button.addEventListener('click', (event) => {
+				event.preventDefault();
+				event.stopPropagation();
+				this.#options.onBlockTool?.(target, tool.action);
+			});
+			bar.append(button);
+		}
+		return bar;
+	}
+
 	#box(target: CanvasTarget, kind: 'hover' | 'selected' | 'highlight', ancestors: CanvasTarget[] = []) {
 		const rect = unionRect(target.elements);
 		const box = this.#doc.createElement('div');
@@ -179,6 +214,11 @@ export class CanvasOverlay {
 				label.append(crumb, this.#doc.createTextNode(' › '));
 			}
 		}
+		if (kind === 'selected' && target.ref.kind === 'Block') {
+			const tools = this.#options.blockTools?.(target);
+			if (tools?.length) box.append(this.#toolbar(target, tools, rect.top < 24));
+		}
+
 		const name = this.#doc.createElement('span');
 		name.textContent =
 			kind === 'hover' && target.ref.ownerLabel
@@ -207,6 +247,19 @@ export function unionRect(elements: Element[]): DOMRect | null {
 	return left === Infinity ? null : new DOMRect(left, top, right - left, bottom - top);
 }
 
+const svg = (path: string) => `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="${path}"/></svg>`;
+const ICONS: Record<BlockAction, string> = {
+	moveUp: svg('M8 2.5 13.5 8l-1.4 1.4L9 6.3V14H7V6.3L3.9 9.4 2.5 8z'),
+	moveDown: svg('M8 13.5 2.5 8l1.4-1.4L7 9.7V2h2v7.7l3.1-3.1L13.5 8z'),
+	duplicate: svg(
+		'M5 1h8a2 2 0 0 1 2 2v8h-2V3H5zM1 5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2zm2 0v8h7V5z',
+	),
+	delete: svg('M6 1h4l1 1h3v2H2V2h3zM3 5h10l-1 10H4zm3 2v6h1V7zm3 0v6h1V7z'),
+	settings: svg(
+		'M2 3h7v2H2zm9 0h3v2h-3zm-2-1h2v4H9zM2 7h3v2H2zm5 0h7v2H7zM5 6h2v4H5zm-3 5h7v2H2zm9 0h3v2h-3zm-2-1h2v4H9z',
+	),
+};
+
 const STYLES = `
 	:host { all: initial; }
 	.layer { position: fixed; inset: 0; pointer-events: none; font: 12px/1.3 system-ui, -apple-system, 'Segoe UI', sans-serif; }
@@ -231,6 +284,19 @@ const STYLES = `
 	}
 	.block > .label { background: ${BLOCK_COLOR}; color: #1b264f; }
 	.label.inside { bottom: auto; top: 4px; left: 4px; }
+	.tools {
+		position: absolute; right: -3px; bottom: calc(100% + 4px); display: flex; gap: 1px; padding: 1px;
+		border-radius: 3px; background: ${BLOCK_COLOR}; box-shadow: 0 1px 3px rgb(0 0 0 / 0.25); pointer-events: auto;
+	}
+	.tools.inside { bottom: auto; top: 4px; right: 4px; }
+	.tool {
+		all: unset; display: grid; place-items: center; width: 22px; height: 20px; border-radius: 2px; cursor: pointer;
+		color: #1b264f;
+	}
+	.tool svg { width: 14px; height: 14px; fill: currentColor; }
+	.tool:hover:not(:disabled), .tool:focus-visible { background: rgb(255 255 255 / 0.45); }
+	.tool:focus-visible { outline: 1px solid #1b264f; }
+	.tool:disabled { opacity: 0.35; cursor: default; }
 	.editing .box.selected .label { display: none; }
 	.crumb {
 		all: unset; cursor: pointer; pointer-events: auto; text-decoration: underline; text-underline-offset: 2px;
