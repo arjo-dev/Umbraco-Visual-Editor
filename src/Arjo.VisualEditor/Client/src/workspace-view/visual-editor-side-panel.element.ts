@@ -1,16 +1,19 @@
 import { css, customElement, html, nothing, property } from '@umbraco-cms/backoffice/external/lit';
 import { UmbLitElement } from '@umbraco-cms/backoffice/lit-element';
 import type { TargetRef } from '../protocol/index.js';
+import './visual-editor-property-editor.element.js';
 
 /**
- * Visual editor side panel. For now it shows what is selected on the canvas; property editing (#19), page settings
- * (#22) and block editing (#25) will live here.
+ * Visual editor side panel: edits what is selected on the canvas. A document property gets the CMS's own property
+ * editor (#19). Blocks and their properties arrive with block editing (#25); page settings with #22.
  */
 @customElement('arjo-visual-editor-side-panel')
 export class ArjoVisualEditorSidePanelElement extends UmbLitElement {
 	@property({ attribute: false }) selected: TargetRef | null = null;
 	/** Editable areas the canvas found, or undefined before it has connected. */
 	@property({ attribute: false }) targetCount?: number;
+	/** Content tab URL of the document (`.../view/content`), for "Show in standard editor". */
+	@property() contentHref?: string;
 
 	#describe(target: TargetRef) {
 		const culture = target.culture ? ` · ${target.culture}` : '';
@@ -19,20 +22,29 @@ export class ArjoVisualEditorSidePanelElement extends UmbLitElement {
 		return { heading: target.label ?? target.alias ?? '', detail: `${owner}${culture}` };
 	}
 
-	override render() {
-		const selected = this.selected ? this.#describe(this.selected) : null;
+	#renderSelection() {
+		const target = this.selected;
+		if (!target) return html`<p class="hint">Click something on the page to select it.</p>`;
+
+		if (target.kind === 'Property' && !target.ownerIsBlock && target.alias) {
+			return html`<arjo-visual-editor-property-editor
+				.alias=${target.alias}
+				.contentHref=${this.contentHref}
+			></arjo-visual-editor-property-editor>`;
+		}
+
+		const { heading, detail } = this.#describe(target);
 		return html`
-			<uui-box headline="Selection">
-				${
-					selected
-						? html`
-								<p class="heading">${selected.heading}</p>
-								<p class="detail">${selected.detail}</p>
-								<p class="hint">Editing selected content arrives in a later release.</p>
-							`
-						: html`<p class="hint">Click something on the page to select it.</p>`
-				}
-			</uui-box>
+			<p class="heading">${heading}</p>
+			<p class="detail">${detail}</p>
+			<p class="hint">Editing blocks here arrives in a later release; use the standard editor for now.</p>
+			${this.contentHref ? html`<a class="standard" href=${this.contentHref}>Show in standard editor</a>` : nothing}
+		`;
+	}
+
+	override render() {
+		return html`
+			<uui-box headline="Selection">${this.#renderSelection()}</uui-box>
 			${
 				this.targetCount !== undefined
 					? html`<p class="status">${this.targetCount} editable areas on this page</p>`
@@ -73,6 +85,13 @@ export class ArjoVisualEditorSidePanelElement extends UmbLitElement {
 		}
 
 		.status {
+			font-size: var(--uui-type-small-size);
+		}
+
+		.standard {
+			display: inline-block;
+			margin-top: var(--uui-size-space-3);
+			color: var(--uui-color-interactive);
 			font-size: var(--uui-type-small-size);
 		}
 	`;
