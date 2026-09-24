@@ -23,6 +23,8 @@ export class ArjoVisualEditorToolbarElement extends UmbLitElement {
 	/** Whether the section sidebar (content tree) is shown in visual mode. */
 	@property({ type: Boolean }) treeVisible = false;
 	@property({ type: Boolean }) rendering = false;
+	/** The page can't be changed by this user (#31): shown as a tag. */
+	@property({ type: Boolean }) readonly = false;
 	/** Zoom the canvas applies so the device width fits (1 = not scaled). */
 	@property({ type: Number }) scale = 1;
 
@@ -109,6 +111,11 @@ export class ArjoVisualEditorToolbarElement extends UmbLitElement {
 			</div>
 
 			<div class="group end">
+				${
+					this.readonly
+						? html`<uui-tag look="secondary" title="You can look, but not change this page here">Read-only</uui-tag>`
+						: nothing
+				}
 				<!-- Always laid out, only hidden, so showing it doesn't shift the toolbar. -->
 				<uui-loader-circle aria-label="Updating preview" ?hidden=${!this.rendering}></uui-loader-circle>
 				<uui-button

@@ -3,6 +3,7 @@ import { UmbLitElement } from '@umbraco-cms/backoffice/lit-element';
 import { UMB_DOCUMENT_WORKSPACE_CONTEXT } from '@umbraco-cms/backoffice/document';
 import { UMB_PROPERTY_DATASET_CONTEXT } from '@umbraco-cms/backoffice/property';
 import type { UmbElementValueModel } from '@umbraco-cms/backoffice/content';
+import { UmbVariantId } from '@umbraco-cms/backoffice/variant';
 import { postRenderSession } from '../api/index.js';
 import { ARJO_VISUAL_MODE_CONTEXT, type ArjoVisualModeContext } from '../visual-mode/visual-mode.context.js';
 import { viewInPath } from '../visual-mode/routes.js';
@@ -76,6 +77,11 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 	/** The panel edge is being dragged: the canvas stops taking pointer events so the drag isn't lost to the iframe. */
 	@state() private _resizing = false;
 	@state() private _scale = 1;
+	/**
+	 * The variant being edited is read-only for this user (#31): no Update permission, in the recycle bin, locked, or
+	 * no access to its language. The workspace's read-only guard decides, as it does for the Content tab.
+	 */
+	@state() private _readonly = false;
 
 	#documentKey?: string;
 	#culture: string | null = null;
@@ -88,6 +94,7 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 	#visualMode?: ArjoVisualModeContext;
 	readonly #nonce = createNonce();
 	#channel?: HostChannel;
+	#workspace?: typeof UMB_DOCUMENT_WORKSPACE_CONTEXT.TYPE;
 	/** The canvas iframe, for laying the rich text toolbar over it. */
 	#frame?: HTMLIFrameElement;
 	/** Editing text in place on the canvas (#20). */
@@ -119,11 +126,14 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 			this.#culture = dataset?.getVariantId().culture ?? null;
 			this.#segment = dataset?.getVariantId().segment ?? null;
 			this.#validation.setCulture(this.#culture);
+			this.#observeReadonly();
 			this.#scheduleRender();
 		});
 
 		this.consumeContext(UMB_DOCUMENT_WORKSPACE_CONTEXT, (workspace) => {
 			if (!workspace) return;
+			this.#workspace = workspace;
+			this.#observeReadonly();
 			this.observe(workspace.isNew, (isNew) => {
 				this._isNew = isNew === true;
 				this.#scheduleRender();
@@ -175,6 +185,7 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 				this._richText = undefined;
 				this.#channel?.send({ type: 'setSelection', target: this._selected });
 				this.#channel?.send({ type: 'setDevice', width: this.#deviceWidth });
+				this.#channel?.send({ type: 'setReadonly', readonly: this._readonly });
 				this.#sendErrors();
 			},
 			onInvalid: (data) => console.warn('[Arjo.VisualEditor] ignored invalid canvas message', data),
@@ -330,6 +341,21 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 		this.#channel?.send({ type: 'richTextEditing', target: session.target, active: false });
 		// Render the stored markup through the template again (links, media, the markers).
 		this.#scheduleRender();
+	}
+
+	/** Follows whether the variant being edited is read-only, and tells the canvas. */
+	#observeReadonly() {
+		const workspace = this.#workspace;
+		if (!workspace) return;
+		this.observe(
+			workspace.readOnlyGuard.isPermittedForVariant(new UmbVariantId(this.#culture, this.#segment)),
+			(readonly) => {
+				this._readonly = readonly === true;
+				if (this._readonly) this.#endRichText(false);
+				this.#channel?.send({ type: 'setReadonly', readonly: this._readonly });
+			},
+			'arjoReadonly',
+		);
 	}
 
 	#onErrors(errors: VisualEditorError[]) {
@@ -544,6 +570,7 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 				.panelOpen=${this._panelOpen}
 				.rendering=${this._status === 'rendering'}
 				.scale=${this._scale}
+				?readonly=${this._readonly}
 				@device-change=${this.#onDeviceChange}
 				@size-change=${this.#onSizeChange}
 				@toggle-tree=${() => this.#visualMode?.setShowTree(!this._treeVisible)}
