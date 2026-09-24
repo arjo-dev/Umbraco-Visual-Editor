@@ -28,7 +28,11 @@ export interface CatalogueBlockGroup {
 export class ArjoVisualEditorBlockPickerElement extends UmbLitElement {
 	constructor() {
 		super();
-		const standIn = { getContentTypeHasProperties: () => false } as unknown as typeof UMB_BLOCK_MANAGER_CONTEXT.TYPE;
+		// Consumers of a context ask it for its host element; the rest is what the catalogue asks of a manager.
+		const standIn = {
+			getHostElement: () => this,
+			getContentTypeHasProperties: () => false,
+		} as unknown as typeof UMB_BLOCK_MANAGER_CONTEXT.TYPE;
 		this.provideContext(UMB_BLOCK_MANAGER_CONTEXT, standIn);
 	}
 
