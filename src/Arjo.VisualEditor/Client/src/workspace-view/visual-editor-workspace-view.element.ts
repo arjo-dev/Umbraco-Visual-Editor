@@ -14,13 +14,14 @@ import {
 	type HostChannel,
 	type TargetRef,
 } from '../protocol/index.js';
-import { VISUAL_EDITOR_DEVICES, type VisualEditorDeviceAlias } from './devices.js';
+import { sizeFor, type VisualEditorDeviceAlias } from './devices.js';
 import './visual-editor-toolbar.element.js';
 import './visual-editor-side-panel.element.js';
 import './visual-editor-canvas.element.js';
 
 const RENDER_DEBOUNCE_MS = 300;
 const PANEL_STORAGE_KEY = 'arjo.visualEditor.panelOpen';
+const SIZES_STORAGE_KEY = 'arjo.visualEditor.sizes';
 
 /**
  * The Visual editor: a document workspace view (ADR 0003) laid out as toolbar, canvas and side panel (#14).
@@ -39,6 +40,8 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 	/** Never saved: there's no draft to render yet (render sessions overlay it, ADR 0001). */
 	@state() private _isNew = false;
 	@state() private _device: VisualEditorDeviceAlias = 'desktop';
+	/** Last size chosen for each device, e.g. { desktop: 'macbook-pro-14' }. Remembered per browser. */
+	@state() private _sizes: Partial<Record<VisualEditorDeviceAlias, string>> = readSizes();
 	@state() private _panelOpen = readPanelOpen();
 	@state() private _scale = 1;
 
@@ -125,7 +128,7 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 	}
 
 	get #deviceWidth() {
-		return VISUAL_EDITOR_DEVICES.find((d) => d.alias === this._device)?.width ?? null;
+		return sizeFor(this._device, this._sizes[this._device]).width;
 	}
 
 	#onCanvasMessage(message: CanvasMessage) {
@@ -144,6 +147,16 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 	#onDeviceChange(event: CustomEvent<VisualEditorDeviceAlias>) {
 		this._device = event.detail;
 		this.#channel?.send({ type: 'setDevice', width: this.#deviceWidth });
+	}
+
+	#onSizeChange(event: CustomEvent<string>) {
+		this._sizes = { ...this._sizes, [this._device]: event.detail };
+		this.#channel?.send({ type: 'setDevice', width: this.#deviceWidth });
+		try {
+			localStorage.setItem(SIZES_STORAGE_KEY, JSON.stringify(this._sizes));
+		} catch {
+			// A per-browser convenience only.
+		}
 	}
 
 	#setPanelOpen(open: boolean) {
@@ -212,10 +225,12 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 			<arjo-visual-editor-toolbar
 				.standardEditorHref=${this.#documentBase ? `${this.#documentBase}/view/content` : undefined}
 				.device=${this._device}
+				.sizeId=${this._sizes[this._device]}
 				.panelOpen=${this._panelOpen}
 				.rendering=${this._status === 'rendering'}
 				.scale=${this._scale}
 				@device-change=${this.#onDeviceChange}
+				@size-change=${this.#onSizeChange}
 				@toggle-panel=${() => this.#setPanelOpen(!this._panelOpen)}
 			></arjo-visual-editor-toolbar>
 			<div class="body">
@@ -278,6 +293,15 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 			color: var(--uui-color-danger);
 		}
 	`;
+}
+
+function readSizes(): Partial<Record<VisualEditorDeviceAlias, string>> {
+	try {
+		const stored = JSON.parse(localStorage.getItem(SIZES_STORAGE_KEY) ?? '{}');
+		return typeof stored === 'object' && stored !== null ? stored : {};
+	} catch {
+		return {};
+	}
 }
 
 function readPanelOpen() {

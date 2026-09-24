@@ -1,6 +1,6 @@
 import { css, customElement, html, nothing, property } from '@umbraco-cms/backoffice/external/lit';
 import { UmbLitElement } from '@umbraco-cms/backoffice/lit-element';
-import { VISUAL_EDITOR_DEVICES, type VisualEditorDeviceAlias } from './devices.js';
+import { deviceFor, sizeFor, sizeLabel, VISUAL_EDITOR_DEVICES, type VisualEditorDeviceAlias } from './devices.js';
 
 /**
  * Visual editor top bar. The document name, culture switcher and Save / Save & Publish stay in Umbraco's own
@@ -8,6 +8,7 @@ import { VISUAL_EDITOR_DEVICES, type VisualEditorDeviceAlias } from './devices.j
  * reflects state passed in and reports what the user asks for as events.
  *
  * @fires device-change - detail: the chosen device alias.
+ * @fires size-change - detail: the chosen size id within the current device.
  * @fires toggle-panel - the side panel toggle was pressed.
  */
 @customElement('arjo-visual-editor-toolbar')
@@ -15,6 +16,8 @@ export class ArjoVisualEditorToolbarElement extends UmbLitElement {
 	/** Link back to the document's Content tab. */
 	@property({ attribute: false }) standardEditorHref?: string;
 	@property({ attribute: false }) device: VisualEditorDeviceAlias = 'desktop';
+	/** Selected size within the device (see devices.ts). */
+	@property({ attribute: false }) sizeId?: string;
 	@property({ type: Boolean }) panelOpen = true;
 	@property({ type: Boolean }) rendering = false;
 	/** Zoom the canvas applies so the device width fits (1 = not scaled). */
@@ -22,6 +25,11 @@ export class ArjoVisualEditorToolbarElement extends UmbLitElement {
 
 	#chooseDevice(alias: VisualEditorDeviceAlias) {
 		this.dispatchEvent(new CustomEvent<VisualEditorDeviceAlias>('device-change', { detail: alias }));
+	}
+
+	#chooseSize(event: Event) {
+		const id = (event.target as HTMLSelectElement).value;
+		this.dispatchEvent(new CustomEvent<string>('size-change', { detail: id }));
 	}
 
 	override render() {
@@ -42,30 +50,41 @@ export class ArjoVisualEditorToolbarElement extends UmbLitElement {
 				</uui-button>
 			</div>
 
-			<uui-button-group class="devices" role="radiogroup" aria-label="Preview width">
-				${VISUAL_EDITOR_DEVICES.map(
-					(d) => html`
-						<uui-button
-							compact
-							role="radio"
-							aria-checked=${d.alias === this.device}
-							look=${d.alias === this.device ? 'primary' : 'secondary'}
-							label=${d.label}
-							title=${d.label}
-							@click=${() => this.#chooseDevice(d.alias)}
-						>
-							<uui-icon name=${d.icon}></uui-icon>
-						</uui-button>
-					`,
-				)}
-			</uui-button-group>
-			${
-				this.scale < 1
-					? html`<span class="scale" title="The page is scaled down so the whole width fits"
-							>${Math.round(this.scale * 100)}%</span
-						>`
-					: nothing
-			}
+			<div class="devices">
+				<uui-button-group role="radiogroup" aria-label="Device">
+					${VISUAL_EDITOR_DEVICES.map(
+						(d) => html`
+							<uui-button
+								compact
+								role="radio"
+								aria-checked=${d.alias === this.device}
+								look=${d.alias === this.device ? 'primary' : 'secondary'}
+								label=${d.label}
+								title=${d.label}
+								@click=${() => this.#chooseDevice(d.alias)}
+							>
+								<uui-icon name=${d.icon}></uui-icon>
+							</uui-button>
+						`,
+					)}
+				</uui-button-group>
+				<uui-select
+					label="Preview size"
+					.options=${deviceFor(this.device).sizes.map((s) => ({
+						name: sizeLabel(s),
+						value: s.id,
+						selected: s.id === sizeFor(this.device, this.sizeId).id,
+					}))}
+					@change=${this.#chooseSize}
+				></uui-select>
+				${
+					this.scale < 1
+						? html`<span class="scale" title="The page is scaled down so the whole width fits"
+								>${Math.round(this.scale * 100)}%</span
+							>`
+						: nothing
+				}
+			</div>
 
 			<div class="group end">
 				${this.rendering ? html`<uui-loader-circle aria-label="Updating preview"></uui-loader-circle>` : nothing}
@@ -101,13 +120,15 @@ export class ArjoVisualEditorToolbarElement extends UmbLitElement {
 			gap: var(--uui-size-space-2);
 		}
 
+		/* Device buttons, size and zoom level stay together, centred between the left and right groups. */
 		.devices {
-			margin-left: auto;
+			display: flex;
+			align-items: center;
+			gap: var(--uui-size-space-3);
+			margin: 0 auto;
 		}
 
-		/* The device switcher (with the zoom level, when shown) stays centred between the left and right groups. */
 		.scale {
-			margin-right: auto;
 			font-size: var(--uui-type-small-size);
 			color: var(--uui-color-text-alt);
 		}
