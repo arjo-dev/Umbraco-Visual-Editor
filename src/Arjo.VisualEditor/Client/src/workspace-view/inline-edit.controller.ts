@@ -29,6 +29,8 @@ const EMPTY_BLOCKS = { layout: {}, contentData: [], settingsData: [], expose: []
 /** What the side panel needs to edit rich text in place (#57). */
 export interface RichTextSession {
 	target: TargetRef;
+	/** It's the same in every language (an invariant property of a culture-variant document). */
+	shared: boolean;
 	markup: string;
 	configuration: UmbPropertyEditorConfigCollection;
 }
@@ -66,8 +68,13 @@ export class ArjoInlineEditController extends UmbControllerBase {
 	 * Answers `beginInlineEdit` if `target` can be edited in place and returns true; returns false otherwise (then the
 	 * side panel is the way to edit it).
 	 */
-	async start(target: TargetRef, text: string, activeCulture: string | null): Promise<boolean> {
-		const editable = await this.#editable(target, activeCulture, (value) => showsValue(text, value));
+	async start(
+		target: TargetRef,
+		text: string,
+		activeCulture: string | null,
+		activeSegment: string | null = null,
+	): Promise<boolean> {
+		const editable = await this.#editable(target, activeCulture, activeSegment, (value) => showsValue(text, value));
 		const editorAlias = editable?.dataType.editorAlias;
 		if (!editable || !editorAlias || !(editorAlias in INLINE_EDITORS)) return false;
 
@@ -84,8 +91,12 @@ export class ArjoInlineEditController extends UmbControllerBase {
 	 * Starts editing rich text in place (#57): returns what the editor needs, or null when it can't be edited in place
 	 * (then the side panel is the way). The caller answers the canvas with `richTextEditing` once the editor is up.
 	 */
-	async startRichText(target: TargetRef, activeCulture: string | null): Promise<RichTextSession | null> {
-		const editable = await this.#editable(target, activeCulture, (value) => {
+	async startRichText(
+		target: TargetRef,
+		activeCulture: string | null,
+		activeSegment: string | null = null,
+	): Promise<RichTextSession | null> {
+		const editable = await this.#editable(target, activeCulture, activeSegment, (value) => {
 			const markup = (value as RichTextValue | null | undefined)?.markup ?? '';
 			// RTE blocks can't be edited on the canvas yet (ADR 0004): their node views don't work in the frame.
 			return typeof markup === 'string' && !/<umb-rte-block/i.test(markup);
@@ -96,6 +107,8 @@ export class ArjoInlineEditController extends UmbControllerBase {
 		this.#editing = { target, location: editable.location, richText: true };
 		return {
 			target,
+			// A document property that doesn't vary, in a document that does: the same in every language (#30).
+			shared: !!activeCulture && !target.ownerIsBlock && !editable.location.property.culture,
 			markup: (editable.location.value as RichTextValue | null | undefined)?.markup ?? '',
 			configuration: new UmbPropertyEditorConfigCollection(editable.dataType.values),
 		};
@@ -135,6 +148,7 @@ export class ArjoInlineEditController extends UmbControllerBase {
 	async #editable(
 		target: TargetRef,
 		activeCulture: string | null,
+		activeSegment: string | null,
 		accept: (value: unknown) => boolean,
 	): Promise<{ location: ValueLocation; dataType: UmbDataTypeDetailModel } | null> {
 		const workspace = this.#workspace;
@@ -149,6 +163,8 @@ export class ArjoInlineEditController extends UmbControllerBase {
 			const holderVariant = new UmbVariantId(location.property.culture, location.property.segment);
 			const datasetVariant = new UmbVariantId(activeCulture, null);
 			if (workspace.readOnlyGuard.getIsPermittedForVariant(holderVariant)) return null;
+			// Values here are the default segment's: with a segment shown, its own value is edited in the side panel.
+			if (activeSegment && holder.variesBySegment) return null;
 			if (!workspace.propertyWriteGuard.getIsPermittedForVariantAndProperty(holderVariant, holder, datasetVariant)) {
 				return null;
 			}

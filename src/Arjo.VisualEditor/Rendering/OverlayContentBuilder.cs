@@ -42,7 +42,13 @@ public sealed class OverlayContentBuilder(
                     ToStoredValue(propertyType, value, session.DocumentKey);
             }
 
-            overrides.Add(new OverlayPublishedProperty(propertyType, draft, draft.GetProperty(group.Key), variationContextAccessor, sources));
+            overrides.Add(new OverlayPublishedProperty(
+                propertyType,
+                draft,
+                draft.GetProperty(group.Key),
+                variationContextAccessor,
+                sources,
+                session.Segment));
         }
 
         // Re-apply the ModelsBuilder model so strongly typed views (UmbracoViewPage<Home>) still bind.

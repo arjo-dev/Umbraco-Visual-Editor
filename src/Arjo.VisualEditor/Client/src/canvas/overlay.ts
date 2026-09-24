@@ -22,6 +22,8 @@ export interface OverlayOptions {
 	onBlockTool?: (target: CanvasTarget, action: BlockAction) => void;
 	/** Whether a hovered or selected block gets a drag handle (#26). */
 	draggable?: (target: CanvasTarget) => boolean;
+	/** A note for a selected target's label, e.g. "Shared across languages" (#30); null for none. */
+	note?: (target: CanvasTarget) => string | null;
 	/** A drag handle was pressed. */
 	onDragStart?: (target: CanvasTarget, event: PointerEvent) => void;
 	/** Whether a selected block gets a resize handle on its right edge (Block Grid column span, #27). */
@@ -416,6 +418,13 @@ export class CanvasOverlay {
 				? `${targetLabel(target.ref)} · ${target.ref.ownerLabel}`
 				: targetLabel(target.ref);
 		label.append(name);
+		const note = kind === 'selected' ? this.#options.note?.(target) : null;
+		if (note) {
+			const tag = this.#doc.createElement('span');
+			tag.className = 'note';
+			tag.textContent = note;
+			label.append(tag);
+		}
 		box.append(label);
 		return box;
 	}
@@ -479,6 +488,7 @@ const STYLES = `
 	}
 	.block > .label { background: ${BLOCK_COLOR}; color: #1b264f; }
 	.label.inside { bottom: auto; top: 4px; left: 4px; }
+	.label .note { margin-left: 6px; padding-left: 6px; border-left: 1px solid rgb(255 255 255 / 0.5); opacity: 0.85; }
 	.add {
 		all: unset; position: absolute; left: 50%; width: 20px; height: 20px; margin-left: -10px; border-radius: 50%;
 		display: grid; place-items: center; font: 700 15px/1 system-ui, sans-serif; cursor: pointer; pointer-events: auto;

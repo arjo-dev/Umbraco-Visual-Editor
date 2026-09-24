@@ -642,4 +642,30 @@ describe('canvas runtime', () => {
 			expect(runtime.overlay.host.shadowRoot!.querySelectorAll('.add')).to.have.length(0);
 		});
 	});
+
+	describe('variants', () => {
+		const note = () =>
+			runtime.overlay.host.shadowRoot!.querySelector('.box.selected .label .note')?.textContent ?? null;
+		const invariantTitle = {
+			kind: 'Property' as const,
+			ownerKey: 'doc',
+			ownerIsBlock: false,
+			alias: 'title',
+			culture: null,
+		};
+
+		it("notes that a page property that doesn't vary is shared across languages", () => {
+			// The page is shown in en-US (the manifest's culture); a property without a culture is the same in all.
+			const target = runtime.index.targets.find((t) => t.ref.alias === 'title')!;
+			runtime.showSelection({ ...target, ref: invariantTitle });
+			expect(note()).to.equal('Shared across languages');
+		});
+
+		it('has no note for properties that vary, or for block properties', () => {
+			click(doc, 'title'); // varies (en-US)
+			expect(note()).to.equal(null);
+			click(doc, 'caption'); // in a block
+			expect(note()).to.equal(null);
+		});
+	});
 });

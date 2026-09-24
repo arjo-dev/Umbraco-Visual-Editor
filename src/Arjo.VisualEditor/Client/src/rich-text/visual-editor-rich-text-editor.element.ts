@@ -46,6 +46,8 @@ export class ArjoVisualEditorRichTextEditorElement extends UmbLitElement {
 	@property({ attribute: false }) configuration?: UmbPropertyEditorConfigCollection;
 	/** The stored markup (not the rendered page HTML: links, media and blocks are resolved there). */
 	@property({ attribute: false }) markup = '';
+	/** The property is the same in every language (#30): said on the toolbar, as the Content tab says it. */
+	@property({ type: Boolean }) shared = false;
 
 	@state() private _editor?: Editor;
 	@state() private _toolbar: ToolbarValue = [[[]]];
@@ -188,6 +190,7 @@ export class ArjoVisualEditorRichTextEditorElement extends UmbLitElement {
 		if (!this._editor) return nothing;
 		return html`
 			<div class="toolbar" role="toolbar" aria-label="Formatting">
+				${this.shared ? html`<p class="shared">Shared across languages</p>` : nothing}
 				${
 					this._toolbar.flat(2).length
 						? html`<umb-tiptap-toolbar
@@ -240,6 +243,14 @@ export class ArjoVisualEditorRichTextEditorElement extends UmbLitElement {
 		umb-tiptap-toolbar {
 			--umb-tiptap-top: 0;
 			display: block;
+		}
+
+		.shared {
+			margin: 0;
+			padding: var(--uui-size-space-1) var(--uui-size-space-3);
+			border-bottom: 1px solid var(--uui-color-border);
+			color: var(--uui-color-text-alt);
+			font-size: var(--uui-type-small-size);
 		}
 	`;
 }
