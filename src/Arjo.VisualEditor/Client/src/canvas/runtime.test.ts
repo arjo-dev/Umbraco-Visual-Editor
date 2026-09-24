@@ -578,4 +578,23 @@ describe('canvas runtime', () => {
 			}
 		});
 	});
+
+	describe('drag handle', () => {
+		const grip = () => runtime.overlay.host.shadowRoot!.querySelector('.box.selected .grip, .box.hover .grip');
+
+		it('shows a drag handle on Block List blocks only', () => {
+			click(doc, 'inner');
+			expect(grip()).to.not.equal(null);
+			click(doc, 'outer'); // no placement: not a Block List block the canvas knows
+			expect(grip()).to.equal(null);
+		});
+
+		it('keeps the hovered block when the pointer moves onto the overlay (its handle)', () => {
+			pointerOver(doc, 'inner');
+			const win = doc.defaultView as typeof window;
+			runtime.overlay.host.dispatchEvent(new win.PointerEvent('pointerover', { bubbles: true }));
+			const last = [...sent].reverse().find((m) => m.type === 'hover');
+			expect(last?.type === 'hover' && last.target?.ownerKey).to.equal('inner');
+		});
+	});
 });

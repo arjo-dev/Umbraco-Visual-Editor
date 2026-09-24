@@ -1,5 +1,14 @@
 import { expect } from '@open-wc/testing';
-import { canMoveBlock, duplicateBlock, moveBlock, removeBlock, type BlockEditorValue } from './block-operations.js';
+import {
+	canMoveBlock,
+	duplicateBlock,
+	moveBlock,
+	moveBlockTo,
+	putBlock,
+	removeBlock,
+	takeBlock,
+	type BlockEditorValue,
+} from './block-operations.js';
 
 const list = (): BlockEditorValue => ({
 	layout: {
@@ -154,5 +163,48 @@ describe('duplicateBlock', () => {
 
 	it('is null for a block that is not there', () => {
 		expect(duplicateBlock(list(), 'missing', newKey)).to.equal(null);
+	});
+});
+
+describe('moveBlockTo', () => {
+	it('moves a block to a gap in its list, counting gaps before it is taken out', () => {
+		expect(order(moveBlockTo(list(), 'a', 3))).to.deep.equal(['b', 'c', 'a']);
+		expect(order(moveBlockTo(list(), 'c', 0))).to.deep.equal(['c', 'a', 'b']);
+		expect(order(moveBlockTo(list(), 'a', 2))).to.deep.equal(['b', 'a', 'c']);
+	});
+
+	it('leaves the value alone when the block would stay where it is', () => {
+		const value = list();
+		expect(moveBlockTo(value, 'b', 1)).to.equal(value);
+		expect(moveBlockTo(value, 'b', 2)).to.equal(value);
+	});
+});
+
+describe('takeBlock and putBlock', () => {
+	it('moves a block with its content, settings and expose entries into another list', () => {
+		const { value: without, taken } = takeBlock(list(), 'a')!;
+		expect(order(without)).to.deep.equal(['b', 'c']);
+		expect(taken.item.contentKey).to.equal('a');
+		expect(taken.contentData.map((d) => d.key)).to.deep.equal(['a']);
+		expect(taken.settingsData.map((d) => d.key)).to.deep.equal(['a-s']);
+		expect(taken.expose.map((e) => e.contentKey)).to.deep.equal(['a']);
+
+		const target: BlockEditorValue = {
+			layout: { 'Umbraco.BlockList': [{ contentKey: 'x' }] },
+			contentData: [{ key: 'x' }],
+			settingsData: [],
+			expose: [],
+		};
+		const into = putBlock(target, 'Umbraco.BlockList', taken, 1);
+		expect(into.layout['Umbraco.BlockList'].map((i) => i.contentKey)).to.deep.equal(['x', 'a']);
+		expect(into.contentData.map((d) => d.key)).to.deep.equal(['x', 'a']);
+		expect(into.settingsData!.map((d) => d.key)).to.deep.equal(['a-s']);
+		expect(into.expose!.map((e) => e.contentKey)).to.deep.equal(['a']);
+	});
+
+	it('puts into an empty value, clamping the position', () => {
+		const { taken } = takeBlock(list(), 'b')!;
+		const into = putBlock({ layout: {}, contentData: [] }, 'Umbraco.BlockList', taken, 5);
+		expect(into.layout['Umbraco.BlockList'].map((i) => i.contentKey)).to.deep.equal(['b']);
 	});
 });

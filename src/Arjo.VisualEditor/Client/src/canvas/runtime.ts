@@ -7,6 +7,8 @@
  * - Inline editing of plain text properties (#20, inline-edit.ts): double-click, or Enter on the selection. Rich text
  *   (#57, rich-text-edit.ts) the same way, with the backoffice's own editor mounted on the element.
  * - A toolbar on the selected block (#25): move up/down, duplicate, delete, settings (the host changes the document).
+ * - Drag and drop of Block List blocks (#26, drag.ts): a handle on hovered and selected blocks, a drop line between
+ *   blocks, autoscroll near the edges; Alt+Up/Down moves the selected block from the keyboard.
  * - Live re-render (#18): a `render` message patches the newer page in (patch.ts) rather than reloading, then
  *   re-resolves the markers and keeps the selection, scroll position and focus.
  * Only active inside the visual editor (a nonce in the URL fragment); opening a render URL directly just shows the page.
@@ -17,6 +19,7 @@ import { InlineEditor, inlineEditableElement } from './inline-edit.js';
 import { RichTextEditState } from './rich-text-edit.js';
 import { guardNavigation } from './navigation.js';
 import { CanvasOverlay, type BlockTool } from './overlay.js';
+import { BLOCK_LIST, blockListsOf, dropSpotAt, type DropSpot } from './drag.js';
 import { fetchRender, patchDocument } from './patch.js';
 import { TargetIndex, type CanvasTarget } from './targets.js';
 
@@ -66,7 +69,99 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 		onBreadcrumb: (target) => select(target),
 		blockTools: (target) => blockTools(target),
 		onBlockTool: (target, action) => channel?.send({ type: 'blockAction', blockKey: target.ref.ownerKey, action }),
+		draggable: (target) => !readonly && !editing() && target.block?.editorAlias === BLOCK_LIST,
+		onDragStart: (target, event) => startDrag(target, event),
 	});
+
+	/** A block being dragged by its handle (#26). */
+	let drag: { target: CanvasTarget; spot: DropSpot | null; x: number; y: number; scroll: number } | null = null;
+	/** The click that ends a drag isn't a click on the page. */
+	let swallowClick = false;
+
+	/** Distance from the top/bottom of the page's viewport where a drag scrolls it, and the fastest it scrolls. */
+	const AUTOSCROLL_EDGE = 56;
+	const AUTOSCROLL_MAX = 18;
+
+	function startDrag(target: CanvasTarget, event: PointerEvent) {
+		if (drag || readonly || editing()) return;
+		const win = doc.defaultView!;
+		drag = { target, spot: null, x: event.clientX, y: event.clientY, scroll: 0 };
+		hover(null);
+		overlay.setDragging(target);
+		doc.documentElement.style.setProperty('cursor', 'grabbing');
+		doc.documentElement.style.setProperty('user-select', 'none');
+
+		const update = () => {
+			if (!drag) return;
+			drag.spot = dropSpotAt(drag.x, drag.y, drag.target, blockListsOf(index.targets), index.targets);
+			overlay.setDropLine(drag.spot?.line ?? null);
+		};
+		const autoscroll = () => {
+			if (!drag) return;
+			const height = win.innerHeight;
+			const speed =
+				drag.y < AUTOSCROLL_EDGE
+					? -AUTOSCROLL_MAX * (1 - drag.y / AUTOSCROLL_EDGE)
+					: drag.y > height - AUTOSCROLL_EDGE
+						? AUTOSCROLL_MAX * (1 - (height - drag.y) / AUTOSCROLL_EDGE)
+						: 0;
+			if (speed) {
+				win.scrollBy(0, speed);
+				update();
+			}
+			drag.scroll = win.requestAnimationFrame(autoscroll);
+		};
+		const onMove = (e: PointerEvent) => {
+			if (!drag) return;
+			drag.x = e.clientX;
+			drag.y = e.clientY;
+			update();
+		};
+		const end = (drop: boolean) => {
+			if (!drag) return;
+			const { target: dragged, spot, scroll } = drag;
+			drag = null;
+			win.cancelAnimationFrame(scroll);
+			win.removeEventListener('pointermove', onMove, true);
+			win.removeEventListener('pointerup', onUp, true);
+			win.removeEventListener('pointercancel', onCancel, true);
+			win.removeEventListener('keydown', onKey, true);
+			win.removeEventListener('blur', onCancel);
+			doc.documentElement.style.removeProperty('cursor');
+			doc.documentElement.style.removeProperty('user-select');
+			overlay.setDropLine(null);
+			overlay.setDragging(null);
+			if (drop && spot) {
+				swallowClick = true;
+				setTimeout(() => (swallowClick = false));
+				channel?.send({
+					type: 'blockMove',
+					blockKey: dragged.ref.ownerKey,
+					to: {
+						ownerKey: spot.list.ownerKey,
+						propertyAlias: spot.list.propertyAlias,
+						areaKey: null,
+						index: spot.index,
+					},
+				});
+			}
+		};
+		const onUp = () => end(true);
+		const onCancel = () => end(false);
+		const onKey = (e: KeyboardEvent) => {
+			if (e.key !== 'Escape') return;
+			e.preventDefault();
+			e.stopPropagation();
+			end(false);
+		};
+		win.addEventListener('pointermove', onMove, true);
+		win.addEventListener('pointerup', onUp, true);
+		win.addEventListener('pointercancel', onCancel, true);
+		win.addEventListener('keydown', onKey, true);
+		win.addEventListener('blur', onCancel);
+		update();
+		drag.scroll = win.requestAnimationFrame(autoscroll);
+	}
 
 	/**
 	 * The block toolbar's buttons for a block, from where it sits (#24): list and grid blocks move and duplicate; rich
@@ -139,12 +234,19 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 	}
 
 	const onPointerOver = (event: PointerEvent) => {
+		// Over our own overlay (a drag handle, the toolbar): keep what's hovered, so its handle stays.
+		if (event.target === overlay.host || drag) return;
 		if (readonly || editing()?.contains(event.target as Node)) return;
 		hover(index.targetAt(event.target as Element));
 	};
 	const onPointerLeave = () => hover(null);
 	const onClick = (event: MouseEvent) => {
 		if (readonly || event.button !== 0) return;
+		if (swallowClick) {
+			event.preventDefault();
+			event.stopPropagation();
+			return;
+		}
 		// Clicks inside the text being edited place the caret.
 		if (editing()?.contains(event.target as Node)) return;
 		const target = index.targetAt(event.target as Element);
@@ -170,6 +272,15 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 	};
 	const onKeyDown = (event: KeyboardEvent) => {
 		if (!selected || editing() || readonly) return;
+		// Keyboard alternative to dragging (#26): Alt+Up/Down moves the selected block among its siblings.
+		if (event.altKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
+			const action = event.key === 'ArrowUp' ? 'moveUp' : 'moveDown';
+			if (blockTools(selected)?.some((t) => t.action === action && !t.disabled)) {
+				event.preventDefault();
+				channel?.send({ type: 'blockAction', blockKey: selected.ref.ownerKey, action });
+			}
+			return;
+		}
 		if (event.key === 'Escape') select(index.ancestorsOf(selected)[0] ?? null);
 		else if (event.key === 'Enter' && (requestInlineEdit(selected) || richText.request(selected)))
 			event.preventDefault();

@@ -20,6 +20,10 @@ export interface OverlayOptions {
 	blockTools?: (target: CanvasTarget) => BlockTool[] | null;
 	/** A block toolbar button was pressed. */
 	onBlockTool?: (target: CanvasTarget, action: BlockAction) => void;
+	/** Whether a hovered or selected block gets a drag handle (#26). */
+	draggable?: (target: CanvasTarget) => boolean;
+	/** A drag handle was pressed. */
+	onDragStart?: (target: CanvasTarget, event: PointerEvent) => void;
 }
 
 const BLOCK_COLOR = '#f79c37';
@@ -35,6 +39,8 @@ export class CanvasOverlay {
 	#highlight: CanvasTarget | null = null;
 	#selection: { target: CanvasTarget; ancestors: CanvasTarget[] } | null = null;
 	#errors: Array<{ target: CanvasTarget; message: string }> = [];
+	#dragging: CanvasTarget | null = null;
+	#dropLine: { left: number; top: number; width: number } | null = null;
 	#frame = 0;
 	#resizeObserver: ResizeObserver;
 	#mutationObserver: MutationObserver;
@@ -80,6 +86,18 @@ export class CanvasOverlay {
 
 	setHighlight(target: CanvasTarget | null) {
 		this.#highlight = target;
+		this.#render();
+	}
+
+	/** The block being dragged (#26): shown dimmed, without hover or handles meanwhile. */
+	setDragging(target: CanvasTarget | null) {
+		this.#dragging = target;
+		this.#render();
+	}
+
+	/** Where the dragged block would drop: a line between blocks (viewport coordinates), or none. */
+	setDropLine(line: { left: number; top: number; width: number } | null) {
+		this.#dropLine = line;
 		this.#render();
 	}
 
@@ -130,6 +148,22 @@ export class CanvasOverlay {
 
 		for (const { target, message } of this.#errors) layer.append(this.#errorBox(target, message));
 
+		if (this.#dragging) {
+			const box = this.#box(this.#dragging, 'dragging');
+			layer.append(box);
+			if (this.#dropLine) {
+				const line = this.#doc.createElement('div');
+				line.className = 'drop';
+				Object.assign(line.style, {
+					left: `${this.#dropLine.left}px`,
+					top: `${this.#dropLine.top - 1.5}px`,
+					width: `${this.#dropLine.width}px`,
+				});
+				layer.append(line);
+			}
+			return;
+		}
+
 		if (this.#highlight) layer.append(this.#box(this.#highlight, 'highlight'));
 		if (this.#hover && this.#hover !== this.#selection?.target) layer.append(this.#box(this.#hover, 'hover'));
 		if (this.#selection) layer.append(this.#box(this.#selection.target, 'selected', this.#selection.ancestors));
@@ -157,6 +191,28 @@ export class CanvasOverlay {
 		return box;
 	}
 
+	/** The drag handle, at the block's left edge (inside it when there's no room outside). */
+	#grip(target: CanvasTarget, inside: boolean) {
+		const grip = this.#doc.createElement('button');
+		grip.type = 'button';
+		grip.className = `grip${inside ? ' inside' : ''}`;
+		grip.title = `Drag to move ${targetLabel(target.ref)}`;
+		grip.setAttribute('aria-label', grip.title);
+		grip.innerHTML = GRIP_ICON;
+		grip.addEventListener('pointerdown', (event) => {
+			if (event.button !== 0) return;
+			event.preventDefault();
+			event.stopPropagation();
+			this.#options.onDragStart?.(target, event);
+		});
+		// Clicks on the handle aren't clicks on the page.
+		grip.addEventListener('click', (event) => {
+			event.preventDefault();
+			event.stopPropagation();
+		});
+		return grip;
+	}
+
 	#toolbar(target: CanvasTarget, tools: BlockTool[], inside: boolean) {
 		const bar = this.#doc.createElement('div');
 		bar.className = `tools${inside ? ' inside' : ''}`;
@@ -180,7 +236,7 @@ export class CanvasOverlay {
 		return bar;
 	}
 
-	#box(target: CanvasTarget, kind: 'hover' | 'selected' | 'highlight', ancestors: CanvasTarget[] = []) {
+	#box(target: CanvasTarget, kind: 'hover' | 'selected' | 'highlight' | 'dragging', ancestors: CanvasTarget[] = []) {
 		const rect = unionRect(target.elements);
 		const box = this.#doc.createElement('div');
 		box.className = `box ${kind} ${target.ref.kind === 'Block' ? 'block' : 'property'}`;
@@ -194,7 +250,9 @@ export class CanvasOverlay {
 			width: `${rect.width}px`,
 			height: `${rect.height}px`,
 		});
-		if (kind === 'highlight') return box;
+		if (kind === 'highlight' || kind === 'dragging') return box;
+
+		if (this.#options.draggable?.(target)) box.append(this.#grip(target, rect.left < 24));
 
 		const label = this.#doc.createElement('div');
 		label.className = `label${rect.top < 24 ? ' inside' : ''}`;
@@ -260,6 +318,9 @@ const ICONS: Record<BlockAction, string> = {
 	),
 };
 
+const GRIP_ICON =
+	'<svg viewBox="0 0 12 16" aria-hidden="true"><circle cx="3.5" cy="3" r="1.5"/><circle cx="8.5" cy="3" r="1.5"/><circle cx="3.5" cy="8" r="1.5"/><circle cx="8.5" cy="8" r="1.5"/><circle cx="3.5" cy="13" r="1.5"/><circle cx="8.5" cy="13" r="1.5"/></svg>';
+
 const STYLES = `
 	:host { all: initial; }
 	.layer { position: fixed; inset: 0; pointer-events: none; font: 12px/1.3 system-ui, -apple-system, 'Segoe UI', sans-serif; }
@@ -284,6 +345,16 @@ const STYLES = `
 	}
 	.block > .label { background: ${BLOCK_COLOR}; color: #1b264f; }
 	.label.inside { bottom: auto; top: 4px; left: 4px; }
+	.box.dragging { background: color-mix(in srgb, ${BLOCK_COLOR} 18%, transparent); outline: 2px dashed ${BLOCK_COLOR}; outline-offset: 3px; }
+	.drop { position: fixed; height: 3px; border-radius: 2px; background: ${BLOCK_COLOR}; box-shadow: 0 0 0 1px #fff; }
+	.grip {
+		all: unset; position: absolute; left: -24px; top: 50%; transform: translateY(-50%); display: grid; place-items: center;
+		width: 18px; height: 28px; border-radius: 3px; cursor: grab; pointer-events: auto; color: #1b264f;
+		background: ${BLOCK_COLOR}; box-shadow: 0 1px 3px rgb(0 0 0 / 0.25);
+	}
+	.grip.inside { left: 4px; }
+	.grip svg { width: 12px; height: 16px; fill: currentColor; }
+	.grip:hover, .grip:focus-visible { filter: brightness(1.08); }
 	.tools {
 		position: absolute; right: -3px; bottom: calc(100% + 4px); display: flex; gap: 1px; padding: 1px;
 		border-radius: 3px; background: ${BLOCK_COLOR}; box-shadow: 0 1px 3px rgb(0 0 0 / 0.25); pointer-events: auto;
