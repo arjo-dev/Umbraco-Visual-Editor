@@ -14,26 +14,31 @@ import {
 	type HostChannel,
 	type TargetRef,
 } from '../protocol/index.js';
+import { VISUAL_EDITOR_DEVICES, type VisualEditorDeviceAlias } from './devices.js';
+import './visual-editor-toolbar.element.js';
+import './visual-editor-side-panel.element.js';
 
 const RENDER_DEBOUNCE_MS = 300;
+const PANEL_STORAGE_KEY = 'arjo.visualEditor.panelOpen';
 
 /**
- * Prototype visual mode (spikes #9-#11, protocol #12): a document workspace view that renders the document with its
- * *unsaved* workspace values in an iframe, re-rendering as they change. While it is showing, visual mode is active,
- * which hides the section sidebar/tree (docs/adr/0003-backoffice-integration.md). It talks to the canvas over the
- * protocol in ../protocol (docs/protocol.md). The real canvas host is #16.
+ * The Visual editor: a document workspace view (ADR 0003) laid out as toolbar, canvas and side panel (#14).
+ * It renders the document with its *unsaved* workspace values (render sessions, ADR 0001), re-rendering as they
+ * change, and talks to the canvas over the protocol (docs/protocol.md). While it is showing, visual mode is active,
+ * which hides the section sidebar/tree. The document name, culture switcher and Save / Save & Publish are Umbraco's
+ * own workspace header and footer.
  */
-@customElement('arjo-visual-preview-workspace-view')
-export class ArjoVisualPreviewWorkspaceViewElement extends UmbLitElement {
+@customElement('arjo-visual-editor-workspace-view')
+export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 	@state() private _url?: string;
 	@state() private _status: 'idle' | 'rendering' | 'error' = 'idle';
 	@state() private _error?: string;
-	@state() private _lastRenderMs?: number;
-	@state() private _connected = false;
 	@state() private _targetCount?: number;
 	@state() private _selected: TargetRef | null = null;
 	/** Never saved: there's no draft to render yet (render sessions overlay it, ADR 0001). */
 	@state() private _isNew = false;
+	@state() private _device: VisualEditorDeviceAlias = 'desktop';
+	@state() private _panelOpen = readPanelOpen();
 
 	#documentKey?: string;
 	#culture: string | null = null;
@@ -45,7 +50,8 @@ export class ArjoVisualPreviewWorkspaceViewElement extends UmbLitElement {
 	#visualMode?: ArjoVisualModeContext;
 	readonly #nonce = createNonce();
 	#channel?: HostChannel;
-	/** The document URL this view was opened on, to tell "switched tab" from "left the document". */
+	#channelIframe?: HTMLIFrameElement;
+	/** The document URL this view was opened on; the "Standard editor" link goes to its Content tab. */
 	#documentBase?: string;
 
 	constructor() {
@@ -99,25 +105,35 @@ export class ArjoVisualPreviewWorkspaceViewElement extends UmbLitElement {
 		clearTimeout(this.#timer);
 		this.#channel?.close();
 		this.#channel = undefined;
+		this.#channelIframe = undefined;
 		super.disconnectedCallback();
 	}
 
 	override updated() {
-		// The iframe exists once the first render URL arrives; open the channel to it once.
+		// The iframe exists once a render URL arrives, and is replaced if the canvas showed a message in between
+		// (unsaved page, render error). Bind the channel to whichever iframe is current.
 		const iframe = this.#iframe;
-		if (iframe && !this.#channel) {
+		if (iframe === this.#channelIframe) return;
+		this.#channel?.close();
+		this.#channel = undefined;
+		this.#channelIframe = iframe ?? undefined;
+		if (iframe) {
 			this.#channel = createHostChannel({
 				iframe,
 				nonce: this.#nonce,
 				onMessage: (message) => this.#onCanvasMessage(message),
 				onConnect: () => {
-					this._connected = true;
-					// A re-render is a fresh page: give it the current selection again.
+					// A re-render is a fresh page: give it the current state again.
 					this.#channel?.send({ type: 'setSelection', target: this._selected });
+					this.#channel?.send({ type: 'setDevice', width: this.#deviceWidth });
 				},
 				onInvalid: (data) => console.warn('[Arjo.VisualEditor] ignored invalid canvas message', data),
 			});
 		}
+	}
+
+	get #deviceWidth() {
+		return VISUAL_EDITOR_DEVICES.find((d) => d.alias === this._device)?.width ?? null;
 	}
 
 	#onCanvasMessage(message: CanvasMessage) {
@@ -128,7 +144,22 @@ export class ArjoVisualPreviewWorkspaceViewElement extends UmbLitElement {
 			case 'select':
 				this._selected = message.target;
 				this.#channel?.send({ type: 'setSelection', target: message.target });
+				if (message.target && !this._panelOpen) this.#setPanelOpen(true);
 				break;
+		}
+	}
+
+	#onDeviceChange(event: CustomEvent<VisualEditorDeviceAlias>) {
+		this._device = event.detail;
+		this.#channel?.send({ type: 'setDevice', width: this.#deviceWidth });
+	}
+
+	#setPanelOpen(open: boolean) {
+		this._panelOpen = open;
+		try {
+			localStorage.setItem(PANEL_STORAGE_KEY, String(open));
+		} catch {
+			// A per-browser convenience only.
 		}
 	}
 
@@ -141,7 +172,6 @@ export class ArjoVisualPreviewWorkspaceViewElement extends UmbLitElement {
 		if (this._isNew || !this.#documentKey || !this.#values) return;
 
 		const requestId = ++this.#requestId;
-		const started = performance.now();
 		this._status = 'rendering';
 
 		const { data, response } = await postRenderSession({
@@ -161,14 +191,13 @@ export class ArjoVisualPreviewWorkspaceViewElement extends UmbLitElement {
 			this._status = 'error';
 			this._error =
 				response?.status === 404
-					? 'Save the document once before previewing it.'
-					: `Render failed (${response?.status}).`;
+					? 'You must first save your page to use the visual editor.'
+					: `The page couldn't be rendered (${response?.status}).`;
 			return;
 		}
 
 		this.#restoreScrollY = this.#iframe?.contentWindow?.scrollY ?? 0;
 		this._url = withNonce(data.url, this.#nonce);
-		this._lastRenderMs = Math.round(performance.now() - started);
 	}
 
 	get #iframe() {
@@ -181,41 +210,47 @@ export class ArjoVisualPreviewWorkspaceViewElement extends UmbLitElement {
 		this._status = 'idle';
 	}
 
-	#describe(target: TargetRef) {
-		const owner = target.ownerIsBlock ? `block ${target.ownerKey.slice(0, 8)}` : 'page';
-		return target.kind === 'Block'
-			? owner
-			: `${owner} → ${target.alias}${target.culture ? ` (${target.culture})` : ''}`;
+	#renderCanvas() {
+		if (this._isNew) {
+			return html`<uui-box class="message"><p>You must first save your page to use the visual editor.</p></uui-box>`;
+		}
+		if (this._status === 'error') {
+			return html`<uui-box class="message"><p class="error">${this._error}</p></uui-box>`;
+		}
+		if (!this._url) {
+			return html`<uui-loader-bar class="loading"></uui-loader-bar>`;
+		}
+		const width = this.#deviceWidth;
+		return html`<iframe
+			src=${this._url}
+			title="Page preview"
+			class=${width ? 'device' : 'full'}
+			style=${width ? `width: ${width}px` : nothing}
+			@load=${this.#onLoad}
+		></iframe>`;
 	}
 
 	override render() {
 		return html`
-			<div class="bar">
-				<uui-button
-					look="outline"
-					compact
-					label="Standard editor"
-					href=${this.#documentBase ? `${this.#documentBase}/view/content` : nothing}
-				>
-					<uui-icon name="icon-arrow-left"></uui-icon> Standard editor
-				</uui-button>
-				<uui-tag look="secondary">Visual editor prototype · unsaved values</uui-tag>
-				${this.#culture ? html`<uui-tag look="outline">${this.#culture}</uui-tag>` : nothing}
-				${this._status === 'rendering' ? html`<uui-loader-circle></uui-loader-circle>` : nothing}
-				${this._lastRenderMs !== undefined ? html`<small>session ${this._lastRenderMs} ms</small>` : nothing}
-				<small
-					>${this._connected ? `canvas connected · ${this._targetCount ?? 0} targets` : 'canvas not connected'}</small
-				>
-				${this._selected ? html`<uui-tag look="primary">Selected: ${this.#describe(this._selected)}</uui-tag>` : nothing}
-				${this._url ? html`<a href=${this._url} target="_blank" rel="noopener">Open in new tab</a>` : nothing}
+			<arjo-visual-editor-toolbar
+				.standardEditorHref=${this.#documentBase ? `${this.#documentBase}/view/content` : undefined}
+				.device=${this._device}
+				.panelOpen=${this._panelOpen}
+				.rendering=${this._status === 'rendering'}
+				@device-change=${this.#onDeviceChange}
+				@toggle-panel=${() => this.#setPanelOpen(!this._panelOpen)}
+			></arjo-visual-editor-toolbar>
+			<div class="body">
+				<div class="canvas">${this.#renderCanvas()}</div>
+				${
+					this._panelOpen
+						? html`<arjo-visual-editor-side-panel
+								.selected=${this._selected}
+								.targetCount=${this._targetCount}
+							></arjo-visual-editor-side-panel>`
+						: nothing
+				}
 			</div>
-			${
-				this._isNew
-					? html`<uui-box class="notice"><p>You must first save your page to use the visual editor.</p></uui-box>`
-					: nothing
-			}
-			${this._status === 'error' ? html`<uui-box><p class="error">${this._error}</p></uui-box>` : nothing}
-			${this._url && !this._isNew ? html`<iframe src=${this._url} title="Visual preview" @load=${this.#onLoad}></iframe>` : nothing}
 		`;
 	}
 
@@ -223,47 +258,83 @@ export class ArjoVisualPreviewWorkspaceViewElement extends UmbLitElement {
 		:host {
 			display: flex;
 			flex-direction: column;
-			gap: var(--uui-size-space-3);
 			height: 100%;
-			padding: var(--uui-size-layout-1);
+			/* The workspace doesn't always give its views a fixed height; keep the canvas usable regardless. */
+			min-height: 70vh;
 			box-sizing: border-box;
 		}
 
-		.bar {
+		.body {
+			flex: 1;
 			display: flex;
-			align-items: center;
-			flex-wrap: wrap;
-			gap: var(--uui-size-space-3);
+			min-height: 0;
 		}
 
-		.bar a {
-			margin-left: auto;
+		.canvas {
+			flex: 1;
+			min-width: 0;
+			display: flex;
+			justify-content: center;
+			align-items: stretch;
+			overflow: auto;
+			background: var(--uui-color-background);
+		}
+
+		arjo-visual-editor-side-panel {
+			width: 360px;
+			flex: none;
 		}
 
 		iframe {
-			flex: 1;
-			min-height: 70vh;
-			width: 100%;
-			border: 1px solid var(--uui-color-border);
-			border-radius: var(--uui-border-radius);
+			border: 0;
 			background: white;
 		}
 
-		.notice p {
+		iframe.full {
+			width: 100%;
+		}
+
+		iframe.device {
+			margin: var(--uui-size-space-5) 0;
+			flex: none;
+			border: 1px solid var(--uui-color-border);
+			border-radius: var(--uui-border-radius);
+			box-shadow: var(--uui-shadow-depth-2);
+		}
+
+		.message {
+			align-self: flex-start;
+			margin: var(--uui-size-layout-1);
+			max-width: 40rem;
+		}
+
+		.message p {
 			margin: 0;
 		}
 
 		.error {
 			color: var(--uui-color-danger);
-			margin: 0;
+		}
+
+		.loading {
+			align-self: flex-start;
+			width: 100%;
 		}
 	`;
 }
 
-export default ArjoVisualPreviewWorkspaceViewElement;
+function readPanelOpen() {
+	try {
+		return localStorage.getItem(PANEL_STORAGE_KEY) !== 'false';
+	} catch {
+		return true;
+	}
+}
+
+export default ArjoVisualEditorWorkspaceViewElement;
 
 declare global {
 	interface HTMLElementTagNameMap {
-		'arjo-visual-preview-workspace-view': ArjoVisualPreviewWorkspaceViewElement;
+		'arjo-visual-editor-workspace-view': ArjoVisualEditorWorkspaceViewElement;
 	}
 }
