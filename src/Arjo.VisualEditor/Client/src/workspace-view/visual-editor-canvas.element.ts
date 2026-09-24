@@ -34,15 +34,11 @@ export class ArjoVisualEditorCanvasElement extends UmbLitElement {
 	/** Device size in CSS pixels; null (or a size without dimensions) fills the available space. */
 	@property({ attribute: false }) deviceSize: Pick<VisualEditorSize, 'width' | 'height'> | null = null;
 
-	/** Where to scroll the first page to (e.g. where the reader was when they last left the Visual editor). */
-	@property({ attribute: false }) initialScrollY = 0;
-
 	@state() private _loaded = false;
 	@state() private _renderError = false;
 	@state() private _scale = 1;
 
 	#restoreScrollY = 0;
-	#pageScrollY = 0;
 	#frame?: HTMLIFrameElement;
 	#resizeObserver = new ResizeObserver(() => this.#updateScale());
 
@@ -58,8 +54,8 @@ export class ArjoVisualEditorCanvasElement extends UmbLitElement {
 
 	protected override willUpdate(changed: PropertyValues<this>) {
 		// Remember where the reader was before the next render replaces the page.
-		if (changed.has('url')) {
-			this.#restoreScrollY = this.#frame ? (this.#frame.contentWindow?.scrollY ?? 0) : this.initialScrollY;
+		if (changed.has('url') && this.#frame) {
+			this.#restoreScrollY = this.#frame.contentWindow?.scrollY ?? 0;
 		}
 	}
 
@@ -75,11 +71,6 @@ export class ArjoVisualEditorCanvasElement extends UmbLitElement {
 
 	get frame() {
 		return this.#frame;
-	}
-
-	/** The page's scroll position; still available after the frame has been removed. */
-	get pageScrollY() {
-		return this.#pageScrollY;
 	}
 
 	#updateScale() {
@@ -112,8 +103,6 @@ export class ArjoVisualEditorCanvasElement extends UmbLitElement {
 		this._renderError = !frameWindow.document.getElementById('uve-markers');
 		// Instant: sites with `scroll-behavior: smooth` (e.g. Bootstrap) would otherwise animate from the top.
 		frameWindow.scrollTo({ top: this.#restoreScrollY, behavior: 'instant' });
-		this.#pageScrollY = frameWindow.scrollY;
-		frameWindow.addEventListener('scroll', () => (this.#pageScrollY = frameWindow.scrollY), { passive: true });
 		this.dispatchEvent(new CustomEvent<boolean>('page-loaded', { detail: !this._renderError }));
 	}
 
