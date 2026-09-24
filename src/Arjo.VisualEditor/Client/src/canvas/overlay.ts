@@ -34,11 +34,14 @@ export interface OverlayOptions {
 	onInsert?: (target: CanvasTarget, where: 'before' | 'after') => void;
 }
 
-/** An empty place blocks can be added to (an empty grid area, #28): drawn as a dashed box with a "+". */
+/**
+ * An empty place on the page, drawn as a dashed box: an empty grid area blocks can be added to (with a "+" button,
+ * #28), or a block with nothing to show yet (a note only; clicks go through to the block).
+ */
 export interface Placeholder {
 	element: Element;
 	label: string;
-	onInsert: () => void;
+	onInsert?: () => void;
 }
 
 /** What a resize would give (#27): the block's new box, and a label such as "6 / 12". */
@@ -264,7 +267,7 @@ export class CanvasOverlay {
 	/** An empty place to add blocks to: a dashed box over it, with a "+" button. */
 	#placeholder({ element, label, onInsert }: Placeholder) {
 		const box = this.#doc.createElement('div');
-		box.className = 'placeholder';
+		box.className = `placeholder${onInsert ? '' : ' note'}`;
 		const rect = element.getBoundingClientRect();
 		if (!rect.width) {
 			box.hidden = true;
@@ -276,6 +279,13 @@ export class CanvasOverlay {
 			width: `${rect.width}px`,
 			height: `${rect.height}px`,
 		});
+		if (!onInsert) {
+			const note = this.#doc.createElement('span');
+			note.className = 'placeholder-note';
+			note.textContent = label;
+			box.append(note);
+			return box;
+		}
 		const button = this.#doc.createElement('button');
 		button.type = 'button';
 		button.className = 'placeholder-add';
@@ -485,6 +495,8 @@ const STYLES = `
 		background: ${PROPERTY_COLOR}; font-weight: 600;
 	}
 	.placeholder-add:hover, .placeholder-add:focus-visible { filter: brightness(1.15); }
+	.placeholder.note { outline-color: ${BLOCK_COLOR}; background: color-mix(in srgb, ${BLOCK_COLOR} 8%, transparent); }
+	.placeholder-note { padding: 4px 10px; color: #6b4b12; font-style: italic; }
 	.box.dragging { background: color-mix(in srgb, ${BLOCK_COLOR} 18%, transparent); outline: 2px dashed ${BLOCK_COLOR}; outline-offset: 3px; }
 	.drop { position: fixed; border-radius: 2px; background: ${BLOCK_COLOR}; box-shadow: 0 0 0 1px #fff; }
 	.resize {

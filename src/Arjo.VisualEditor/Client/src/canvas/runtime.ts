@@ -112,6 +112,25 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 
 	/** Height given to an empty grid area, so it can be seen, clicked and dropped on. */
 	const EMPTY_AREA_HEIGHT = 56;
+	/** Height given to a block with nothing to show yet (e.g. one just added), so it can be seen and selected. */
+	const EMPTY_BLOCK_HEIGHT = 64;
+
+	/**
+	 * A block that shows nothing yet: no text, no media, and no areas or blocks inside it (those have placeholders or
+	 * content of their own). Its empty properties don't count.
+	 */
+	function isEmptyBlock(target: CanvasTarget): boolean {
+		if (target.ref.kind !== 'Block' || !target.elements.length) return false;
+		return target.elements.every(
+			(el) =>
+				!el.textContent?.trim() &&
+				!el.querySelector('img, picture, video, iframe, svg, canvas, object, embed, .umb-block-grid__area') &&
+				!index.targets.some(
+					(t) =>
+						t !== target && t.ref.kind === 'Block' && t.elements.some((inner) => el !== inner && el.contains(inner)),
+				),
+		);
+	}
 
 	/**
 	 * Placeholders in empty grid areas (#28): an empty area renders with no height, so it gets one (on the page, in
@@ -124,8 +143,16 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 			if (element.getBoundingClientRect().height < EMPTY_AREA_HEIGHT)
 				element.style.minHeight = `${EMPTY_AREA_HEIGHT}px`;
 		}
-		overlay.setPlaceholders(
-			empty.map((container) => ({
+		// Blocks with nothing to show yet (e.g. one just added): say where their content is edited.
+		const blank = readonly ? [] : index.targets.filter(isEmptyBlock);
+		for (const target of blank) {
+			const element = target.elements[0] as HTMLElement;
+			if (element.getBoundingClientRect().height < EMPTY_BLOCK_HEIGHT)
+				element.style.minHeight = `${EMPTY_BLOCK_HEIGHT}px`;
+		}
+		overlay.setPlaceholders([
+			...blank.map((target) => ({ element: target.elements[0], label: 'Edit the content in the side panel' })),
+			...empty.map((container) => ({
 				element: container.element,
 				label: 'Add block',
 				onInsert: () =>
@@ -141,7 +168,7 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 						},
 					}),
 			})),
-		);
+		]);
 	}
 
 	/** Where a dragged block would drop: in a Block List for list blocks, in a grid's root or area for grid blocks. */
