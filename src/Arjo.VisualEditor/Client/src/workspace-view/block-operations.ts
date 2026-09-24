@@ -189,3 +189,63 @@ export function duplicateBlock(
 		contentKey: copy.contentKey,
 	};
 }
+
+/** A block taken out of one block editor value, to be put into another (#26). */
+export interface TakenBlock {
+	item: LayoutItem;
+	contentData: BlockEditorValue['contentData'];
+	settingsData: NonNullable<BlockEditorValue['settingsData']>;
+	expose: NonNullable<BlockEditorValue['expose']>;
+}
+
+/**
+ * The value with the block moved to position `index` of its own list: `index` counts the gaps before the block is
+ * taken out (0 = first, siblings.length = last), as a drop between two blocks does.
+ */
+export function moveBlockTo(value: BlockEditorValue, contentKey: string, index: number): BlockEditorValue {
+	const found = findSiblings(value, contentKey);
+	if (!found) return value;
+	const to = index > found.index ? index - 1 : index;
+	if (to === found.index || to < 0 || to >= found.items.length) return value;
+	const items = found.items.filter((_, i) => i !== found.index);
+	items.splice(to, 0, found.items[found.index]);
+	return found.replace(items);
+}
+
+/** The value without the block, and the block with everything that goes with it (as removeBlock removes it). */
+export function takeBlock(
+	value: BlockEditorValue,
+	contentKey: string,
+): { value: BlockEditorValue; taken: TakenBlock } | null {
+	const found = findSiblings(value, contentKey);
+	if (!found) return null;
+	const item = found.items[found.index];
+	const { content, settings } = layoutKeys(item);
+	return {
+		value: removeBlock(value, contentKey),
+		taken: {
+			item,
+			contentData: value.contentData.filter((d) => content.has(d.key)),
+			settingsData: (value.settingsData ?? []).filter((d) => settings.has(d.key)),
+			expose: (value.expose ?? []).filter((e) => content.has(e.contentKey)),
+		},
+	};
+}
+
+/** The value with a taken block put in its `editorAlias` layout at `index` (clamped to the list's length). */
+export function putBlock(
+	value: BlockEditorValue,
+	editorAlias: string,
+	taken: TakenBlock,
+	index: number,
+): BlockEditorValue {
+	const items = [...(value.layout[editorAlias] ?? [])];
+	items.splice(Math.max(0, Math.min(index, items.length)), 0, taken.item);
+	return {
+		...value,
+		layout: { ...value.layout, [editorAlias]: items },
+		contentData: [...value.contentData, ...taken.contentData],
+		settingsData: [...(value.settingsData ?? []), ...taken.settingsData],
+		expose: [...(value.expose ?? []), ...taken.expose],
+	};
+}

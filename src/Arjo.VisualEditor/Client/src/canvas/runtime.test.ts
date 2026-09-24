@@ -578,4 +578,45 @@ describe('canvas runtime', () => {
 			}
 		});
 	});
+
+	describe('drag handle', () => {
+		const grip = () => runtime.overlay.host.shadowRoot!.querySelector('.box.selected .grip, .box.hover .grip');
+
+		it('shows a drag handle on Block List blocks only', () => {
+			click(doc, 'inner');
+			expect(grip()).to.not.equal(null);
+			click(doc, 'outer'); // no placement: not a Block List block the canvas knows
+			expect(grip()).to.equal(null);
+		});
+
+		it('keeps a draggable block hovered a little beyond its edge, so its handle stays in reach', () => {
+			const win = doc.defaultView as typeof window;
+			const over = (id: string, x: number, y: number) =>
+				doc
+					.getElementById(id)!
+					.dispatchEvent(new win.PointerEvent('pointerover', { bubbles: true, clientX: x, clientY: y }));
+			const hovered = () => {
+				const last = [...sent].reverse().find((m) => m.type === 'hover');
+				return last?.type === 'hover' ? (last.target?.ownerKey ?? null) : 'none';
+			};
+			const inner = doc.getElementById('inner')!.getBoundingClientRect();
+
+			over('inner', inner.left + 5, inner.top + 5);
+			expect(hovered()).to.equal('inner');
+			// Out into the outer block's padding, left of the inner block where its handle is: still the inner block.
+			over('outer', inner.left - 15, inner.top + 5);
+			expect(hovered()).to.equal('inner');
+			// Well away from it: whatever is there.
+			over('plain', 400, doc.getElementById('plain')!.getBoundingClientRect().top + 2);
+			expect(hovered()).to.equal(null);
+		});
+
+		it('keeps the hovered block when the pointer moves onto the overlay (its handle)', () => {
+			pointerOver(doc, 'inner');
+			const win = doc.defaultView as typeof window;
+			runtime.overlay.host.dispatchEvent(new win.PointerEvent('pointerover', { bubbles: true }));
+			const last = [...sent].reverse().find((m) => m.type === 'hover');
+			expect(last?.type === 'hover' && last.target?.ownerKey).to.equal('inner');
+		});
+	});
 });

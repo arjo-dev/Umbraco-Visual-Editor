@@ -30,6 +30,13 @@
                 @await Html.GetBlockGridHtmlAsync(Model, "grid")
             </div>
         </div>
+
+        <div class="row gx-4 gx-lg-5 justify-content-center">
+            <div class="col-lg-10">
+                @await Html.GetBlockListHtmlAsync(Model, "moreblocks")
+            </div>
+        </div>
+
     </div>
 </article>
 
