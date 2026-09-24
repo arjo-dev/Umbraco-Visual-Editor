@@ -5,12 +5,13 @@ import { sameTarget, type TargetRef } from '../protocol/index.js';
 import type { VisualEditorError } from './validation.controller.js';
 import type { RichTextSession } from './inline-edit.controller.js';
 import './visual-editor-property-editor.element.js';
+import './visual-editor-block-editor.element.js';
 import './visual-editor-page-settings.element.js';
 
 /**
  * Visual editor side panel, with two views:
  * - **Selection:** edits what is selected on the canvas. A document property gets the CMS's own property editor
- *   (#19); blocks and their properties arrive with block editing (#25).
+ *   (#19); a block, or a property inside one, gets the block's content and settings (#25).
  * - **Page settings:** the properties the page doesn't show (#22).
  * Selecting something on the canvas switches to Selection. Validation errors (#23) are listed above both views while
  * there are any; clicking one fires `show-error` (the workspace view selects it on the page).
@@ -30,6 +31,10 @@ export class ArjoVisualEditorSidePanelElement extends UmbLitElement {
 	@property({ attribute: false }) errors: VisualEditorError[] = [];
 	/** Targets on the page (from the canvas), for error labels and whether an error can be shown on the page. */
 	@property({ attribute: false }) targets: TargetRef[] = [];
+	/** The culture being edited (block properties that vary by culture show its values). */
+	@property({ attribute: false }) culture: string | null = null;
+	/** The selected block's tab: content, or settings (the canvas block toolbar's settings button). */
+	@property() blockTab: 'content' | 'settings' = 'content';
 	/** Rich text being edited on the canvas, with the element its editor mounts on. */
 	@property({ attribute: false }) richText?: RichTextSession & { mount: HTMLElement };
 
@@ -118,11 +123,18 @@ export class ArjoVisualEditorSidePanelElement extends UmbLitElement {
 			></arjo-visual-editor-property-editor>`;
 		}
 
+		// A block, or a property inside one: the block's content and settings.
 		const { heading, detail } = this.#describe(target);
+		const block =
+			target.kind === 'Block' ? target : this.targets.find((t) => t.kind === 'Block' && t.ownerKey === target.ownerKey);
 		return html`
-			<p class="heading">${heading}</p>
-			<p class="detail">${detail}</p>
-			<p class="hint">Editing blocks here arrives in a later release; use the standard editor for now.</p>
+			<p class="heading">${target.kind === 'Block' ? heading : (block?.label ?? target.ownerLabel ?? 'Block')}</p>
+			<p class="detail">${target.kind === 'Block' ? detail : `Block · selected: ${heading}`}</p>
+			<arjo-visual-editor-block-editor
+				.blockKey=${target.ownerKey}
+				.culture=${this.culture}
+				.tab=${this.blockTab}
+			></arjo-visual-editor-block-editor>
 			${this.contentHref ? html`<a class="standard" href=${this.contentHref}>Show in standard editor</a>` : nothing}
 		`;
 	}

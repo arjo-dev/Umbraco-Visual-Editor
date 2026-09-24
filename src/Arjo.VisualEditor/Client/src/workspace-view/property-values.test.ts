@@ -2,8 +2,10 @@ import { expect } from '@open-wc/testing';
 import type { TargetRef } from '../protocol/index.js';
 import {
 	contentKeyOfSettings,
+	locateBlock,
 	locateValue,
 	showsValue,
+	withBlockEditorValue,
 	withBlockPropertyValue,
 	type PropertyValueModel,
 } from './property-values.js';
@@ -119,5 +121,84 @@ describe('contentKeyOfSettings', () => {
 		};
 		expect(contentKeyOfSettings([grid], 'nested-settings')).to.equal('nested');
 		expect(contentKeyOfSettings([grid], 'missing')).to.equal(null);
+	});
+});
+
+describe('block data', () => {
+	const withSettings = (): PropertyValueModel => ({
+		alias: 'blocks',
+		culture: null,
+		segment: null,
+		value: {
+			layout: { 'Umbraco.BlockList': [{ contentKey: 'row', settingsKey: 'row-settings' }] },
+			contentData: [
+				{
+					key: 'row',
+					contentTypeKey: 'row-type',
+					values: [
+						{ alias: 'title', culture: null, segment: null, value: 'Row' },
+						{
+							alias: 'body',
+							culture: null,
+							segment: null,
+							value: {
+								markup: '<p>x</p>',
+								blocks: {
+									layout: { 'Umbraco.RichText': [{ contentKey: 'rte', settingsKey: null }] },
+									contentData: [{ key: 'rte', contentTypeKey: 'rte-type', values: [] }],
+									settingsData: [],
+								},
+							},
+						},
+					],
+				},
+			],
+			settingsData: [{ key: 'row-settings', contentTypeKey: 'settings-type', values: [] }],
+		},
+	});
+
+	it('locates a block with its settings and the property it is in', () => {
+		const located = locateBlock([withSettings()], 'row', null)!;
+		expect(located.property.alias).to.equal('blocks');
+		expect(located.content.contentTypeKey).to.equal('row-type');
+		expect(located.settings?.key).to.equal('row-settings');
+	});
+
+	it('locates blocks inside rich text, which have no settings', () => {
+		const located = locateBlock([withSettings()], 'rte', null)!;
+		expect(located.content.contentTypeKey).to.equal('rte-type');
+		expect(located.settings).to.equal(null);
+	});
+
+	it('sets a settings value, adding it when the block has none yet', () => {
+		const value = withSettings().value;
+		const next = withBlockPropertyValue(value, 'row-settings', 'background', null, 'dark', 'settingsData') as {
+			settingsData: Array<{ values: PropertyValueModel[] }>;
+		};
+		expect(next.settingsData[0].values).to.deep.equal([
+			{ alias: 'background', culture: null, segment: null, value: 'dark' },
+		]);
+	});
+
+	it('sets values of blocks inside rich text', () => {
+		const next = withBlockPropertyValue(withSettings().value, 'rte', 'caption', null, 'Hi');
+		expect(JSON.stringify(next)).to.contain('"alias":"caption","culture":null,"segment":null,"value":"Hi"');
+		expect(JSON.stringify(withSettings().value)).to.not.contain('caption');
+	});
+});
+
+describe('withBlockEditorValue', () => {
+	it('changes the block value holding a nested block, copying only the path to it', () => {
+		const before = grid('en-US', 'Caption').value;
+		const after = withBlockEditorValue(before, 'image-row', (v) => ({ ...v, marked: true })) as typeof before;
+		const nested = after.contentData[0].values[0].value as Record<string, unknown>;
+		expect(nested.marked).to.equal(true);
+		expect((before.contentData[0].values[0].value as Record<string, unknown>).marked).to.equal(undefined);
+		expect(after.settingsData).to.equal(before.settingsData);
+	});
+
+	it('returns the value itself when the block is not there', () => {
+		const before = grid('en-US', 'Caption').value;
+		expect(withBlockEditorValue(before, 'missing', (v) => ({ ...v }))).to.equal(before);
 	});
 });

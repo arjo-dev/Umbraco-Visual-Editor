@@ -34,6 +34,10 @@ export interface BlockPosition {
 
 // ---- canvas -> host ----
 
+/** The canvas block toolbar's buttons (#25). */
+export type BlockAction = 'moveUp' | 'moveDown' | 'duplicate' | 'delete' | 'settings';
+const BLOCK_ACTIONS: readonly string[] = ['moveUp', 'moveDown', 'duplicate', 'delete', 'settings'];
+
 export type CanvasMessage =
 	| { type: 'ready'; documentKey: string; culture: string | null; targets: TargetRef[] }
 	/** Outcome of a `render` message: patched in (`ok`), or it couldn't be and the host should reload the frame. */
@@ -51,6 +55,8 @@ export type CanvasMessage =
 	| { type: 'inlineEdit'; target: TargetRef; value: string }
 	/** Editing in place finished: committed (blur, Enter) or `cancelled` (Escape; the host restores the value). */
 	| { type: 'inlineEditEnd'; target: TargetRef; cancelled: boolean }
+	/** A block toolbar button was pressed (#25): the host changes the document (or shows the block's settings). */
+	| { type: 'blockAction'; blockKey: string; action: BlockAction }
 	| { type: 'blockMove'; blockKey: string; to: BlockPosition }
 	| { type: 'blockInsertRequest'; at: BlockPosition }
 	| { type: 'scroll'; x: number; y: number };
@@ -117,6 +123,7 @@ const canvasValidators: Record<CanvasMessageType, (m: Obj) => boolean> = {
 	richTextEditStart: (m) => isTargetRef(m.target) && isStr(m.mountId),
 	inlineEdit: (m) => isTargetRef(m.target) && isStr(m.value),
 	inlineEditEnd: (m) => isTargetRef(m.target) && typeof m.cancelled === 'boolean',
+	blockAction: (m) => isStr(m.blockKey) && isStr(m.action) && BLOCK_ACTIONS.includes(m.action),
 	blockMove: (m) => isStr(m.blockKey) && isBlockPosition(m.to),
 	blockInsertRequest: (m) => isBlockPosition(m.at),
 	scroll: (m) => isNum(m.x) && isNum(m.y),
