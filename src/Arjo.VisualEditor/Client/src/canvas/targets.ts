@@ -9,6 +9,8 @@ export interface CanvasTarget {
 	ref: TargetRef;
 	/** Elements showing it. Attribute-only occurrences (e.g. <meta content>) aren't selectable and aren't included. */
 	elements: Element[];
+	/** Property editor alias (e.g. Umbraco.TextBox); null for blocks. */
+	editorAlias: string | null;
 }
 
 export function toTargetRef(marker: MarkerInfo): TargetRef {
@@ -36,7 +38,7 @@ export class TargetIndex {
 			const ref = toTargetRef(marker);
 			let target = this.targets.find((t) => sameTarget(t.ref, ref));
 			if (!target) {
-				target = { ref, elements: [] };
+				target = { ref, elements: [], editorAlias: marker.editorAlias ?? null };
 				this.targets.push(target);
 			}
 			for (const el of elements) {

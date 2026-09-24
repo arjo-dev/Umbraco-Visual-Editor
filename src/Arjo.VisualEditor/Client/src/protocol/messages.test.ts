@@ -12,7 +12,9 @@ describe('parseCanvasMessage', () => {
 		{ type: 'hover', target: title },
 		{ type: 'hover', target: null },
 		{ type: 'select', target: block },
+		{ type: 'inlineEditStart', target: title, text: 'Old title' },
 		{ type: 'inlineEdit', target: title, value: 'New title' },
+		{ type: 'inlineEditEnd', target: title, cancelled: false },
 		{ type: 'blockMove', blockKey: 'block-1', to: { ...position, areaKey: 'area-1', index: 2 } },
 		{ type: 'blockInsertRequest', at: position },
 		{ type: 'scroll', x: 0, y: 120.5 },
@@ -43,6 +45,7 @@ describe('parseCanvasMessage', () => {
 		['blockMove with a negative index', { type: 'blockMove', blockKey: 'b', to: { ...position, index: -1 } }],
 		['blockMove with a fractional index', { type: 'blockMove', blockKey: 'b', to: { ...position, index: 1.5 } }],
 		['rendered without ok', { type: 'rendered', url: '/__visual-editor/render/abc' }],
+		['inlineEditEnd without cancelled', { type: 'inlineEditEnd', target: title }],
 		['scroll with NaN', { type: 'scroll', x: Number.NaN, y: 0 }],
 	];
 
@@ -59,6 +62,8 @@ describe('parseHostMessage', () => {
 		{ type: 'highlight', target: null },
 		{ type: 'setSelection', target: title },
 		{ type: 'setReadonly', readonly: false },
+		{ type: 'beginInlineEdit', target: title, maxLength: 512, multiline: false },
+		{ type: 'beginInlineEdit', target: title, maxLength: null, multiline: true },
 		{ type: 'setDevice', width: 375 },
 		{ type: 'setDevice', width: null },
 	];
@@ -73,6 +78,10 @@ describe('parseHostMessage', () => {
 		['an unknown type', { type: 'eval', code: 'alert(1)' }],
 		['a canvas message', { type: 'select', target: null }],
 		['render without a url', { type: 'render' }],
+		[
+			'beginInlineEdit with a zero maxLength',
+			{ type: 'beginInlineEdit', target: title, maxLength: 0, multiline: false },
+		],
 		['setReadonly with a string', { type: 'setReadonly', readonly: 'true' }],
 		['setDevice with zero width', { type: 'setDevice', width: 0 }],
 		['setDevice with a string width', { type: 'setDevice', width: '375px' }],

@@ -15,6 +15,7 @@ import {
 	type TargetRef,
 } from '../protocol/index.js';
 import { deviceFor, sizeFor, type VisualEditorDeviceAlias } from './devices.js';
+import { ArjoInlineEditController } from './inline-edit.controller.js';
 import './visual-editor-toolbar.element.js';
 import './visual-editor-side-panel.element.js';
 import './visual-editor-canvas.element.js';
@@ -60,6 +61,8 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 	#visualMode?: ArjoVisualModeContext;
 	readonly #nonce = createNonce();
 	#channel?: HostChannel;
+	/** Editing text in place on the canvas (#20). */
+	#inline = new ArjoInlineEditController(this, (message) => this.#channel?.send(message));
 	/** The frame shows a normal render with the canvas runtime, so newer renders can be patched in (#18). */
 	#canPatch = false;
 	/** Render URL sent to the canvas, awaiting its `rendered` answer. */
@@ -131,6 +134,7 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 			onMessage: (message) => this.#onCanvasMessage(message),
 			onConnect: () => {
 				// A re-render is a fresh page: give it the current state again.
+				this.#inline.reset();
 				this.#channel?.send({ type: 'setSelection', target: this._selected });
 				this.#channel?.send({ type: 'setDevice', width: this.#deviceWidth });
 			},
@@ -157,6 +161,20 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 				if (message.ok) this._status = 'idle';
 				// It couldn't be patched in (e.g. the template threw): load it properly, which shows the error.
 				else this.#load(withNonce(message.url, this.#nonce));
+				break;
+			case 'inlineEditStart':
+				void this.#inline.start(message.target, message.text, this.#culture).then((started) => {
+					// Not plain text shown as stored (or not editable): the side panel is the way to edit it.
+					if (!started && !this._panelOpen) this.#setPanelOpen(true);
+				});
+				break;
+			case 'inlineEdit':
+				this.#inline.write(message.target, message.value);
+				break;
+			case 'inlineEditEnd':
+				this.#inline.end(message.target, message.cancelled);
+				// Renders wait while text is edited in place; catch up now.
+				this.#scheduleRender();
 				break;
 			case 'select':
 				this._selected = message.target;
@@ -203,6 +221,8 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 
 	async #render() {
 		if (this._isNew || !this.#documentKey || !this.#values) return;
+		// The canvas shows the text as it's typed; re-rendering now would only fight it. Rendered when editing ends.
+		if (this.#inline.editing) return;
 
 		const requestId = ++this.#requestId;
 		this._status = 'rendering';
