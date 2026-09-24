@@ -1,6 +1,12 @@
 import { expect } from '@open-wc/testing';
 import type { TargetRef } from '../protocol/index.js';
-import { locateValue, showsValue, withBlockPropertyValue, type PropertyValueModel } from './property-values.js';
+import {
+	contentKeyOfSettings,
+	locateValue,
+	showsValue,
+	withBlockPropertyValue,
+	type PropertyValueModel,
+} from './property-values.js';
 
 const caption = (value: string, key = 'image-row') => ({
 	key,
@@ -88,5 +94,30 @@ describe('showsValue', () => {
 		expect(showsValue('HELLO', 'Hello')).to.equal(false);
 		expect(showsValue('Hello…', 'Hello world')).to.equal(false);
 		expect(showsValue('42', 42)).to.equal(false);
+	});
+});
+
+describe('contentKeyOfSettings', () => {
+	it('finds the block a settings key belongs to, in nested grid areas', () => {
+		const grid: PropertyValueModel = {
+			alias: 'grid',
+			culture: null,
+			segment: null,
+			value: {
+				layout: {
+					'Umbraco.BlockGrid': [
+						{
+							contentKey: 'row',
+							settingsKey: null,
+							areas: [{ key: 'left', items: [{ contentKey: 'nested', settingsKey: 'nested-settings' }] }],
+						},
+					],
+				},
+				contentData: [],
+				settingsData: [],
+			},
+		};
+		expect(contentKeyOfSettings([grid], 'nested-settings')).to.equal('nested');
+		expect(contentKeyOfSettings([grid], 'missing')).to.equal(null);
 	});
 });

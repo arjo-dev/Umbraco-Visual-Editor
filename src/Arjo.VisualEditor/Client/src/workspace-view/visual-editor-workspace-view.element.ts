@@ -17,6 +17,8 @@ import {
 import { deviceFor, sizeFor, type VisualEditorDeviceAlias } from './devices.js';
 import { ArjoInlineEditController } from './inline-edit.controller.js';
 import { clampPanelWidth, PANEL_DEFAULT_WIDTH } from './panel-width.js';
+import { ArjoValidationController, type VisualEditorError } from './validation.controller.js';
+import type { ArjoVisualEditorSidePanelElement } from './visual-editor-side-panel.element.js';
 import './visual-editor-toolbar.element.js';
 import './visual-editor-side-panel.element.js';
 import './visual-editor-canvas.element.js';
@@ -47,6 +49,10 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 	@state() private _targetCount?: number;
 	/** Document properties the canvas found on the page; the rest are listed under Page settings (#22). */
 	@state() private _visibleAliases?: ReadonlySet<string>;
+	/** Targets on the page, as the canvas last reported them. */
+	@state() private _targets: TargetRef[] = [];
+	/** Validation errors for the variant being edited (#23). */
+	@state() private _errors: VisualEditorError[] = [];
 	@state() private _selected: TargetRef | null = null;
 	/** Never saved: there's no draft to render yet (render sessions overlay it, ADR 0001). */
 	@state() private _isNew = false;
@@ -72,6 +78,8 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 	#channel?: HostChannel;
 	/** Editing text in place on the canvas (#20). */
 	#inline = new ArjoInlineEditController(this, (message) => this.#channel?.send(message));
+	/** Validation messages, placed on the page (#23). */
+	#validation = new ArjoValidationController(this, (errors) => this.#onErrors(errors));
 	/** The frame shows a normal render with the canvas runtime, so newer renders can be patched in (#18). */
 	#canPatch = false;
 	/** Render URL sent to the canvas, awaiting its `rendered` answer. */
@@ -93,6 +101,7 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 
 		this.consumeContext(UMB_PROPERTY_DATASET_CONTEXT, (dataset) => {
 			this.#culture = dataset?.getVariantId().culture ?? null;
+			this.#validation.setCulture(this.#culture);
 			this.#scheduleRender();
 		});
 
@@ -146,6 +155,7 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 				this.#inline.reset();
 				this.#channel?.send({ type: 'setSelection', target: this._selected });
 				this.#channel?.send({ type: 'setDevice', width: this.#deviceWidth });
+				this.#sendErrors();
 			},
 			onInvalid: (data) => console.warn('[Arjo.VisualEditor] ignored invalid canvas message', data),
 		});
@@ -163,6 +173,7 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 		switch (message.type) {
 			case 'ready':
 				this._targetCount = message.targets.length;
+				this._targets = message.targets;
 				this._visibleAliases = new Set(
 					message.targets.filter((t) => !t.ownerIsBlock && t.alias).map((t) => t.alias as string),
 				);
@@ -193,6 +204,48 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 				this.#channel?.send({ type: 'setSelection', target: message.target });
 				if (message.target && !this._panelOpen) this.#setPanelOpen(true);
 				break;
+		}
+	}
+
+	#onErrors(errors: VisualEditorError[]) {
+		const hadErrors = this._errors.length > 0;
+		this._errors = errors;
+		this.#sendErrors();
+		// Messages appear when a save or publish is refused: take the editor to the first one.
+		if (!hadErrors && errors.length) void this.#showError(errors[0]);
+	}
+
+	/** Marks the errors on the page: the property (or block) and the blocks around it. */
+	#sendErrors() {
+		this.#channel?.send({
+			type: 'setErrors',
+			errors: this._errors.flatMap((error) => {
+				const message = this.localize.string(error.body);
+				return [...error.blocks, ...(error.target ? [error.target] : [])].map((target) => ({ target, message }));
+			}),
+		});
+	}
+
+	/**
+	 * Shows an error: selects it on the page (scrolled into view) when it's there, the innermost block around it when
+	 * only that is, or the property under Page settings when it isn't on the page at all.
+	 */
+	async #showError(error: VisualEditorError) {
+		if (!this._panelOpen) this.#setPanelOpen(true);
+		await this.updateComplete;
+		const panel = this.shadowRoot?.querySelector<ArjoVisualEditorSidePanelElement>('arjo-visual-editor-side-panel');
+		const onPage =
+			panel?.targetOnPage(error.target) ??
+			[...error.blocks]
+				.reverse()
+				.map((block) => panel?.targetOnPage(block))
+				.find(Boolean) ??
+			null;
+		if (onPage) {
+			this._selected = onPage;
+			this.#channel?.send({ type: 'setSelection', target: onPage, reveal: true });
+		} else if (error.target && !error.target.ownerIsBlock) {
+			panel?.showPageSettings();
 		}
 	}
 
@@ -375,6 +428,9 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 									.selected=${this._selected}
 									.targetCount=${this._targetCount}
 									.visibleAliases=${this._visibleAliases}
+									.errors=${this._errors}
+									.targets=${this._targets}
+									@show-error=${(e: CustomEvent<VisualEditorError>) => this.#showError(e.detail)}
 									.contentHref=${this.#documentBase ? `${this.#documentBase}/view/content` : undefined}
 								></arjo-visual-editor-side-panel>`
 						: nothing

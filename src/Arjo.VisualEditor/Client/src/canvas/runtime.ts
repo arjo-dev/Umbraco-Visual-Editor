@@ -22,8 +22,10 @@ export interface CanvasRuntime {
 	readonly index: TargetIndex;
 	overlay: CanvasOverlay;
 	select(target: CanvasTarget | null): void;
-	/** Show a selection made by the host, without reporting it back. */
-	showSelection(target: CanvasTarget | null): void;
+	/** Show a selection made by the host, without reporting it back; `reveal` scrolls it into view. */
+	showSelection(target: CanvasTarget | null, reveal?: boolean): void;
+	/** Validation errors to mark (#23). */
+	setErrors(errors: Array<{ target: TargetRef; message: string }>): void;
 	/** Read-only (e.g. no Update permission, #31): no hover or selection from the page. */
 	setReadonly(readonly: boolean): void;
 	setHighlight(target: TargetRef | null): void;
@@ -43,6 +45,7 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 	let selected: CanvasTarget | null = null;
 	let hovered: CanvasTarget | null = null;
 	let highlighted: TargetRef | null = null;
+	let errors: Array<{ target: TargetRef; message: string }> = [];
 	let readonly = false;
 	/** The render in flight; a newer `render` aborts it. */
 	let pending: AbortController | null = null;
@@ -116,6 +119,16 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 	doc.addEventListener('dblclick', onDoubleClick, true);
 	doc.addEventListener('keydown', onKeyDown);
 
+	/** Marks the errors whose targets are on the page (again after a re-render: elements change). */
+	function showErrors() {
+		const byTarget = new Map<CanvasTarget, string[]>();
+		for (const error of errors) {
+			const target = index.find(error.target);
+			if (target) byTarget.set(target, [...(byTarget.get(target) ?? []), error.message]);
+		}
+		overlay.setErrors([...byTarget].map(([target, messages]) => ({ target, message: messages.join('\n') })));
+	}
+
 	const sendReady = () =>
 		channel?.send({
 			type: 'ready',
@@ -160,6 +173,7 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 		hovered = null;
 		overlay.setHover(null);
 		overlay.setHighlight(index.find(highlighted));
+		showErrors();
 		// A reload of the frame (or the navigation guard) should come back to this render, not the first one.
 		try {
 			doc.defaultView?.history.replaceState(null, '', url + (doc.defaultView?.location.hash ?? ''));
@@ -180,7 +194,14 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 		},
 		overlay,
 		select: (target) => select(target),
-		showSelection: (target) => select(target, false),
+		showSelection(target, reveal) {
+			select(target, false);
+			if (reveal && target?.elements[0]) target.elements[0].scrollIntoView({ block: 'center', behavior: 'smooth' });
+		},
+		setErrors(list) {
+			errors = list;
+			showErrors();
+		},
 		setReadonly(value) {
 			readonly = value;
 			if (readonly) {
@@ -212,7 +233,10 @@ export function handleHostMessage(runtime: CanvasRuntime, message: HostMessage) 
 	switch (message.type) {
 		case 'setSelection':
 			// The host is the source of truth; don't echo its selection back.
-			runtime.showSelection(runtime.index.find(message.target));
+			runtime.showSelection(runtime.index.find(message.target), message.reveal);
+			break;
+		case 'setErrors':
+			runtime.setErrors(message.errors);
 			break;
 		case 'highlight':
 			runtime.setHighlight(message.target);

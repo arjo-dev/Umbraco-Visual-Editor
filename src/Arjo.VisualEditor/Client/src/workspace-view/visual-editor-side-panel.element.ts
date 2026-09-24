@@ -1,7 +1,8 @@
 import { css, customElement, html, nothing, property, state } from '@umbraco-cms/backoffice/external/lit';
 import type { PropertyValues } from '@umbraco-cms/backoffice/external/lit';
 import { UmbLitElement } from '@umbraco-cms/backoffice/lit-element';
-import type { TargetRef } from '../protocol/index.js';
+import { sameTarget, type TargetRef } from '../protocol/index.js';
+import type { VisualEditorError } from './validation.controller.js';
 import './visual-editor-property-editor.element.js';
 import './visual-editor-page-settings.element.js';
 
@@ -10,7 +11,10 @@ import './visual-editor-page-settings.element.js';
  * - **Selection:** edits what is selected on the canvas. A document property gets the CMS's own property editor
  *   (#19); blocks and their properties arrive with block editing (#25).
  * - **Page settings:** the properties the page doesn't show (#22).
- * Selecting something on the canvas switches to Selection.
+ * Selecting something on the canvas switches to Selection. Validation errors (#23) are listed above both views while
+ * there are any; clicking one fires `show-error` (the workspace view selects it on the page).
+ *
+ * @fires show-error - detail: the VisualEditorError clicked.
  */
 @customElement('arjo-visual-editor-side-panel')
 export class ArjoVisualEditorSidePanelElement extends UmbLitElement {
@@ -18,7 +22,56 @@ export class ArjoVisualEditorSidePanelElement extends UmbLitElement {
 	/** Aliases of the document properties shown on the page; undefined until the canvas has connected. */
 	@property({ attribute: false }) visibleAliases?: ReadonlySet<string>;
 
+	/** Validation errors for the variant being edited. */
+	@property({ attribute: false }) errors: VisualEditorError[] = [];
+	/** Targets on the page (from the canvas), for error labels and whether an error can be shown on the page. */
+	@property({ attribute: false }) targets: TargetRef[] = [];
+
 	@state() private _view: 'selection' | 'settings' = 'selection';
+
+	/** Switches to Page settings, e.g. to show an error on a property that isn't on the page. */
+	showPageSettings() {
+		this._view = 'settings';
+	}
+
+	/** The page target an error points at, if it's on the page. */
+	targetOnPage(ref: TargetRef | null) {
+		return ref ? (this.targets.find((t) => sameTarget(t, ref)) ?? null) : null;
+	}
+
+	#errorLabel(error: VisualEditorError) {
+		if (!error.target) return this.localize.term('general_name');
+		const onPage = this.targetOnPage(error.target);
+		const name = onPage?.label ?? error.propertyName ?? error.target.alias ?? 'Block';
+		const owner = onPage?.ownerLabel;
+		return owner ? `${name} (${owner})` : name;
+	}
+
+	#renderErrors() {
+		if (!this.errors.length) return nothing;
+		return html`
+			<uui-box class="errors">
+				<div slot="headline" class="errors-headline">
+					<uui-icon name="icon-alert"></uui-icon>
+					${this.errors.length === 1 ? '1 thing needs attention' : `${this.errors.length} things need attention`}
+				</div>
+				<ul>
+					${this.errors.map(
+						(error) =>
+							html`<li>
+								<button
+									type="button"
+									@click=${() => this.dispatchEvent(new CustomEvent('show-error', { detail: error }))}
+								>
+									<strong>${this.#errorLabel(error)}</strong>
+									<span>${this.localize.string(error.body)}</span>
+								</button>
+							</li>`,
+					)}
+				</ul>
+			</uui-box>
+		`;
+	}
 
 	protected override willUpdate(changed: PropertyValues<this>) {
 		if (changed.has('selected') && this.selected) this._view = 'selection';
@@ -57,6 +110,7 @@ export class ArjoVisualEditorSidePanelElement extends UmbLitElement {
 
 	override render() {
 		return html`
+			${this.#renderErrors()}
 			<uui-tab-group>
 				<uui-tab
 					label="Selection"
@@ -99,6 +153,48 @@ export class ArjoVisualEditorSidePanelElement extends UmbLitElement {
 
 		p {
 			margin: 0;
+		}
+
+		.errors {
+			--uui-box-header-padding: var(--uui-size-space-3) var(--uui-size-space-4);
+			border: 1px solid var(--uui-color-danger);
+		}
+
+		.errors-headline {
+			display: flex;
+			gap: var(--uui-size-space-2);
+			align-items: center;
+			color: var(--uui-color-danger);
+			font-weight: 700;
+		}
+
+		.errors ul {
+			margin: 0;
+			padding: 0;
+			list-style: none;
+		}
+
+		.errors button {
+			all: unset;
+			box-sizing: border-box;
+			display: flex;
+			flex-direction: column;
+			width: 100%;
+			padding: var(--uui-size-space-2) 0;
+			cursor: pointer;
+		}
+
+		.errors button:hover strong,
+		.errors button:focus-visible strong {
+			text-decoration: underline;
+		}
+
+		.errors button:focus-visible {
+			outline: 2px solid var(--uui-color-focus);
+		}
+
+		.errors button span {
+			color: var(--uui-color-text-alt);
 		}
 
 		/* The tab group is made for workspace headers and takes 100% of the height; here it's a row at the top. */

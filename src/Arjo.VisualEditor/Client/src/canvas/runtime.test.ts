@@ -422,4 +422,72 @@ describe('canvas runtime', () => {
 			}
 		});
 	});
+
+	describe('validation errors', () => {
+		const ref = (alias: string | null, ownerKey: string) =>
+			runtime.index.targets.find((t) => t.ref.alias === alias && t.ref.ownerKey === ownerKey)!.ref;
+		const errorBoxes = () => [...runtime.overlay.host.shadowRoot!.querySelectorAll<HTMLElement>('.box.error')];
+
+		it('marks each invalid target with an outline and a badge, joining its messages', () => {
+			handleHostMessage(runtime, {
+				type: 'setErrors',
+				errors: [
+					{ target: ref('caption', 'inner'), message: 'Required' },
+					{ target: ref('caption', 'inner'), message: 'Too long' },
+					{ target: ref(null, 'inner'), message: 'Required' },
+				],
+			});
+			const boxes = errorBoxes();
+			expect(boxes.map((b) => b.className)).to.have.members(['box error property', 'box error block']);
+			expect(
+				boxes
+					.find((b) => b.classList.contains('property'))!
+					.querySelector('.badge')!
+					.getAttribute('title'),
+			).to.equal('Required\nToo long');
+		});
+
+		it('ignores errors for targets that are not on the page, and clears', () => {
+			const missing = {
+				kind: 'Property' as const,
+				ownerKey: 'doc',
+				ownerIsBlock: false,
+				alias: 'metaTitle',
+				culture: null,
+			};
+			handleHostMessage(runtime, { type: 'setErrors', errors: [{ target: missing, message: 'Required' }] });
+			expect(errorBoxes()).to.have.length(0);
+			handleHostMessage(runtime, { type: 'setErrors', errors: [{ target: ref('title', 'doc'), message: 'Required' }] });
+			expect(errorBoxes()).to.have.length(1);
+			handleHostMessage(runtime, { type: 'setErrors', errors: [] });
+			expect(errorBoxes()).to.have.length(0);
+		});
+
+		it('keeps marking errors after a live re-render', async () => {
+			const realFetch = window.fetch;
+			window.fetch = (async () =>
+				new Response(pageHtml({ caption: 'Changed' }), { headers: { 'content-type': 'text/html' } })) as typeof fetch;
+			try {
+				handleHostMessage(runtime, {
+					type: 'setErrors',
+					errors: [{ target: ref('caption', 'inner'), message: 'Required' }],
+				});
+				await runtime.render('/r/2');
+				expect(errorBoxes()).to.have.length(1);
+			} finally {
+				window.fetch = realFetch;
+			}
+		});
+
+		it('scrolls a revealed selection into view', () => {
+			const caption = doc.getElementById('caption')!;
+			let revealed = false;
+			caption.scrollIntoView = () => {
+				revealed = true;
+			};
+			handleHostMessage(runtime, { type: 'setSelection', target: ref('caption', 'inner'), reveal: true });
+			expect(revealed).to.equal(true);
+			expect(selectionLabel(runtime).name).to.equal('Caption');
+		});
+	});
 });

@@ -56,7 +56,10 @@ export type HostMessage =
 	/** Show a newer render (render-session URL, ADR 0001): the canvas patches it in and answers with `rendered`. */
 	| { type: 'render'; url: string }
 	| { type: 'highlight'; target: TargetRef | null }
-	| { type: 'setSelection'; target: TargetRef | null }
+	/** `reveal`: also scroll it into view (e.g. picked from the list of validation errors). */
+	| { type: 'setSelection'; target: TargetRef | null; reveal?: boolean }
+	/** Validation errors to mark on the page (#23); replaces the previous set. */
+	| { type: 'setErrors'; errors: Array<{ target: TargetRef; message: string }> }
 	| { type: 'setReadonly'; readonly: boolean }
 	/** Go ahead with an `inlineEditStart`. Not sent when it can't be edited in place (the side panel is used instead). */
 	| { type: 'beginInlineEdit'; target: TargetRef; maxLength: number | null; multiline: boolean }
@@ -114,7 +117,9 @@ const canvasValidators: Record<CanvasMessageType, (m: Obj) => boolean> = {
 const hostValidators: Record<HostMessageType, (m: Obj) => boolean> = {
 	render: (m) => isStr(m.url),
 	highlight: (m) => isNullableTarget(m.target),
-	setSelection: (m) => isNullableTarget(m.target),
+	setSelection: (m) => isNullableTarget(m.target) && (m.reveal === undefined || typeof m.reveal === 'boolean'),
+	setErrors: (m) =>
+		Array.isArray(m.errors) && m.errors.every((e) => isObj(e) && isTargetRef(e.target) && isStr(e.message)),
 	setReadonly: (m) => typeof m.readonly === 'boolean',
 	beginInlineEdit: (m) =>
 		isTargetRef(m.target) &&
