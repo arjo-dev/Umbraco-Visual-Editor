@@ -55,18 +55,28 @@ const manifest = {
 	],
 };
 
-/** A render-session-like page in a same-origin frame: manifest, a marked title and a nested block with a caption. */
+/** A render-session-like page: manifest, a marked title and a nested block with a caption. */
+const pageHtml = ({
+	title = 'Hello',
+	caption = 'A caption',
+	after = '',
+} = {}) => `<!doctype html><body style="margin:0">
+		<h1 id="title" style="margin:40px 0 0">${stega(1)}${title}</h1>
+		<!--uve:b:2--><div id="outer" style="padding:20px"><!--uve:b:3--><div id="inner" style="padding:20px">
+			<p id="caption">${stega(4)}${caption}</p>
+		</div><!--/uve:b:3--></div><!--/uve:b:2-->
+		<p id="plain">Not editable</p>
+		<input id="field">
+		<div style="height:2000px"></div>
+		${after}
+		<script type="application/json" id="uve-markers">${JSON.stringify(manifest)}</script>
+	</body>`;
+
+/** The page in a same-origin frame. */
 async function page(): Promise<{ frame: HTMLIFrameElement; doc: Document }> {
 	const frame = document.createElement('iframe');
 	frame.style.cssText = 'width: 800px; height: 600px';
-	frame.srcdoc = `<!doctype html><body style="margin:0">
-		<h1 id="title" style="margin:40px 0 0">${stega(1)}Hello</h1>
-		<!--uve:b:2--><div id="outer" style="padding:20px"><!--uve:b:3--><div id="inner" style="padding:20px">
-			<p id="caption">${stega(4)}A caption</p>
-		</div><!--/uve:b:3--></div><!--/uve:b:2-->
-		<p id="plain">Not editable</p>
-		<script type="application/json" id="uve-markers">${JSON.stringify(manifest)}</script>
-	</body>`;
+	frame.srcdoc = pageHtml();
 	const loaded = new Promise((resolve) => frame.addEventListener('load', resolve, { once: true }));
 	document.body.append(frame);
 	await loaded;
@@ -200,5 +210,109 @@ describe('canvas runtime', () => {
 	it('keeps the overlay out of the page: its own element, in the top layer', () => {
 		expect(runtime.overlay.host.shadowRoot).to.not.equal(null);
 		expect(runtime.overlay.host.matches(':popover-open')).to.equal(true);
+	});
+
+	describe('live re-render', () => {
+		const realFetch = window.fetch;
+		/** Render URL -> [html, delay ms]; anything else is a 404. */
+		let responses: Record<string, [string, number?]>;
+
+		beforeEach(() => {
+			responses = {};
+			window.fetch = (async (input: RequestInfo | URL) => {
+				const entry = responses[String(input)];
+				if (entry?.[1]) await new Promise((resolve) => setTimeout(resolve, entry[1]));
+				return entry
+					? new Response(entry[0], { headers: { 'content-type': 'text/html; charset=utf-8' } })
+					: new Response('Not found', { status: 404 });
+			}) as typeof fetch;
+		});
+
+		afterEach(() => {
+			window.fetch = realFetch;
+		});
+
+		const rendered = () => sent.filter((m) => m.type === 'rendered');
+
+		it('patches the new render into the page instead of replacing it', async () => {
+			const outer = doc.getElementById('outer');
+			responses['/r/2'] = [pageHtml({ title: 'Hello again' })];
+
+			expect(await runtime.render('/r/2')).to.equal(true);
+
+			expect(doc.getElementById('title')!.textContent).to.equal('Hello again');
+			expect(doc.getElementById('outer')).to.equal(outer); // the same element, updated in place
+			expect(rendered()).to.deep.equal([{ type: 'rendered', url: '/r/2', ok: true }]);
+			expect(sent.filter((m) => m.type === 'ready')).to.have.length(2);
+		});
+
+		it('re-resolves markers: new text is selectable and has no marker characters left', async () => {
+			responses['/r/2'] = [pageHtml({ caption: 'New caption' })];
+			await runtime.render('/r/2');
+
+			expect(doc.getElementById('caption')!.textContent).to.equal('New caption');
+			click(doc, 'caption');
+			const msg = lastSelect();
+			expect(msg?.type === 'select' && msg.target).to.include({ alias: 'caption', ownerKey: 'inner' });
+		});
+
+		it('keeps the selection, scroll position, focus and overlay', async () => {
+			click(doc, 'caption');
+			sent = [];
+			doc.getElementById('field')!.focus({ preventScroll: true });
+			doc.defaultView!.scrollTo(0, 300);
+			responses['/r/2'] = [pageHtml({ caption: 'Changed' })];
+
+			await runtime.render('/r/2');
+
+			expect(selectionLabel(runtime).name).to.equal('Caption');
+			expect(runtime.overlay.host.isConnected).to.equal(true);
+			expect(runtime.overlay.host.matches(':popover-open')).to.equal(true);
+			expect(doc.defaultView!.scrollY).to.equal(300);
+			expect(doc.activeElement?.id).to.equal('field');
+			expect(lastSelect()).to.equal(undefined); // kept, not re-reported
+		});
+
+		it('clears the selection when the selected block is gone', async () => {
+			click(doc, 'inner');
+			responses['/r/2'] = [pageHtml().replace(/<!--uve:b:3-->[\s\S]*<!--\/uve:b:3-->/, '')];
+
+			await runtime.render('/r/2');
+
+			expect(doc.getElementById('inner')).to.equal(null);
+			expect(runtime.overlay.host.shadowRoot!.querySelector('.box.selected')).to.equal(null);
+		});
+
+		it("answers not ok, leaving the page as it is, when the render didn't produce markers", async () => {
+			responses['/r/2'] = ['<!doctype html><body><h1>Error</h1></body>'];
+
+			expect(await runtime.render('/r/2')).to.equal(false);
+			expect(await runtime.render('/r/missing')).to.equal(false);
+
+			expect(doc.getElementById('title')!.textContent).to.equal('Hello');
+			expect(rendered()).to.deep.equal([
+				{ type: 'rendered', url: '/r/2', ok: false },
+				{ type: 'rendered', url: '/r/missing', ok: false },
+			]);
+		});
+
+		it('drops a render that a newer one overtook', async () => {
+			responses['/r/slow'] = [pageHtml({ title: 'Stale' }), 50];
+			responses['/r/fast'] = [pageHtml({ title: 'Latest' })];
+
+			const slow = runtime.render('/r/slow');
+			const fast = runtime.render('/r/fast');
+
+			expect(await Promise.all([slow, fast])).to.deep.equal([false, true]);
+			expect(doc.getElementById('title')!.textContent).to.equal('Latest');
+			expect(rendered()).to.deep.equal([{ type: 'rendered', url: '/r/fast', ok: true }]);
+		});
+
+		it('handles the render message from the host', async () => {
+			responses['/r/2'] = [pageHtml({ title: 'Via message' })];
+			handleHostMessage(runtime, { type: 'render', url: '/r/2' });
+			await new Promise((resolve) => setTimeout(resolve, 20));
+			expect(doc.getElementById('title')!.textContent).to.equal('Via message');
+		});
 	});
 });

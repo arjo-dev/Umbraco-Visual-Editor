@@ -14,8 +14,10 @@ const RENDER_PATH_PREFIX = '/__visual-editor/render/';
  * - `sandbox` omits `allow-top-navigation`, so the site's scripts can't navigate the backoffice window. With
  *   `allow-scripts` + `allow-same-origin` it is not a security boundary (the page is the site's own code).
  * - Device sizes (width and height) that don't fit the available space are scaled down to fit both.
- * - If the frame ends up anywhere other than the render page (a script navigated it, a meta refresh), the render
- *   page is loaded again. The in-page runtime stops ordinary link clicks and form submits.
+ * - Changing `url` reloads the frame. Live re-renders (#18) are patched into the page by the canvas runtime
+ *   instead; the host passes the newest one as `latestUrl`.
+ * - If the frame ends up anywhere other than the render page (a script navigated it, a meta refresh), the latest
+ *   render page is loaded again. The in-page runtime stops ordinary link clicks and form submits.
  * - A load without the edit-mode marker manifest means the template failed (an error page): shown as a warning
  *   with the page still visible for debugging.
  *
@@ -27,6 +29,8 @@ const RENDER_PATH_PREFIX = '/__visual-editor/render/';
 export class ArjoVisualEditorCanvasElement extends UmbLitElement {
 	/** Render-session URL (with the protocol nonce fragment). */
 	@property() url?: string;
+	/** Newest render patched into the page without a reload (with the nonce fragment); what a recovery loads. */
+	@property({ attribute: false }) latestUrl?: string;
 	/** Device size in CSS pixels; null (or a size without dimensions) fills the available space. */
 	@property({ attribute: false }) deviceSize: Pick<VisualEditorSize, 'width' | 'height'> | null = null;
 
@@ -91,13 +95,14 @@ export class ArjoVisualEditorCanvasElement extends UmbLitElement {
 		}
 		if (!path?.startsWith(RENDER_PATH_PREFIX)) {
 			// Navigated away from the render page: go back to it.
-			frameWindow.location.replace(this.url);
+			frameWindow.location.replace(this.latestUrl ?? this.url);
 			return;
 		}
 
 		this._loaded = true;
 		this._renderError = !frameWindow.document.getElementById('uve-markers');
-		frameWindow.scrollTo(0, this.#restoreScrollY);
+		// Instant: sites with `scroll-behavior: smooth` (e.g. Bootstrap) would otherwise animate from the top.
+		frameWindow.scrollTo({ top: this.#restoreScrollY, behavior: 'instant' });
 		this.dispatchEvent(new CustomEvent<boolean>('page-loaded', { detail: !this._renderError }));
 	}
 

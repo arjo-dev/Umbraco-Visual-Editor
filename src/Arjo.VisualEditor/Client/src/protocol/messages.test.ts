@@ -8,6 +8,7 @@ const position = { ownerKey: 'doc-1', propertyAlias: 'grid', areaKey: null, inde
 describe('parseCanvasMessage', () => {
 	const valid = [
 		{ type: 'ready', documentKey: 'doc-1', culture: null, targets: [title, block] },
+		{ type: 'rendered', url: '/__visual-editor/render/abc', ok: true },
 		{ type: 'hover', target: title },
 		{ type: 'hover', target: null },
 		{ type: 'select', target: block },
@@ -41,6 +42,7 @@ describe('parseCanvasMessage', () => {
 		['inlineEdit without a target', { type: 'inlineEdit', target: null, value: 'x' }],
 		['blockMove with a negative index', { type: 'blockMove', blockKey: 'b', to: { ...position, index: -1 } }],
 		['blockMove with a fractional index', { type: 'blockMove', blockKey: 'b', to: { ...position, index: 1.5 } }],
+		['rendered without ok', { type: 'rendered', url: '/__visual-editor/render/abc' }],
 		['scroll with NaN', { type: 'scroll', x: Number.NaN, y: 0 }],
 	];
 

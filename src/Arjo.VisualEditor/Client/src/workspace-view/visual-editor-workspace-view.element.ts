@@ -33,7 +33,10 @@ const PREVIEW_STORAGE_KEY = 'arjo.visualEditor.preview';
  */
 @customElement('arjo-visual-editor-workspace-view')
 export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
+	/** The frame's page; changing it reloads the frame. */
 	@state() private _url?: string;
+	/** The newest render, whether loaded or patched into the page (#18). */
+	@state() private _latestUrl?: string;
 	@state() private _status: 'idle' | 'rendering' | 'error' = 'idle';
 	@state() private _error?: string;
 	@state() private _targetCount?: number;
@@ -57,6 +60,10 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 	#visualMode?: ArjoVisualModeContext;
 	readonly #nonce = createNonce();
 	#channel?: HostChannel;
+	/** The frame shows a normal render with the canvas runtime, so newer renders can be patched in (#18). */
+	#canPatch = false;
+	/** Render URL sent to the canvas, awaiting its `rendered` answer. */
+	#pendingRender?: string;
 	/** The document URL this view was opened on; the "Standard editor" link goes to its Content tab. */
 	#documentBase?: string;
 
@@ -144,6 +151,13 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 			case 'ready':
 				this._targetCount = message.targets.length;
 				break;
+			case 'rendered':
+				if (message.url !== this.#pendingRender) break; // an older render; a newer one is on its way
+				this.#pendingRender = undefined;
+				if (message.ok) this._status = 'idle';
+				// It couldn't be patched in (e.g. the template threw): load it properly, which shows the error.
+				else this.#load(withNonce(message.url, this.#nonce));
+				break;
 			case 'select':
 				this._selected = message.target;
 				this.#channel?.send({ type: 'setSelection', target: message.target });
@@ -208,6 +222,7 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 
 		if (!data) {
 			this._status = 'error';
+			this.#canPatch = false; // the canvas is replaced by the message
 			this._error =
 				response?.status === 404
 					? 'You must first save your page to use the visual editor.'
@@ -215,7 +230,25 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 			return;
 		}
 
-		this._url = withNonce(data.url, this.#nonce);
+		this._latestUrl = withNonce(data.url, this.#nonce);
+		// Patch the newer render into the page rather than reloading it: scroll, focus and selection survive.
+		if (this.#canPatch && this.#channel?.send({ type: 'render', url: data.url })) {
+			this.#pendingRender = data.url;
+			return;
+		}
+		this.#load(this._latestUrl);
+	}
+
+	/** Loads a page into the frame; renders can be patched in again once it has loaded. */
+	#load(url: string) {
+		this.#canPatch = false;
+		this.#pendingRender = undefined;
+		this._url = url;
+	}
+
+	#onPageLoaded(event: CustomEvent<boolean>) {
+		this.#canPatch = event.detail;
+		this._status = 'idle';
 	}
 
 	#renderCanvas() {
@@ -227,9 +260,10 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 		}
 		return html`<arjo-visual-editor-canvas
 			.url=${this._url}
+			.latestUrl=${this._latestUrl}
 			.deviceSize=${this.#deviceSize}
 			@frame-changed=${this.#onFrameChanged}
-			@page-loaded=${() => (this._status = 'idle')}
+			@page-loaded=${this.#onPageLoaded}
 			@scale-changed=${(e: CustomEvent<number>) => (this._scale = e.detail)}
 		></arjo-visual-editor-canvas>`;
 	}
