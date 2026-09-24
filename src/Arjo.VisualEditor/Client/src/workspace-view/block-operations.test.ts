@@ -2,6 +2,8 @@ import { expect } from '@open-wc/testing';
 import {
 	canMoveBlock,
 	duplicateBlock,
+	fromClipboard,
+	toClipboardValues,
 	fitSpan,
 	layoutPosition,
 	newBlock,
@@ -285,5 +287,66 @@ describe('newBlock', () => {
 			],
 		});
 		expect(block.settingsData).to.deep.equal([]);
+	});
+});
+
+describe('clipboard', () => {
+	let n = 0;
+	const newKey = () => `c${++n}`;
+	beforeEach(() => (n = 0));
+
+	it('copies a list block as a block value, like the standard editor', () => {
+		const values = toClipboardValues(takeBlock(list(), 'a')!.taken, false);
+		expect(values).to.deep.equal([
+			{
+				type: 'block',
+				value: {
+					contentData: [{ key: 'a', contentTypeKey: 't', values: [{ alias: 'title', value: 'A' }] }],
+					settingsData: [{ key: 'a-s', contentTypeKey: 's', values: [] }],
+					layout: [{ contentKey: 'a', settingsKey: 'a-s' }],
+				},
+			},
+		]);
+	});
+
+	it('copies a grid block as a block value and a gridBlock value with its areas', () => {
+		const values = toClipboardValues(takeBlock(grid(), 'two')!.taken, true);
+		expect(values.map((v) => v.type)).to.deep.equal(['block', 'gridBlock']);
+		const block = values[0].value as { contentData: unknown[]; layout: unknown[] };
+		expect(block.contentData).to.have.length(1);
+		const gridBlock = values[1].value as { contentData: unknown[]; layout: Array<{ areas: unknown[] }> };
+		expect(gridBlock.contentData).to.have.length(4);
+		expect(gridBlock.layout[0].areas).to.have.length(2);
+	});
+
+	it('pastes with new keys throughout, keeping the content', () => {
+		const values = toClipboardValues(takeBlock(list(), 'b')!.taken, false);
+		const [pasted] = fromClipboard(values, false, newKey);
+		expect(pasted.item.contentKey).to.not.equal('b');
+		expect(pasted.contentData[0].key).to.equal(pasted.item.contentKey);
+		const json = JSON.stringify(pasted);
+		expect(json).to.not.contain('"rte"'); // the rich text block inside got a new key too
+		expect(json).to.contain('data-content-key');
+	});
+
+	it('pastes a grid block into a grid with its areas, and into a list without', () => {
+		const values = toClipboardValues(takeBlock(grid(), 'two')!.taken, true);
+		const [intoGrid] = fromClipboard(values, true, newKey);
+		expect(intoGrid.item.areas).to.have.length(2);
+		expect(intoGrid.contentData).to.have.length(4);
+
+		const [intoList] = fromClipboard(values, false, newKey);
+		expect(intoList.item).to.have.keys(['contentKey', 'settingsKey']);
+		expect(intoList.contentData).to.have.length(1);
+	});
+
+	it('pastes a list block into a grid without a span, to be fitted', () => {
+		const [pasted] = fromClipboard(toClipboardValues(takeBlock(list(), 'a')!.taken, false), true, newKey);
+		expect(pasted.item.columnSpan).to.equal(undefined);
+		expect(pasted.item.areas).to.deep.equal([]);
+	});
+
+	it('has nothing for entries that are not blocks', () => {
+		expect(fromClipboard([{ type: 'text', value: 'x' }], false, newKey)).to.deep.equal([]);
 	});
 });

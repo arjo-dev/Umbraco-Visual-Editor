@@ -41,8 +41,8 @@ export interface BlockPosition {
 // ---- canvas -> host ----
 
 /** The canvas block toolbar's buttons (#25). */
-export type BlockAction = 'moveUp' | 'moveDown' | 'duplicate' | 'delete' | 'settings';
-const BLOCK_ACTIONS: readonly string[] = ['moveUp', 'moveDown', 'duplicate', 'delete', 'settings'];
+export type BlockAction = 'moveUp' | 'moveDown' | 'duplicate' | 'copy' | 'delete' | 'settings';
+const BLOCK_ACTIONS: readonly string[] = ['moveUp', 'moveDown', 'duplicate', 'copy', 'delete', 'settings'];
 
 export type CanvasMessage =
 	| { type: 'ready'; documentKey: string; culture: string | null; targets: TargetRef[] }

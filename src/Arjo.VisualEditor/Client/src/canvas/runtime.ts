@@ -345,6 +345,8 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 				{ action: 'duplicate', label: 'Duplicate' },
 			);
 		}
+		// Copy to the CMS clipboard (#29): blocks copied here can be pasted in the standard editor, and back.
+		if (block.editorAlias !== 'Umbraco.RichText') tools.push({ action: 'copy', label: 'Copy' });
 		if (block.settingsKey) tools.push({ action: 'settings', label: 'Settings' });
 		if (block.editorAlias !== 'Umbraco.RichText') tools.push({ action: 'delete', label: 'Delete' });
 		return tools;

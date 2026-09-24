@@ -287,6 +287,11 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 			if (!this._panelOpen) this.#setPanelOpen(true);
 			return;
 		}
+		if (action === 'copy') {
+			// To the CMS clipboard (#29), for pasting here or in the standard editor.
+			await this.#blocks.copy(blockKey, ref(blockKey).label ?? 'Block', this.#culture);
+			return;
+		}
 		const selected = await this.#blocks.apply(blockKey, action, this.#culture);
 		if (selected === undefined) return;
 		this._selected = selected ? ref(selected) : null;
