@@ -3,6 +3,7 @@ import type { UmbControllerHost } from '@umbraco-cms/backoffice/controller-api';
 import { UmbDataTypeDetailRepository } from '@umbraco-cms/backoffice/data-type';
 import { UmbDocumentTypeDetailRepository } from '@umbraco-cms/backoffice/document-type';
 import { UMB_NOTIFICATION_CONTEXT } from '@umbraco-cms/backoffice/notification';
+import { UMB_CLIPBOARD_CONTEXT, type UmbClipboardEntryDetailModel } from '@umbraco-cms/backoffice/clipboard';
 import type { BlockPosition } from '../protocol/index.js';
 import { UMB_DOCUMENT_WORKSPACE_CONTEXT } from '@umbraco-cms/backoffice/document';
 import { umbConfirmModal } from '@umbraco-cms/backoffice/modal';
@@ -18,8 +19,10 @@ import {
 	type BlockEditorValue,
 	type TakenBlock,
 	fitSpan,
+	fromClipboard,
 	layoutPosition,
 	newBlock,
+	toClipboardValues,
 	putBlockInArea,
 	withColumnSpan,
 } from './block-operations.js';
@@ -376,14 +379,19 @@ export class ArjoBlockEditController extends UmbControllerBase {
 	}
 
 	/**
-	 * Adds a block at a position (#28, a "+" on the canvas): picks its type (with `pick`, the CMS block catalogue,
-	 * when more than one type is allowed there), creates it and puts it there. Returns the new block's key, or undefined
-	 * when nothing was added (not allowed, full, or the catalogue was closed).
+	 * Adds a block at a position (#28, a "+" on the canvas): the CMS block catalogue, with the block types allowed
+	 * there, offers to create one or to paste blocks from the CMS clipboard (#29; entries copied here or in the
+	 * standard editor, when all their block types are allowed). Returns the key of the (first) block added, or
+	 * undefined when nothing was added (not allowed, full, or the catalogue was closed).
 	 */
 	async insert(
 		at: BlockPosition,
 		activeCulture: string | null,
-		pick: (blocks: CatalogueBlockType[], groups: CatalogueBlockGroup[]) => Promise<string | null>,
+		pick: (
+			blocks: CatalogueBlockType[],
+			groups: CatalogueBlockGroup[],
+			clipboardFilter: (entry: UmbClipboardEntryDetailModel) => Promise<boolean>,
+		) => Promise<{ create: string } | { paste: string[] } | null>,
 	): Promise<string | undefined> {
 		const workspace = this.#workspace;
 		const target = workspace && this.#listAt(at, activeCulture);
@@ -409,49 +417,148 @@ export class ArjoBlockEditController extends UmbControllerBase {
 				areas?: GridAreaConfig[];
 			}
 		> = grid ? allowedInGrid(grid, area) : ((get('blocks') as CatalogueBlockType[] | undefined) ?? []);
+		const inProperty = new Set(
+			((get('blocks') as CatalogueBlockType[] | undefined) ?? []).map((b) => b.contentElementTypeKey),
+		);
 		const count = grid
 			? containerItems(list, at.areaOwnerKey ?? null, area?.key ?? null).length
 			: (list.layout['Umbraco.BlockList']?.length ?? 0);
 		const max = area ? area.maxAllowed : (get('validationLimit') as { max?: number | null } | undefined)?.max;
 		if (!allowed.length) {
-			await this.#warn('No blocks can go there', 'Its configuration doesn’t allow any block types there.');
+			await this.#warn('No blocks can go there', 'Its configuration doesn\u2019t allow any block types there.');
 			return undefined;
 		}
 		if (max && count >= max) {
-			await this.#warn('There’s no room', `It allows at most ${max} blocks.`);
+			await this.#warn('There\u2019s no room', `It allows at most ${max} blocks.`);
 			return undefined;
 		}
 
-		const typeKey =
-			allowed.length === 1
-				? allowed[0].contentElementTypeKey
-				: await pick(allowed, (get('blockGroups') as CatalogueBlockGroup[] | undefined) ?? []);
-		const type = allowed.find((b) => b.contentElementTypeKey === typeKey);
-		if (!typeKey || !type) return undefined;
+		// Clipboard entries that fit: every block type in them allowed in the property, and the blocks themselves here.
+		const topTypes = new Set(allowed.map((b) => b.contentElementTypeKey));
+		const fits = (blocks: TakenBlock[]) =>
+			blocks.length > 0 &&
+			blocks.every(
+				(b) =>
+					topTypes.has(b.contentData.find((d) => d.key === b.item.contentKey)?.contentTypeKey as string) &&
+					b.contentData.every((d) => inProperty.has(d.contentTypeKey as string)),
+			);
+		const clipboardFilter = async (entry: UmbClipboardEntryDetailModel) => fits(fromClipboard(entry.values, isGrid));
 
-		// Exposed in the edited culture when its element type varies by culture (as the block editors do).
-		const { data: elementType } = await new UmbDocumentTypeDetailRepository(this).requestByUnique(typeKey);
-		const columns = grid ? columnsIn(grid, area) : 0;
-		const block = newBlock({
-			contentTypeKey: typeKey,
-			settingsTypeKey: type.settingsElementTypeKey ?? null,
-			exposeCulture: elementType?.variesByCulture ? activeCulture : null,
-			grid: grid
-				? {
-						columnSpan: fitSpan(columns, columns, spansOf(grid, typeKey)) ?? columns,
-						rowSpan: type.rowMinSpan ?? 1,
-						areaKeys: type.areas?.map((a) => a.key) ?? [],
-					}
-				: undefined,
-		});
+		const choice = await pick(
+			allowed,
+			(get('blockGroups') as CatalogueBlockGroup[] | undefined) ?? [],
+			clipboardFilter,
+		);
+		if (!choice) return undefined;
+
+		let blocks: TakenBlock[];
+		if ('paste' in choice) {
+			const clipboard = await this.getContext(UMB_CLIPBOARD_CONTEXT);
+			const entries = await Promise.all(choice.paste.map((unique) => clipboard?.read(unique)));
+			blocks = entries.flatMap((entry) => (entry ? fromClipboard(entry.values, isGrid) : []));
+			if (!fits(blocks)) return undefined;
+		} else {
+			const type = allowed.find((b) => b.contentElementTypeKey === choice.create);
+			if (!type) return undefined;
+			const columns = grid ? columnsIn(grid, area) : 0;
+			blocks = [
+				newBlock({
+					contentTypeKey: type.contentElementTypeKey,
+					settingsTypeKey: type.settingsElementTypeKey ?? null,
+					exposeCulture: null,
+					grid: grid
+						? {
+								columnSpan: fitSpan(columns, columns, spansOf(grid, type.contentElementTypeKey)) ?? columns,
+								rowSpan: type.rowMinSpan ?? 1,
+								areaKeys: type.areas?.map((a) => a.key) ?? [],
+							}
+						: undefined,
+				}),
+			];
+		}
+
+		// Room for them all, spans that fit (grid), and exposed in the edited culture where their element type varies
+		// by culture (as the block editors do).
+		if (max && count + blocks.length > max) {
+			await this.#warn('There\u2019s no room', `It allows at most ${max} blocks.`);
+			return undefined;
+		}
+		const variesByCulture = new Map<string, boolean>();
+		const repository = new UmbDocumentTypeDetailRepository(this);
+		for (const block of blocks) {
+			if (grid) {
+				const typeKey = block.contentData.find((d) => d.key === block.item.contentKey)?.contentTypeKey as string;
+				const check = checkGridDrop(grid, typeKey, (block.item.columnSpan as number | undefined) ?? null, area, 0);
+				if (!check.ok) {
+					await this.#warn('The block can\u2019t go there', check.reason);
+					return undefined;
+				}
+				block.item.columnSpan = check.columnSpan;
+				block.item.rowSpan ??= 1;
+			}
+			for (const data of block.contentData) {
+				const typeKey = data.contentTypeKey as string;
+				if (!variesByCulture.has(typeKey)) {
+					const { data: type } = await repository.requestByUnique(typeKey);
+					variesByCulture.set(typeKey, !!type?.variesByCulture);
+				}
+				block.expose = [
+					...block.expose.filter((e) => e.contentKey !== data.key),
+					{ contentKey: data.key, culture: variesByCulture.get(typeKey) ? activeCulture : null, segment: null },
+				];
+			}
+		}
+
 		const put = (value: unknown) =>
-			grid
-				? at.areaOwnerKey && area
-					? putBlockInArea(asBlockValue(value), at.areaOwnerKey, area.key, block, at.index)
-					: putBlock(asBlockValue(value), 'Umbraco.BlockGrid', block, at.index)
-				: putBlock(asBlockValue(value), 'Umbraco.BlockList', block, at.index);
+			blocks.reduce(
+				(next, block, i) =>
+					grid
+						? at.areaOwnerKey && area
+							? putBlockInArea(next, at.areaOwnerKey, area.key, block, at.index + i)
+							: putBlock(next, 'Umbraco.BlockGrid', block, at.index + i)
+						: putBlock(next, 'Umbraco.BlockList', block, at.index + i),
+				asBlockValue(value),
+			);
 		await this.#set(target.property, this.#withList(target.property.value, at, target.culture, put));
-		return block.item.contentKey;
+		return blocks[0].item.contentKey;
+	}
+
+	/**
+	 * Copies a block to the CMS clipboard (#29), in the entry format the standard block editors use, so it can be
+	 * pasted there too. Returns whether it was copied.
+	 */
+	async copy(blockKey: string, label: string, activeCulture: string | null): Promise<boolean> {
+		const workspace = this.#workspace;
+		const block = workspace && locateBlock(workspace.getValues() ?? [], blockKey, activeCulture);
+		if (!block) return false;
+		let taken: TakenBlock | null = null;
+		let grid = false;
+		withBlockEditorValue(block.property.value, blockKey, (value) => {
+			if (isBlockEditorValue(value)) {
+				taken = takeBlock(value, blockKey)?.taken ?? null;
+				grid = layoutPosition(value, blockKey)?.editorAlias === 'Umbraco.BlockGrid';
+			}
+			return value;
+		});
+		const copied = taken as TakenBlock | null;
+		if (!copied) return false;
+		const { data: type } = await new UmbDocumentTypeDetailRepository(this).requestByUnique(
+			block.content.contentTypeKey,
+		);
+		const clipboard = await this.getContext(UMB_CLIPBOARD_CONTEXT);
+		const notifications = await this.getContext(UMB_NOTIFICATION_CONTEXT);
+		try {
+			await clipboard?.write({
+				name: label,
+				icon: type?.icon ?? 'icon-document',
+				values: toClipboardValues(copied, grid),
+			});
+			notifications?.peek('positive', { data: { message: 'Copied to the clipboard' } });
+			return true;
+		} catch (error) {
+			notifications?.peek('danger', { data: { message: error instanceof Error ? error.message : String(error) } });
+			return false;
+		}
 	}
 
 	/** Sets one of a block's content (or settings) values, from the side panel. */

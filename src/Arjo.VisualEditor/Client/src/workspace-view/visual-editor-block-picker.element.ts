@@ -2,6 +2,7 @@ import { customElement } from '@umbraco-cms/backoffice/external/lit';
 import { UmbLitElement } from '@umbraco-cms/backoffice/lit-element';
 import { UMB_BLOCK_CATALOGUE_MODAL, UMB_BLOCK_MANAGER_CONTEXT } from '@umbraco-cms/backoffice/block';
 import { umbOpenModal } from '@umbraco-cms/backoffice/modal';
+import type { UmbClipboardEntryDetailModel } from '@umbraco-cms/backoffice/clipboard';
 
 /** A block type as the catalogue lists it (Block List and Block Grid configuration entries). */
 export interface CatalogueBlockType {
@@ -36,21 +37,28 @@ export class ArjoVisualEditorBlockPickerElement extends UmbLitElement {
 		this.provideContext(UMB_BLOCK_MANAGER_CONTEXT, standIn);
 	}
 
-	/** The content element type key of the block type picked, or null when the catalogue was closed. */
-	async pick(blocks: CatalogueBlockType[], blockGroups: CatalogueBlockGroup[] = []): Promise<string | null> {
+	/**
+	 * What was picked: a block type to create, or clipboard entries to paste (#29; the catalogue's Clipboard tab,
+	 * offering the entries `clipboardFilter` accepts). Null when the catalogue was closed.
+	 */
+	async pick(
+		blocks: CatalogueBlockType[],
+		blockGroups: CatalogueBlockGroup[],
+		clipboardFilter: (entry: UmbClipboardEntryDetailModel) => Promise<boolean>,
+	): Promise<{ create: string } | { paste: string[] } | null> {
 		try {
 			const value = await umbOpenModal(this, UMB_BLOCK_CATALOGUE_MODAL, {
 				data: {
 					blocks: blocks as typeof UMB_BLOCK_CATALOGUE_MODAL.DATA.blocks,
 					blockGroups: blockGroups as typeof UMB_BLOCK_CATALOGUE_MODAL.DATA.blockGroups,
 					openClipboard: false,
-					// Pasting from the clipboard isn't done on the canvas yet: offer no clipboard entries.
-					clipboardFilter: async () => false,
+					clipboardFilter,
 					createBlockInWorkspace: false,
 					originData: { index: -1 } as typeof UMB_BLOCK_CATALOGUE_MODAL.DATA.originData,
 				},
 			});
-			return value?.create?.contentElementTypeKey ?? null;
+			if (value?.clipboard?.selection.length) return { paste: value.clipboard.selection };
+			return value?.create ? { create: value.create.contentElementTypeKey } : null;
 		} catch {
 			return null; // closed
 		}

@@ -270,7 +270,9 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 	async #onInsert(at: BlockPosition) {
 		const picker = this.shadowRoot?.querySelector('arjo-visual-editor-block-picker');
 		if (!picker) return;
-		const key = await this.#blocks.insert(at, this.#culture, (blocks, groups) => picker.pick(blocks, groups));
+		const key = await this.#blocks.insert(at, this.#culture, (blocks, groups, clipboardFilter) =>
+			picker.pick(blocks, groups, clipboardFilter),
+		);
 		if (!key) return;
 		this._selected = this.#blockRef(key);
 		this._blockTab = 'content';
@@ -285,6 +287,11 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 			this._selected = ref(blockKey);
 			this._blockTab = 'settings';
 			if (!this._panelOpen) this.#setPanelOpen(true);
+			return;
+		}
+		if (action === 'copy') {
+			// To the CMS clipboard (#29), for pasting here or in the standard editor.
+			await this.#blocks.copy(blockKey, ref(blockKey).label ?? 'Block', this.#culture);
 			return;
 		}
 		const selected = await this.#blocks.apply(blockKey, action, this.#culture);

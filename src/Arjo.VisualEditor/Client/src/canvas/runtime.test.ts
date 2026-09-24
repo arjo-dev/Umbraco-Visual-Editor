@@ -528,7 +528,7 @@ describe('canvas runtime', () => {
 		it("shows the selected block's actions, from where it sits", () => {
 			click(doc, 'inner');
 			// The only block in its list: nowhere to move; no settings.
-			expect(tools()).to.deep.equal(['Move up (disabled)', 'Move down (disabled)', 'Duplicate', 'Delete']);
+			expect(tools()).to.deep.equal(['Move up (disabled)', 'Move down (disabled)', 'Duplicate', 'Copy', 'Delete']);
 		});
 
 		it('sends the action for the block', () => {

@@ -391,3 +391,91 @@ export function newBlock(options: NewBlockOptions): TakenBlock {
 		expose: [{ contentKey, culture: options.exposeCulture, segment: null }],
 	};
 }
+
+/** A clipboard entry value, as the CMS clipboard stores it: `{ type, value }` (#29). */
+export interface ClipboardValue {
+	type: string;
+	value: unknown;
+}
+
+/** The CMS clipboard's block value types: any block editor's `'block'`, and Block Grid's `'gridBlock'` (with areas). */
+export const CLIPBOARD_BLOCK = 'block';
+export const CLIPBOARD_GRID_BLOCK = 'gridBlock';
+
+interface ClipboardBlockValue {
+	contentData: BlockEditorValue['contentData'];
+	settingsData?: BlockEditorValue['settingsData'];
+	layout?: LayoutItem[];
+}
+
+const isClipboardBlockValue = (value: unknown): value is ClipboardBlockValue =>
+	isObj(value) && Array.isArray(value.contentData) && (value.layout === undefined || Array.isArray(value.layout));
+
+/**
+ * A block (as taken from a value, with everything in it) as CMS clipboard entry values, the way the standard block
+ * editors copy one: a `'block'` value with the block itself, and for grid blocks also a `'gridBlock'` value with its
+ * areas and the blocks in them.
+ */
+export function toClipboardValues(block: TakenBlock, grid: boolean): ClipboardValue[] {
+	const { item } = block;
+	const values: ClipboardValue[] = [
+		{
+			type: CLIPBOARD_BLOCK,
+			value: {
+				contentData: block.contentData.filter((d) => d.key === item.contentKey),
+				settingsData: block.settingsData.filter((d) => d.key === item.settingsKey),
+				layout: [{ contentKey: item.contentKey, settingsKey: item.settingsKey ?? null }],
+			},
+		},
+	];
+	if (grid) {
+		values.push({
+			type: CLIPBOARD_GRID_BLOCK,
+			value: { contentData: block.contentData, settingsData: block.settingsData, layout: [item] },
+		});
+	}
+	return values;
+}
+
+/**
+ * The blocks of a CMS clipboard entry, ready to put into a Block List (`grid` false) or Block Grid: with new keys
+ * throughout (the entry may be pasted many times, and next to the blocks it was copied from). A grid takes a
+ * `'gridBlock'` value as it is (areas, spans); otherwise a `'block'` value's blocks come without spans (to be fitted)
+ * and without areas. `expose` is left to the caller, which knows the cultures.
+ */
+export function fromClipboard(
+	values: readonly ClipboardValue[],
+	grid: boolean,
+	newKey: () => string = () => crypto.randomUUID(),
+): TakenBlock[] {
+	const gridValue = values.find((v) => v.type === CLIPBOARD_GRID_BLOCK)?.value;
+	const blockValue = values.find((v) => v.type === CLIPBOARD_BLOCK)?.value;
+	const source =
+		grid && isClipboardBlockValue(gridValue) ? gridValue : isClipboardBlockValue(blockValue) ? blockValue : null;
+	if (!source?.layout?.length) return [];
+	const fromGrid = source === gridValue;
+
+	const blocks: TakenBlock[] = source.layout.map((layoutItem) => {
+		const item: LayoutItem = fromGrid
+			? layoutItem
+			: grid
+				? { contentKey: layoutItem.contentKey, settingsKey: layoutItem.settingsKey ?? null, rowSpan: 1, areas: [] }
+				: { contentKey: layoutItem.contentKey, settingsKey: layoutItem.settingsKey ?? null };
+		const { content, settings } = layoutKeys(item);
+		return {
+			item,
+			contentData: source.contentData.filter((d) => content.has(d.key)),
+			settingsData: (source.settingsData ?? []).filter((d) => settings.has(d.key)),
+			expose: [],
+		};
+	});
+
+	const keys = new Set<string>();
+	for (const block of blocks) {
+		const { content, settings } = layoutKeys(block.item);
+		[...content, ...settings].forEach((key) => keys.add(key));
+		nestedBlockKeys([block.contentData, block.settingsData], keys);
+	}
+	const renamed = new Map([...keys].map((key) => [key, newKey()]));
+	return blocks.map((block) => rekey(block, renamed) as TakenBlock);
+}

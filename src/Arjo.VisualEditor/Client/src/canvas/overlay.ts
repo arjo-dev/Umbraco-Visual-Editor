@@ -445,6 +445,7 @@ const ICONS: Record<BlockAction, string> = {
 	duplicate: svg(
 		'M5 1h8a2 2 0 0 1 2 2v8h-2V3H5zM1 5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2zm2 0v8h7V5z',
 	),
+	copy: svg('M4 1h7l3 3v8h-2V5h-3V3H4zM2 5h6l3 3v7H2zm2 2v6h5V9H7V7z'),
 	delete: svg('M6 1h4l1 1h3v2H2V2h3zM3 5h10l-1 10H4zm3 2v6h1V7zm3 0v6h1V7z'),
 	settings: svg(
 		'M2 3h7v2H2zm9 0h3v2h-3zm-2-1h2v4H9zM2 7h3v2H2zm5 0h7v2H7zM5 6h2v4H5zm-3 5h7v2H2zm9 0h3v2h-3zm-2-1h2v4H9z',
