@@ -114,3 +114,27 @@ export function showsValue(text: string, value: unknown): boolean {
 	const normalise = (s: string) => s.replace(/\r\n?/g, '\n').trim();
 	return typeof value === 'string' ? normalise(text) === normalise(value) : text.trim() === '' && value == null;
 }
+
+/**
+ * The content key of the block whose settings have key `settingsKey`: block layouts (at any depth, including grid
+ * areas) pair them as `{ contentKey, settingsKey }`. Null when not found.
+ */
+export function contentKeyOfSettings(values: readonly PropertyValueModel[], settingsKey: string): string | null {
+	const search = (node: unknown): string | null => {
+		if (Array.isArray(node)) {
+			for (const item of node) {
+				const found = search(item);
+				if (found) return found;
+			}
+			return null;
+		}
+		if (!isObj(node)) return null;
+		if (node.settingsKey === settingsKey && typeof node.contentKey === 'string') return node.contentKey;
+		for (const child of Object.values(node)) {
+			const found = search(child);
+			if (found) return found;
+		}
+		return null;
+	};
+	return search(values.map((v) => v.value));
+}

@@ -12,6 +12,7 @@ export interface OverlayOptions {
 
 const BLOCK_COLOR = '#f79c37';
 const PROPERTY_COLOR = '#3544b1';
+const ERROR_COLOR = '#d42054';
 
 export class CanvasOverlay {
 	readonly host: HTMLElement;
@@ -21,6 +22,7 @@ export class CanvasOverlay {
 	#hover: CanvasTarget | null = null;
 	#highlight: CanvasTarget | null = null;
 	#selection: { target: CanvasTarget; ancestors: CanvasTarget[] } | null = null;
+	#errors: Array<{ target: CanvasTarget; message: string }> = [];
 	#frame = 0;
 	#resizeObserver: ResizeObserver;
 	#mutationObserver: MutationObserver;
@@ -69,6 +71,12 @@ export class CanvasOverlay {
 		this.#render();
 	}
 
+	/** Validation errors (#23): outlined, with a badge, always visible. */
+	setErrors(errors: Array<{ target: CanvasTarget; message: string }>) {
+		this.#errors = errors;
+		this.#render();
+	}
+
 	setSelection(target: CanvasTarget | null, ancestors: CanvasTarget[] = []) {
 		this.#selection = target ? { target, ancestors } : null;
 		this.#observeTargets();
@@ -103,9 +111,33 @@ export class CanvasOverlay {
 		const layer = this.#root.querySelector('.layer')!;
 		layer.replaceChildren();
 
+		for (const { target, message } of this.#errors) layer.append(this.#errorBox(target, message));
+
 		if (this.#highlight) layer.append(this.#box(this.#highlight, 'highlight'));
 		if (this.#hover && this.#hover !== this.#selection?.target) layer.append(this.#box(this.#hover, 'hover'));
 		if (this.#selection) layer.append(this.#box(this.#selection.target, 'selected', this.#selection.ancestors));
+	}
+
+	#errorBox(target: CanvasTarget, message: string) {
+		const rect = unionRect(target.elements);
+		const box = this.#doc.createElement('div');
+		box.className = `box error ${target.ref.kind === 'Block' ? 'block' : 'property'}`;
+		if (!rect) {
+			box.hidden = true;
+			return box;
+		}
+		Object.assign(box.style, {
+			left: `${rect.left}px`,
+			top: `${rect.top}px`,
+			width: `${rect.width}px`,
+			height: `${rect.height}px`,
+		});
+		const badge = this.#doc.createElement('span');
+		badge.className = 'badge';
+		badge.textContent = '!';
+		badge.title = message;
+		box.append(badge);
+		return box;
 	}
 
 	#box(target: CanvasTarget, kind: 'hover' | 'selected' | 'highlight', ancestors: CanvasTarget[] = []) {
@@ -178,6 +210,14 @@ const STYLES = `
 	.box.hover.block { outline: 1px dashed ${BLOCK_COLOR}; outline-offset: 3px; }
 	.box.selected.property { outline: 2px solid ${PROPERTY_COLOR}; outline-offset: 2px; }
 	.box.selected.block { outline: 2px solid ${BLOCK_COLOR}; outline-offset: 3px; }
+	.box.error.property { outline: 2px solid ${ERROR_COLOR}; outline-offset: 2px; }
+	.box.error.block { outline: 1px dashed ${ERROR_COLOR}; outline-offset: 3px; }
+	.box.error .badge {
+		position: absolute; top: -10px; right: -10px; width: 18px; height: 18px; border-radius: 50%;
+		display: grid; place-items: center; font-weight: 700; color: #fff; background: ${ERROR_COLOR};
+		box-shadow: 0 1px 3px rgb(0 0 0 / 0.3);
+	}
+	.box.error.block .badge { top: -11px; right: -11px; }
 	.box.highlight { background: color-mix(in srgb, ${PROPERTY_COLOR} 12%, transparent); outline: 1px solid ${PROPERTY_COLOR}; }
 	.label {
 		position: absolute; left: -2px; bottom: calc(100% + 4px); white-space: nowrap;
