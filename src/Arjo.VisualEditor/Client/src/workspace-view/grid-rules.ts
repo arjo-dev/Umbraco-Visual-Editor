@@ -19,6 +19,8 @@ export interface GridAreaConfig {
 
 export interface GridBlockConfig {
 	contentElementTypeKey: string;
+	settingsElementTypeKey?: string | null;
+	rowMinSpan?: number | null;
 	groupKey?: string | null;
 	allowAtRoot?: boolean;
 	allowInAreas?: boolean;
@@ -91,4 +93,17 @@ export function checkGridDrop(
 	const columnSpan = fitSpan(Math.min(span ?? columns, columns), columns, spansOf(config, typeKey));
 	if (columnSpan === null) return { ok: false, reason: 'This block is too wide to go there.' };
 	return { ok: true, columnSpan };
+}
+
+/** The block types that may go at the grid's root (`area` null) or into an area. */
+export function allowedInGrid(config: GridConfig, area: GridAreaConfig | null): GridBlockConfig[] {
+	if (!area) return config.blocks.filter((b) => b.allowAtRoot !== false);
+	const allowances = area.specifiedAllowance ?? [];
+	if (!allowances.length) return config.blocks.filter((b) => b.allowInAreas !== false);
+	return config.blocks.filter((b) =>
+		allowances.some(
+			(a) =>
+				(a.elementTypeKey && a.elementTypeKey === b.contentElementTypeKey) || (a.groupKey && a.groupKey === b.groupKey),
+		),
+	);
 }

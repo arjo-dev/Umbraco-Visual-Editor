@@ -10,11 +10,20 @@
  * - Drag and drop of Block List (#26, drag.ts) and Block Grid blocks (#27, grid.ts, into and between areas): a handle
  *   on hovered and selected blocks, a drop line, autoscroll near the edges; Alt+Up/Down moves the selected block from
  *   the keyboard. Grid blocks can also be resized: a handle on the selected block's right edge changes its column span.
+ * - Adding blocks (#28): "+" buttons on a hovered or selected block's top and bottom edges, and a placeholder in every
+ *   empty grid area (also a drop target while dragging); the host opens the block catalogue.
  * - Live re-render (#18): a `render` message patches the newer page in (patch.ts) rather than reloading, then
  *   re-resolves the markers and keeps the selection, scroll position and focus.
  * Only active inside the visual editor (a nonce in the URL fragment); opening a render URL directly just shows the page.
  */
-import { connectToHost, readNonce, type CanvasChannel, type HostMessage, type TargetRef } from '../protocol/index.js';
+import {
+	connectToHost,
+	readNonce,
+	type BlockPosition,
+	type CanvasChannel,
+	type HostMessage,
+	type TargetRef,
+} from '../protocol/index.js';
 import { readManifest, resolveMarkers } from './markers.js';
 import { InlineEditor, inlineEditableElement } from './inline-edit.js';
 import { RichTextEditState } from './rich-text-edit.js';
@@ -76,7 +85,64 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 		onDragStart: (target, event) => startDrag(target, event),
 		resizable: (target) => !readonly && !editing() && target.block?.editorAlias === BLOCK_GRID,
 		onResizeStart: (target, event) => startResize(target, event),
+		insertable: (target) => !readonly && !editing() && !drag && isMovable(target),
+		onInsert: (target, where) => {
+			const at = positionBeside(target, where);
+			if (at) channel?.send({ type: 'blockInsertRequest', at });
+		},
 	});
+
+	/** The position just before or after a block, in its list or grid container. */
+	function positionBeside(target: CanvasTarget, where: 'before' | 'after'): BlockPosition | null {
+		const block = target.block;
+		if (!block) return null;
+		const at = where === 'before' ? block.index : block.index + 1;
+		if (block.editorAlias !== BLOCK_GRID) {
+			return { ownerKey: block.ownerKey, propertyAlias: block.propertyAlias, areaKey: null, index: at };
+		}
+		return {
+			ownerKey: block.ownerKey,
+			propertyAlias: block.propertyAlias,
+			areaKey: block.areaKey,
+			index: at,
+			areaOwnerKey: block.areaOwnerKey,
+			areaAlias: containerOf(target, gridContainersOf(index.targets))?.areaAlias ?? null,
+		};
+	}
+
+	/** Height given to an empty grid area, so it can be seen, clicked and dropped on. */
+	const EMPTY_AREA_HEIGHT = 56;
+
+	/**
+	 * Placeholders in empty grid areas (#28): an empty area renders with no height, so it gets one (on the page, in
+	 * edit mode only; a re-render resets it, and this runs again) and a "+ Add block" button.
+	 */
+	function refreshPlaceholders() {
+		const empty = readonly ? [] : gridContainersOf(index.targets).filter((c) => c.areaOwnerKey && !c.blocks.length);
+		for (const container of empty) {
+			const element = container.element as HTMLElement;
+			if (element.getBoundingClientRect().height < EMPTY_AREA_HEIGHT)
+				element.style.minHeight = `${EMPTY_AREA_HEIGHT}px`;
+		}
+		overlay.setPlaceholders(
+			empty.map((container) => ({
+				element: container.element,
+				label: 'Add block',
+				onInsert: () =>
+					channel?.send({
+						type: 'blockInsertRequest',
+						at: {
+							ownerKey: container.ownerKey,
+							propertyAlias: container.propertyAlias,
+							areaKey: null,
+							index: 0,
+							areaOwnerKey: container.areaOwnerKey,
+							areaAlias: container.areaAlias,
+						},
+					}),
+			})),
+		);
+	}
 
 	/** Where a dragged block would drop: in a Block List for list blocks, in a grid's root or area for grid blocks. */
 	function spotFor(target: CanvasTarget, x: number, y: number): DropSpot | null {
@@ -445,6 +511,7 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 		overlay.setHover(null);
 		overlay.setHighlight(index.find(highlighted));
 		showErrors();
+		refreshPlaceholders();
 		// A reload of the frame (or the navigation guard) should come back to this render, not the first one.
 		try {
 			doc.defaultView?.history.replaceState(null, '', url + (doc.defaultView?.location.hash ?? ''));
@@ -458,6 +525,7 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 	}
 
 	sendReady();
+	refreshPlaceholders();
 
 	return {
 		get index() {
@@ -480,6 +548,7 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 		},
 		setReadonly(value) {
 			readonly = value;
+			refreshPlaceholders();
 			if (readonly) {
 				hover(null);
 				inline.cancel();

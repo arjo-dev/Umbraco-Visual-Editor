@@ -4,6 +4,7 @@ import {
 	duplicateBlock,
 	fitSpan,
 	layoutPosition,
+	newBlock,
 	putBlockInArea,
 	withColumnSpan,
 	moveBlock,
@@ -249,5 +250,40 @@ describe('grid moves and spans', () => {
 		expect(fitSpan(5, 12, [12, 6, 4])).to.equal(6); // 4 and 6 are as near: the wider
 		expect(fitSpan(9, 12, [])).to.equal(9);
 		expect(fitSpan(12, 4, [12, 6])).to.equal(null);
+	});
+});
+
+describe('newBlock', () => {
+	let n = 0;
+	const newKey = () => `k${++n}`;
+	beforeEach(() => (n = 0));
+
+	it('makes an empty block with settings when its type has them', () => {
+		expect(newBlock({ contentTypeKey: 't', settingsTypeKey: 's', exposeCulture: 'en-US', newKey })).to.deep.equal({
+			item: { contentKey: 'k1', settingsKey: 'k2' },
+			contentData: [{ key: 'k1', contentTypeKey: 't', values: [] }],
+			settingsData: [{ key: 'k2', contentTypeKey: 's', values: [] }],
+			expose: [{ contentKey: 'k1', culture: 'en-US', segment: null }],
+		});
+	});
+
+	it('gives a grid block its span, rows and empty areas', () => {
+		const block = newBlock({
+			contentTypeKey: 't',
+			exposeCulture: null,
+			grid: { columnSpan: 6, rowSpan: 1, areaKeys: ['l', 'r'] },
+			newKey,
+		});
+		expect(block.item).to.deep.equal({
+			contentKey: 'k1',
+			settingsKey: null,
+			columnSpan: 6,
+			rowSpan: 1,
+			areas: [
+				{ key: 'l', items: [] },
+				{ key: 'r', items: [] },
+			],
+		});
+		expect(block.settingsData).to.deep.equal([]);
 	});
 });

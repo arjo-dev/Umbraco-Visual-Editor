@@ -1,5 +1,5 @@
 import { expect } from '@open-wc/testing';
-import { areaOf, checkGridDrop, gridConfigOf, type GridConfig } from './grid-rules.js';
+import { allowedInGrid, areaOf, checkGridDrop, gridConfigOf, type GridConfig } from './grid-rules.js';
 
 // Like the Playground's grid: rich text and image rows go anywhere; the two-column block only at the root, with a
 // left area (any block) and a right area for images only, holding at most one.
@@ -76,5 +76,16 @@ describe('grid rules', () => {
 		expect(checkGridDrop(config, 'two', 12, null, 0)).to.deep.equal({ ok: true, columnSpan: 12 });
 		const narrow: GridConfig = { ...config, gridColumns: 6 };
 		expect(checkGridDrop(narrow, 'two', 12, null, 0)).to.include({ ok: false });
+	});
+});
+
+describe('allowedInGrid', () => {
+	const types = (area: Parameters<typeof allowedInGrid>[1]) =>
+		allowedInGrid(config, area).map((b) => b.contentElementTypeKey);
+
+	it('offers what may go at the root, or in an area', () => {
+		expect(types(null)).to.deep.equal(['text', 'image', 'two']);
+		expect(types(areaOf(config, 'two', null, 'left'))).to.deep.equal(['text', 'image', 'banner']);
+		expect(types(areaOf(config, 'two', null, 'right'))).to.deep.equal(['image']);
 	});
 });
