@@ -290,6 +290,7 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 						? html`<arjo-visual-editor-side-panel
 								.selected=${this._selected}
 								.targetCount=${this._targetCount}
+								.contentHref=${this.#documentBase ? `${this.#documentBase}/view/content` : undefined}
 							></arjo-visual-editor-side-panel>`
 						: nothing
 				}

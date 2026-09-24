@@ -109,7 +109,8 @@ export class ArjoVisualEditorToolbarElement extends UmbLitElement {
 			</div>
 
 			<div class="group end">
-				${this.rendering ? html`<uui-loader-circle aria-label="Updating preview"></uui-loader-circle>` : nothing}
+				<!-- Always laid out, only hidden, so showing it doesn't shift the toolbar. -->
+				<uui-loader-circle aria-label="Updating preview" ?hidden=${!this.rendering}></uui-loader-circle>
 				<uui-button
 					compact
 					look=${this.panelOpen ? 'primary' : 'secondary'}
@@ -181,6 +182,11 @@ export class ArjoVisualEditorToolbarElement extends UmbLitElement {
 
 		uui-loader-circle {
 			font-size: var(--uui-size-5);
+		}
+
+		uui-loader-circle[hidden] {
+			display: inline-block;
+			visibility: hidden;
 		}
 	`;
 }
