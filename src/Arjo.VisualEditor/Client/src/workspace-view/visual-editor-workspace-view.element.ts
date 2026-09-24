@@ -41,6 +41,8 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 	@state() private _status: 'idle' | 'rendering' | 'error' = 'idle';
 	@state() private _error?: string;
 	@state() private _targetCount?: number;
+	/** Document properties the canvas found on the page; the rest are listed under Page settings (#22). */
+	@state() private _visibleAliases?: ReadonlySet<string>;
 	@state() private _selected: TargetRef | null = null;
 	/** Never saved: there's no draft to render yet (render sessions overlay it, ADR 0001). */
 	@state() private _isNew = false;
@@ -154,6 +156,9 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 		switch (message.type) {
 			case 'ready':
 				this._targetCount = message.targets.length;
+				this._visibleAliases = new Set(
+					message.targets.filter((t) => !t.ownerIsBlock && t.alias).map((t) => t.alias as string),
+				);
 				break;
 			case 'rendered':
 				if (message.url !== this.#pendingRender) break; // an older render; a newer one is on its way
@@ -310,6 +315,7 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 						? html`<arjo-visual-editor-side-panel
 								.selected=${this._selected}
 								.targetCount=${this._targetCount}
+								.visibleAliases=${this._visibleAliases}
 								.contentHref=${this.#documentBase ? `${this.#documentBase}/view/content` : undefined}
 							></arjo-visual-editor-side-panel>`
 						: nothing
