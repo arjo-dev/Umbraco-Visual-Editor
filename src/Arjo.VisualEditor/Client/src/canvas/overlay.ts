@@ -28,6 +28,20 @@ export interface OverlayOptions {
 	resizable?: (target: CanvasTarget) => boolean;
 	/** A resize handle was pressed. */
 	onResizeStart?: (target: CanvasTarget, event: PointerEvent) => void;
+	/** Whether a hovered or selected block gets "+" buttons to add a block before and after it (#28). */
+	insertable?: (target: CanvasTarget) => boolean;
+	/** A "+" button was pressed: add a block before or after `target`. */
+	onInsert?: (target: CanvasTarget, where: 'before' | 'after') => void;
+}
+
+/**
+ * An empty place on the page, drawn as a dashed box: an empty grid area blocks can be added to (with a "+" button,
+ * #28), or a block with nothing to show yet (a note only; clicks go through to the block).
+ */
+export interface Placeholder {
+	element: Element;
+	label: string;
+	onInsert?: () => void;
 }
 
 /** What a resize would give (#27): the block's new box, and a label such as "6 / 12". */
@@ -55,6 +69,7 @@ export class CanvasOverlay {
 	#dragging: CanvasTarget | null = null;
 	#dropLine: { left: number; top: number; width: number; height: number } | null = null;
 	#resizePreview: ResizePreview | null = null;
+	#placeholders: Placeholder[] = [];
 	#frame = 0;
 	#resizeObserver: ResizeObserver;
 	#mutationObserver: MutationObserver;
@@ -115,6 +130,12 @@ export class CanvasOverlay {
 		this.#render();
 	}
 
+	/** Empty places to add blocks to (#28). */
+	setPlaceholders(placeholders: Placeholder[]) {
+		this.#placeholders = placeholders;
+		this.#render();
+	}
+
 	/** A block being resized (#27): its new size, drawn over it. */
 	setResizePreview(preview: ResizePreview | null) {
 		this.#resizePreview = preview;
@@ -167,6 +188,7 @@ export class CanvasOverlay {
 		layer.replaceChildren();
 
 		for (const { target, message } of this.#errors) layer.append(this.#errorBox(target, message));
+		for (const placeholder of this.#placeholders) layer.append(this.#placeholder(placeholder));
 
 		if (this.#resizePreview) {
 			const { left, top, width, height, label } = this.#resizePreview;
@@ -222,6 +244,59 @@ export class CanvasOverlay {
 		badge.textContent = '!';
 		badge.title = message;
 		box.append(badge);
+		return box;
+	}
+
+	/** A "+" on the block's top edge (add before) or bottom edge (add after). */
+	#adder(target: CanvasTarget, where: 'before' | 'after') {
+		const button = this.#doc.createElement('button');
+		button.type = 'button';
+		button.className = `add ${where}`;
+		button.title = where === 'before' ? 'Add a block before this one' : 'Add a block after this one';
+		button.setAttribute('aria-label', button.title);
+		button.textContent = '+';
+		button.addEventListener('pointerdown', (event) => event.stopPropagation());
+		button.addEventListener('click', (event) => {
+			event.preventDefault();
+			event.stopPropagation();
+			this.#options.onInsert?.(target, where);
+		});
+		return button;
+	}
+
+	/** An empty place to add blocks to: a dashed box over it, with a "+" button. */
+	#placeholder({ element, label, onInsert }: Placeholder) {
+		const box = this.#doc.createElement('div');
+		box.className = `placeholder${onInsert ? '' : ' note'}`;
+		const rect = element.getBoundingClientRect();
+		if (!rect.width) {
+			box.hidden = true;
+			return box;
+		}
+		Object.assign(box.style, {
+			left: `${rect.left}px`,
+			top: `${rect.top}px`,
+			width: `${rect.width}px`,
+			height: `${rect.height}px`,
+		});
+		if (!onInsert) {
+			const note = this.#doc.createElement('span');
+			note.className = 'placeholder-note';
+			note.textContent = label;
+			box.append(note);
+			return box;
+		}
+		const button = this.#doc.createElement('button');
+		button.type = 'button';
+		button.className = 'placeholder-add';
+		button.textContent = `+ ${label}`;
+		button.addEventListener('pointerdown', (event) => event.stopPropagation());
+		button.addEventListener('click', (event) => {
+			event.preventDefault();
+			event.stopPropagation();
+			onInsert();
+		});
+		box.append(button);
 		return box;
 	}
 
@@ -308,6 +383,9 @@ export class CanvasOverlay {
 
 		if (this.#options.draggable?.(target)) box.append(this.#grip(target, rect.left < 24));
 		if (kind === 'selected' && this.#options.resizable?.(target)) box.append(this.#resizer(target));
+		if ((kind === 'hover' || kind === 'selected') && this.#options.insertable?.(target)) {
+			box.append(this.#adder(target, 'before'), this.#adder(target, 'after'));
+		}
 
 		const label = this.#doc.createElement('div');
 		label.className = `label${rect.top < 24 ? ' inside' : ''}`;
@@ -400,6 +478,25 @@ const STYLES = `
 	}
 	.block > .label { background: ${BLOCK_COLOR}; color: #1b264f; }
 	.label.inside { bottom: auto; top: 4px; left: 4px; }
+	.add {
+		all: unset; position: absolute; left: 50%; width: 20px; height: 20px; margin-left: -10px; border-radius: 50%;
+		display: grid; place-items: center; font: 700 15px/1 system-ui, sans-serif; cursor: pointer; pointer-events: auto;
+		color: #fff; background: ${PROPERTY_COLOR}; box-shadow: 0 1px 3px rgb(0 0 0 / 0.3);
+	}
+	.add.before { top: -10px; }
+	.add.after { bottom: -10px; }
+	.add:hover, .add:focus-visible { transform: scale(1.12); }
+	.placeholder {
+		position: fixed; box-sizing: border-box; display: grid; place-items: center; border-radius: 3px;
+		outline: 1px dashed ${PROPERTY_COLOR}; outline-offset: -1px; background: color-mix(in srgb, ${PROPERTY_COLOR} 6%, transparent);
+	}
+	.placeholder-add {
+		all: unset; padding: 4px 10px; border-radius: 3px; cursor: pointer; pointer-events: auto; color: #fff;
+		background: ${PROPERTY_COLOR}; font-weight: 600;
+	}
+	.placeholder-add:hover, .placeholder-add:focus-visible { filter: brightness(1.15); }
+	.placeholder.note { outline-color: ${BLOCK_COLOR}; background: color-mix(in srgb, ${BLOCK_COLOR} 8%, transparent); }
+	.placeholder-note { padding: 4px 10px; color: #6b4b12; font-style: italic; }
 	.box.dragging { background: color-mix(in srgb, ${BLOCK_COLOR} 18%, transparent); outline: 2px dashed ${BLOCK_COLOR}; outline-offset: 3px; }
 	.drop { position: fixed; border-radius: 2px; background: ${BLOCK_COLOR}; box-shadow: 0 0 0 1px #fff; }
 	.resize {

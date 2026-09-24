@@ -361,3 +361,33 @@ export function fitSpan(wanted: number, columns: number, allowed: readonly numbe
 			: best,
 	);
 }
+
+/** What a new block needs (#28): its type, its settings type (if its block type has settings) and, in a grid, its size. */
+export interface NewBlockOptions {
+	contentTypeKey: string;
+	settingsTypeKey?: string | null;
+	/** Block Grid: the column span, rows and the block type's areas (they start empty). */
+	grid?: { columnSpan: number; rowSpan: number; areaKeys: string[] };
+	/** The culture the block is exposed in: the edited culture when its element type varies by culture, else null. */
+	exposeCulture: string | null;
+	newKey?: () => string;
+}
+
+/** A new, empty block, ready to put in a value (putBlock / putBlockInArea). */
+export function newBlock(options: NewBlockOptions): TakenBlock {
+	const newKey = options.newKey ?? (() => crypto.randomUUID());
+	const contentKey = newKey();
+	const settingsKey = options.settingsTypeKey ? newKey() : null;
+	const item: LayoutItem = { contentKey, settingsKey };
+	if (options.grid) {
+		item.columnSpan = options.grid.columnSpan;
+		item.rowSpan = options.grid.rowSpan;
+		item.areas = options.grid.areaKeys.map((key) => ({ key, items: [] }));
+	}
+	return {
+		item,
+		contentData: [{ key: contentKey, contentTypeKey: options.contentTypeKey, values: [] }],
+		settingsData: settingsKey ? [{ key: settingsKey, contentTypeKey: options.settingsTypeKey!, values: [] }] : [],
+		expose: [{ contentKey, culture: options.exposeCulture, segment: null }],
+	};
+}

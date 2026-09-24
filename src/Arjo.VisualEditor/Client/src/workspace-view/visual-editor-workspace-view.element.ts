@@ -12,6 +12,7 @@ import {
 	sameTarget,
 	withNonce,
 	type BlockAction,
+	type BlockPosition,
 	type CanvasMessage,
 	type HostChannel,
 	type TargetRef,
@@ -21,6 +22,7 @@ import { ArjoInlineEditController, type RichTextSession } from './inline-edit.co
 import { clampPanelWidth, PANEL_DEFAULT_WIDTH } from './panel-width.js';
 import { ArjoValidationController, type VisualEditorError } from './validation.controller.js';
 import { ArjoBlockEditController } from './block-edit.controller.js';
+import './visual-editor-block-picker.element.js';
 import '../rich-text/visual-editor-rich-text-editor.element.js';
 import type { ArjoVisualEditorSidePanelElement } from './visual-editor-side-panel.element.js';
 import './visual-editor-toolbar.element.js';
@@ -229,6 +231,10 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 				// A block dropped on the canvas (#26); the re-render shows it in its new place, still selected.
 				void this.#blocks.moveTo(message.blockKey, message.to, this.#culture);
 				break;
+			case 'blockInsertRequest':
+				// A "+" on the canvas (#28): pick a block type, add it, select it.
+				void this.#onInsert(message.at);
+				break;
 			case 'blockResize':
 				// A grid block's column span dragged on the canvas (#27); the host snaps it to the allowed spans.
 				void this.#blocks.resize(message.blockKey, message.columnSpan, this.#culture);
@@ -247,16 +253,34 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 		}
 	}
 
-	/** A block toolbar button (#25): settings shows the block's settings; the rest change the document. */
-	async #onBlockAction(blockKey: string, action: BlockAction) {
-		const ref = (key: string): TargetRef =>
+	/** A block by key, with its labels when the page has shown it. */
+	#blockRef(key: string): TargetRef {
+		return (
 			this._targets.find((t) => t.kind === 'Block' && t.ownerKey === key) ?? {
 				kind: 'Block',
 				ownerKey: key,
 				ownerIsBlock: true,
 				alias: null,
 				culture: null,
-			};
+			}
+		);
+	}
+
+	/** Adds a block (#28): the new block is selected once the re-render shows it, with its editor in the side panel. */
+	async #onInsert(at: BlockPosition) {
+		const picker = this.shadowRoot?.querySelector('arjo-visual-editor-block-picker');
+		if (!picker) return;
+		const key = await this.#blocks.insert(at, this.#culture, (blocks, groups) => picker.pick(blocks, groups));
+		if (!key) return;
+		this._selected = this.#blockRef(key);
+		this._blockTab = 'content';
+		if (!this._panelOpen) this.#setPanelOpen(true);
+		this.#channel?.send({ type: 'setSelection', target: this._selected });
+	}
+
+	/** A block toolbar button (#25): settings shows the block's settings; the rest change the document. */
+	async #onBlockAction(blockKey: string, action: BlockAction) {
+		const ref = (key: string) => this.#blockRef(key);
 		if (action === 'settings') {
 			this._selected = ref(blockKey);
 			this._blockTab = 'settings';
@@ -500,6 +524,7 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 
 	override render() {
 		return html`
+			<arjo-visual-editor-block-picker></arjo-visual-editor-block-picker>
 			<arjo-visual-editor-toolbar
 				.standardEditorHref=${this.#documentBase ? `${this.#documentBase}/view/content` : undefined}
 				.device=${this._device}

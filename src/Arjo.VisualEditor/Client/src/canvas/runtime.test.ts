@@ -619,4 +619,27 @@ describe('canvas runtime', () => {
 			expect(last?.type === 'hover' && last.target?.ownerKey).to.equal('inner');
 		});
 	});
+
+	describe('adding blocks', () => {
+		it('offers "+" before and after a list block, asking the host for those positions', () => {
+			click(doc, 'inner');
+			const adders = [...runtime.overlay.host.shadowRoot!.querySelectorAll<HTMLButtonElement>('.box.selected .add')];
+			expect(adders.map((b) => b.className)).to.deep.equal(['add before', 'add after']);
+			sent = [];
+			adders[1].click();
+			expect(sent).to.deep.equal([
+				{ type: 'blockInsertRequest', at: { ownerKey: 'outer', propertyAlias: 'items', areaKey: null, index: 1 } },
+			]);
+		});
+
+		it('offers none while read-only', () => {
+			click(doc, 'inner');
+			handleHostMessage(runtime, { type: 'setReadonly', readonly: true });
+			handleHostMessage(runtime, {
+				type: 'setSelection',
+				target: { kind: 'Block', ownerKey: 'inner', ownerIsBlock: true, alias: null, culture: null },
+			});
+			expect(runtime.overlay.host.shadowRoot!.querySelectorAll('.add')).to.have.length(0);
+		});
+	});
 });

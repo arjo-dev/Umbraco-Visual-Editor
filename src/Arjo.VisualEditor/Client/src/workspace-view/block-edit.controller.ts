@@ -19,10 +19,21 @@ import {
 	type TakenBlock,
 	fitSpan,
 	layoutPosition,
+	newBlock,
 	putBlockInArea,
 	withColumnSpan,
 } from './block-operations.js';
-import { areaOf, checkGridDrop, columnsIn, gridConfigOf, spansOf, type GridConfig } from './grid-rules.js';
+import {
+	allowedInGrid,
+	areaOf,
+	checkGridDrop,
+	columnsIn,
+	gridConfigOf,
+	spansOf,
+	type GridAreaConfig,
+	type GridConfig,
+} from './grid-rules.js';
+import type { CatalogueBlockGroup, CatalogueBlockType } from './visual-editor-block-picker.element.js';
 import {
 	locateBlock,
 	locateBlockHolder,
@@ -362,6 +373,85 @@ export class ArjoBlockEditController extends UmbControllerBase {
 		if (next === holder.property.value) return false;
 		await this.#set(holder.property, next);
 		return true;
+	}
+
+	/**
+	 * Adds a block at a position (#28, a "+" on the canvas): picks its type (with `pick`, the CMS block catalogue,
+	 * when more than one type is allowed there), creates it and puts it there. Returns the new block's key, or undefined
+	 * when nothing was added (not allowed, full, or the catalogue was closed).
+	 */
+	async insert(
+		at: BlockPosition,
+		activeCulture: string | null,
+		pick: (blocks: CatalogueBlockType[], groups: CatalogueBlockGroup[]) => Promise<string | null>,
+	): Promise<string | undefined> {
+		const workspace = this.#workspace;
+		const target = workspace && this.#listAt(at, activeCulture);
+		if (!workspace || !target || !(await this.#canWrite(target.property, activeCulture))) return undefined;
+		const values = await this.#listConfiguration(at, activeCulture);
+		if (!values) return undefined;
+		const get = (alias: string) => values.find((v) => v.alias === alias)?.value;
+		const list = asBlockValue(target.value);
+
+		// What may go there, and whether there's room.
+		const isGrid = at.areaOwnerKey !== undefined;
+		const grid: GridConfig | null = isGrid ? gridConfigOf(values) : null;
+		let area: GridAreaConfig | null = null;
+		if (grid && at.areaOwnerKey) {
+			const ownerType = list.contentData.find((d) => d.key === at.areaOwnerKey)?.contentTypeKey as string | undefined;
+			area = ownerType ? areaOf(grid, ownerType, at.areaKey, at.areaAlias) : null;
+			if (!area) return undefined;
+		}
+		const allowed: Array<
+			CatalogueBlockType & {
+				settingsElementTypeKey?: string | null;
+				rowMinSpan?: number | null;
+				areas?: GridAreaConfig[];
+			}
+		> = grid ? allowedInGrid(grid, area) : ((get('blocks') as CatalogueBlockType[] | undefined) ?? []);
+		const count = grid
+			? containerItems(list, at.areaOwnerKey ?? null, area?.key ?? null).length
+			: (list.layout['Umbraco.BlockList']?.length ?? 0);
+		const max = area ? area.maxAllowed : (get('validationLimit') as { max?: number | null } | undefined)?.max;
+		if (!allowed.length) {
+			await this.#warn('No blocks can go there', 'Its configuration doesn’t allow any block types there.');
+			return undefined;
+		}
+		if (max && count >= max) {
+			await this.#warn('There’s no room', `It allows at most ${max} blocks.`);
+			return undefined;
+		}
+
+		const typeKey =
+			allowed.length === 1
+				? allowed[0].contentElementTypeKey
+				: await pick(allowed, (get('blockGroups') as CatalogueBlockGroup[] | undefined) ?? []);
+		const type = allowed.find((b) => b.contentElementTypeKey === typeKey);
+		if (!typeKey || !type) return undefined;
+
+		// Exposed in the edited culture when its element type varies by culture (as the block editors do).
+		const { data: elementType } = await new UmbDocumentTypeDetailRepository(this).requestByUnique(typeKey);
+		const columns = grid ? columnsIn(grid, area) : 0;
+		const block = newBlock({
+			contentTypeKey: typeKey,
+			settingsTypeKey: type.settingsElementTypeKey ?? null,
+			exposeCulture: elementType?.variesByCulture ? activeCulture : null,
+			grid: grid
+				? {
+						columnSpan: fitSpan(columns, columns, spansOf(grid, typeKey)) ?? columns,
+						rowSpan: type.rowMinSpan ?? 1,
+						areaKeys: type.areas?.map((a) => a.key) ?? [],
+					}
+				: undefined,
+		});
+		const put = (value: unknown) =>
+			grid
+				? at.areaOwnerKey && area
+					? putBlockInArea(asBlockValue(value), at.areaOwnerKey, area.key, block, at.index)
+					: putBlock(asBlockValue(value), 'Umbraco.BlockGrid', block, at.index)
+				: putBlock(asBlockValue(value), 'Umbraco.BlockList', block, at.index);
+		await this.#set(target.property, this.#withList(target.property.value, at, target.culture, put));
+		return block.item.contentKey;
 	}
 
 	/** Sets one of a block's content (or settings) values, from the side panel. */
