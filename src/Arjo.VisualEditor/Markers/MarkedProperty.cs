@@ -65,6 +65,7 @@ internal sealed class MarkedProperty(
             ownerIsBlock,
             Alias,
             PropertyType.Variations.VariesByCulture() ? culture : null,
-            PropertyType.EditorAlias);
+            PropertyType.EditorAlias,
+            PropertyType.ContentType?.Key);
     }
 }

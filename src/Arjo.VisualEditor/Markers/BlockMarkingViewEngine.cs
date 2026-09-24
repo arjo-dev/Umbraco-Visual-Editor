@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.AspNetCore.Mvc.ViewEngines;
 using Microsoft.Extensions.Options;
 using Umbraco.Cms.Core.Models.Blocks;
+using Umbraco.Cms.Core.Models.PublishedContent;
 
 namespace Arjo.VisualEditor.Markers;
 
@@ -28,6 +29,24 @@ internal sealed class BlockMarkingViewEngine(IViewEngine inner, IHttpContextAcce
 
     private sealed class BlockMarkingView(IView inner, IHttpContextAccessor httpContextAccessor) : IView
     {
+        // Block items expose their element as "Content". Typed items (BlockListItem<RichTextRow>) redeclare it with
+        // "new", so there are several Content properties on the type; any of them returns the same element. Only used for
+        // display labels, so a failure here must never break rendering.
+        private static Guid? BlockContentTypeKey(IBlockReference block)
+        {
+            try
+            {
+                return block.GetType().GetProperties()
+                    .Where(p => p.Name == "Content" && typeof(IPublishedElement).IsAssignableFrom(p.PropertyType))
+                    .Select(p => p.GetValue(block) as IPublishedElement)
+                    .FirstOrDefault(e => e is not null)?.ContentType.Key;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
         public string Path => inner.Path;
 
         public async Task RenderAsync(ViewContext context)
@@ -42,7 +61,11 @@ internal sealed class BlockMarkingViewEngine(IViewEngine inner, IHttpContextAcce
             }
 
             // Same block key => same id, so nested partials for one block (e.g. a grid item's areas) share it.
-            var id = editMode.Markers.Register(MarkerKind.Block, block.ContentKey, ownerIsBlock: true);
+            var id = editMode.Markers.Register(
+                MarkerKind.Block,
+                block.ContentKey,
+                ownerIsBlock: true,
+                contentTypeKey: BlockContentTypeKey(block));
             await context.Writer.WriteAsync($"<!--uve:b:{id}-->");
             await inner.RenderAsync(context);
             await context.Writer.WriteAsync($"<!--/uve:b:{id}-->");

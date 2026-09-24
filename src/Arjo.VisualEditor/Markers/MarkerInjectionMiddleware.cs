@@ -2,6 +2,8 @@ using System.Text;
 using System.Text.Json;
 using Arjo.VisualEditor.Rendering;
 using Microsoft.AspNetCore.Http;
+using Umbraco.Cms.Core.Models;
+using Umbraco.Cms.Core.Services;
 
 namespace Arjo.VisualEditor.Markers;
 
@@ -11,11 +13,52 @@ namespace Arjo.VisualEditor.Markers;
 /// </summary>
 internal sealed class MarkerInjectionMiddleware(RequestDelegate next)
 {
-    public const string CanvasScriptPath = "/App_Plugins/ArjoVisualEditor/canvas-debug.js";
+    /// <summary>
+    /// Adds display names so the canvas and side panel can say "Title" or "Rich Text Row" rather than aliases and keys:
+    /// a property's name, a block's content type name, and (for properties inside blocks) the block's type name.
+    /// </summary>
+    // Labels are for display only: if resolving them fails, the page still renders (with aliases instead).
+    private static IReadOnlyList<MarkerInfo> SafeWithLabels(IReadOnlyList<MarkerInfo> markers, IContentTypeService contentTypeService)
+    {
+        try
+        {
+            return WithLabels(markers, contentTypeService);
+        }
+        catch
+        {
+            return markers;
+        }
+    }
+
+    private static IReadOnlyList<MarkerInfo> WithLabels(IReadOnlyList<MarkerInfo> markers, IContentTypeService contentTypeService)
+    {
+        var keys = markers.Select(m => m.ContentTypeKey).OfType<Guid>().Distinct().ToArray();
+        var types = keys.Length == 0
+            ? new Dictionary<Guid, IContentType>()
+            : contentTypeService.GetMany(keys).ToDictionary(t => t.Key);
+
+        return markers.Select(m =>
+        {
+            if (m.ContentTypeKey is not { } key || !types.TryGetValue(key, out IContentType? type))
+            {
+                return m;
+            }
+
+            return m.Kind == MarkerKind.Block
+                ? m with { Label = type.Name }
+                : m with
+                {
+                    Label = type.CompositionPropertyTypes.FirstOrDefault(p => p.Alias == m.Alias)?.Name ?? m.Alias,
+                    OwnerLabel = m.OwnerIsBlock ? type.Name : null,
+                };
+        }).ToList();
+    }
+
+    public const string CanvasScriptPath = "/App_Plugins/ArjoVisualEditor/canvas-runtime.js";
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
-    public async Task InvokeAsync(HttpContext context)
+    public async Task InvokeAsync(HttpContext context, IContentTypeService contentTypeService)
     {
         if (!context.Request.Path.StartsWithSegments(RenderSessionContentFinder.PathPrefix.TrimEnd('/'), StringComparison.OrdinalIgnoreCase))
         {
@@ -50,7 +93,7 @@ internal sealed class MarkerInjectionMiddleware(RequestDelegate next)
 
         var html = Encoding.UTF8.GetString(buffer.ToArray());
         var manifest = JsonSerializer.Serialize(
-            new { editMode.Session.DocumentKey, editMode.Session.Culture, Markers = editMode.Markers.All },
+            new { editMode.Session.DocumentKey, editMode.Session.Culture, Markers = SafeWithLabels(editMode.Markers.All, contentTypeService) },
             JsonOptions);
         var injection =
             $"<script type=\"application/json\" id=\"uve-markers\">{manifest.Replace("</", "<\\/")}</script>" +

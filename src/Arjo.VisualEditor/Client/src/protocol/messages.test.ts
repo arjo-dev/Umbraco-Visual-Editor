@@ -83,6 +83,27 @@ describe('parseHostMessage', () => {
 	}
 });
 
+describe('TargetRef labels', () => {
+	it('accepts optional display labels', () => {
+		const labelled = { ...title, label: 'Title' };
+		expect(parseCanvasMessage({ type: 'select', target: labelled })).to.deep.equal({
+			type: 'select',
+			target: labelled,
+		});
+		const inBlock = { ...block, kind: 'Property', alias: 'caption', label: 'Caption', ownerLabel: 'Image Row' };
+		expect(parseCanvasMessage({ type: 'hover', target: inBlock })).to.not.equal(null);
+	});
+
+	it('rejects non-string labels', () => {
+		expect(parseCanvasMessage({ type: 'select', target: { ...title, label: 42 } })).to.equal(null);
+		expect(parseCanvasMessage({ type: 'select', target: { ...title, ownerLabel: {} } })).to.equal(null);
+	});
+
+	it('ignores labels when comparing targets', () => {
+		expect(sameTarget(title, { ...title, label: 'Title' })).to.equal(true);
+	});
+});
+
 describe('sameTarget', () => {
 	it('matches equal refs', () => expect(sameTarget(title, { ...title })).to.equal(true));
 	it('matches null with null', () => expect(sameTarget(null, null)).to.equal(true));

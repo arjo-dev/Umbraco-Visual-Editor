@@ -1,0 +1,194 @@
+/**
+ * Hover, highlight and selection outlines drawn over the page (#17). The overlay is its own element in the top
+ * layer (popover), with a shadow root: site CSS can't restyle it, our CSS can't leak into the site, and no site
+ * z-index can cover it. Boxes follow their elements through scrolling, resizing and DOM changes.
+ */
+import { targetLabel, type CanvasTarget } from './targets.js';
+
+export interface OverlayOptions {
+	/** A breadcrumb entry (a parent block of the selection) was clicked. */
+	onBreadcrumb?: (target: CanvasTarget) => void;
+}
+
+const BLOCK_COLOR = '#f79c37';
+const PROPERTY_COLOR = '#3544b1';
+
+export class CanvasOverlay {
+	readonly host: HTMLElement;
+	#root: ShadowRoot;
+	#doc: Document;
+	#options: OverlayOptions;
+	#hover: CanvasTarget | null = null;
+	#highlight: CanvasTarget | null = null;
+	#selection: { target: CanvasTarget; ancestors: CanvasTarget[] } | null = null;
+	#frame = 0;
+	#resizeObserver: ResizeObserver;
+	#mutationObserver: MutationObserver;
+	#onViewportChange = () => this.#schedule();
+
+	constructor(doc: Document = document, options: OverlayOptions = {}) {
+		this.#doc = doc;
+		this.#options = options;
+
+		this.host = doc.createElement('uve-overlay');
+		// Inline styles beat the site's (non-!important) rules; the popover UA styles are reset too.
+		this.host.setAttribute(
+			'style',
+			'position:fixed;inset:0;width:100vw;height:100vh;margin:0;padding:0;border:0;background:transparent;' +
+				'overflow:visible;pointer-events:none;z-index:2147483647;display:block;',
+		);
+		this.#root = this.host.attachShadow({ mode: 'open' });
+		this.#root.innerHTML = `<style>${STYLES}</style><div class="layer" part="layer"></div>`;
+		doc.body.append(this.host);
+		if ('showPopover' in this.host) {
+			this.host.setAttribute('popover', 'manual');
+			(this.host as HTMLElement & { showPopover(): void }).showPopover();
+		}
+
+		const win = doc.defaultView ?? window;
+		win.addEventListener('scroll', this.#onViewportChange, { capture: true, passive: true });
+		win.addEventListener('resize', this.#onViewportChange, { passive: true });
+		this.#resizeObserver = new ResizeObserver(this.#onViewportChange);
+		this.#resizeObserver.observe(doc.documentElement);
+		this.#mutationObserver = new MutationObserver((records) => {
+			// Our own host changing isn't a page layout change.
+			if (records.every((r) => r.target === this.host)) return;
+			this.#schedule();
+		});
+		this.#mutationObserver.observe(doc.body, { subtree: true, childList: true, attributes: true, characterData: true });
+	}
+
+	setHover(target: CanvasTarget | null) {
+		if (target === this.#hover) return;
+		this.#hover = target;
+		this.#render();
+	}
+
+	setHighlight(target: CanvasTarget | null) {
+		this.#highlight = target;
+		this.#render();
+	}
+
+	setSelection(target: CanvasTarget | null, ancestors: CanvasTarget[] = []) {
+		this.#selection = target ? { target, ancestors } : null;
+		this.#observeTargets();
+		this.#render();
+	}
+
+	destroy() {
+		const win = this.#doc.defaultView ?? window;
+		win.removeEventListener('scroll', this.#onViewportChange, { capture: true });
+		win.removeEventListener('resize', this.#onViewportChange);
+		this.#resizeObserver.disconnect();
+		this.#mutationObserver.disconnect();
+		cancelAnimationFrame(this.#frame);
+		this.host.remove();
+	}
+
+	#observeTargets() {
+		this.#resizeObserver.disconnect();
+		this.#resizeObserver.observe(this.#doc.documentElement);
+		for (const el of this.#selection?.target.elements ?? []) this.#resizeObserver.observe(el);
+	}
+
+	#schedule() {
+		if (this.#frame) return;
+		this.#frame = requestAnimationFrame(() => {
+			this.#frame = 0;
+			this.#render();
+		});
+	}
+
+	#render() {
+		const layer = this.#root.querySelector('.layer')!;
+		layer.replaceChildren();
+
+		if (this.#highlight) layer.append(this.#box(this.#highlight, 'highlight'));
+		if (this.#hover && this.#hover !== this.#selection?.target) layer.append(this.#box(this.#hover, 'hover'));
+		if (this.#selection) layer.append(this.#box(this.#selection.target, 'selected', this.#selection.ancestors));
+	}
+
+	#box(target: CanvasTarget, kind: 'hover' | 'selected' | 'highlight', ancestors: CanvasTarget[] = []) {
+		const rect = unionRect(target.elements);
+		const box = this.#doc.createElement('div');
+		box.className = `box ${kind} ${target.ref.kind === 'Block' ? 'block' : 'property'}`;
+		if (!rect) {
+			box.hidden = true;
+			return box;
+		}
+		Object.assign(box.style, {
+			left: `${rect.left}px`,
+			top: `${rect.top}px`,
+			width: `${rect.width}px`,
+			height: `${rect.height}px`,
+		});
+		if (kind === 'highlight') return box;
+
+		const label = this.#doc.createElement('div');
+		label.className = `label${rect.top < 24 ? ' inside' : ''}`;
+		if (kind === 'selected') {
+			// Outermost block first, down to the selection: "Two Column › Image Row › Caption".
+			for (const ancestor of [...ancestors].reverse()) {
+				const crumb = this.#doc.createElement('button');
+				crumb.type = 'button';
+				crumb.className = 'crumb';
+				crumb.textContent = targetLabel(ancestor.ref);
+				crumb.title = `Select ${targetLabel(ancestor.ref)}`;
+				crumb.addEventListener('click', (event) => {
+					event.preventDefault();
+					event.stopPropagation();
+					this.#options.onBreadcrumb?.(ancestor);
+				});
+				label.append(crumb, this.#doc.createTextNode(' › '));
+			}
+		}
+		const name = this.#doc.createElement('span');
+		name.textContent =
+			kind === 'hover' && target.ref.ownerLabel
+				? `${targetLabel(target.ref)} · ${target.ref.ownerLabel}`
+				: targetLabel(target.ref);
+		label.append(name);
+		box.append(label);
+		return box;
+	}
+}
+
+/** Bounding box of all of a target's visible elements, in viewport coordinates. */
+export function unionRect(elements: Element[]): DOMRect | null {
+	let left = Infinity;
+	let top = Infinity;
+	let right = -Infinity;
+	let bottom = -Infinity;
+	for (const el of elements) {
+		const r = el.getBoundingClientRect();
+		if (r.width === 0 && r.height === 0) continue;
+		left = Math.min(left, r.left);
+		top = Math.min(top, r.top);
+		right = Math.max(right, r.right);
+		bottom = Math.max(bottom, r.bottom);
+	}
+	return left === Infinity ? null : new DOMRect(left, top, right - left, bottom - top);
+}
+
+const STYLES = `
+	:host { all: initial; }
+	.layer { position: fixed; inset: 0; pointer-events: none; font: 12px/1.3 system-ui, -apple-system, 'Segoe UI', sans-serif; }
+	.box { position: fixed; box-sizing: border-box; border-radius: 2px; }
+	.box.hover.property { outline: 1px dashed ${PROPERTY_COLOR}; outline-offset: 2px; }
+	.box.hover.block { outline: 1px dashed ${BLOCK_COLOR}; outline-offset: 3px; }
+	.box.selected.property { outline: 2px solid ${PROPERTY_COLOR}; outline-offset: 2px; }
+	.box.selected.block { outline: 2px solid ${BLOCK_COLOR}; outline-offset: 3px; }
+	.box.highlight { background: color-mix(in srgb, ${PROPERTY_COLOR} 12%, transparent); outline: 1px solid ${PROPERTY_COLOR}; }
+	.label {
+		position: absolute; left: -2px; bottom: calc(100% + 4px); white-space: nowrap;
+		padding: 2px 6px; border-radius: 3px; color: #fff; background: ${PROPERTY_COLOR};
+		box-shadow: 0 1px 3px rgb(0 0 0 / 0.25);
+	}
+	.block > .label { background: ${BLOCK_COLOR}; color: #1b264f; }
+	.label.inside { bottom: auto; top: 4px; left: 4px; }
+	.crumb {
+		all: unset; cursor: pointer; pointer-events: auto; text-decoration: underline; text-underline-offset: 2px;
+		opacity: 0.85;
+	}
+	.crumb:hover, .crumb:focus-visible { opacity: 1; outline: 1px solid currentColor; outline-offset: 1px; }
+`;

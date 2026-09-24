@@ -15,6 +15,11 @@ export interface MarkerInfo {
 	alias: string | null;
 	culture: string | null;
 	editorAlias: string | null;
+	contentTypeKey?: string | null;
+	/** Display name: property name, or block content type name (filled in by the server). */
+	label?: string | null;
+	/** For properties inside blocks: the block content type name. */
+	ownerLabel?: string | null;
 }
 
 export interface MarkerManifest {
@@ -89,7 +94,9 @@ export function resolveMarkers(manifest: MarkerManifest, root: Document = docume
 		if (!start || start.parentNode !== node.parentNode) continue;
 		starts.delete(key);
 		const elements: Element[] = [];
-		for (let n = start.nextSibling; n && n !== node; n = n.nextSibling) if (n instanceof Element) elements.push(n);
+		// nodeType, not instanceof: the document may belong to another window (e.g. a frame driven from its host).
+		for (let n = start.nextSibling; n && n !== node; n = n.nextSibling)
+			if (n.nodeType === Node.ELEMENT_NODE) elements.push(n as Element);
 		add(Number(id), type === 'b' ? blockRoot(elements) : elements, 'comment');
 	}
 

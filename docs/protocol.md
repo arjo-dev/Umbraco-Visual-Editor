@@ -42,6 +42,10 @@ Marker ids change on every render, so messages identify what they're about by a 
 - **`ownerKey`** is the document key, or a block's content key when `ownerIsBlock` is true.
 - **Whole blocks** have `alias: null`.
 
+Targets can also carry **display labels**, filled in from the document and element types. They aren't part of the identity:
+- `label`: the property's name, or the block's content type name, e.g. "Caption" or "Image Row".
+- `ownerLabel`: for a property inside a block, the block's type name.
+
 Block positions use `{ ownerKey, propertyAlias, areaKey | null, index }`.
 
 ## Messages
@@ -70,4 +74,9 @@ Block positions use `{ ownerKey, propertyAlias, areaKey | null, index }`.
 
 ## Status
 
-The message *set* is the initial one from #12. `ready`, `select` and `setSelection` are wired up in the prototypes: the Visual editor view and `canvas-debug.js`. The other messages are defined and validated but not used yet; they arrive with the issues listed above. Add new messages here and in `messages.ts` together, with tests.
+The message *set* is the initial one from #12.
+- **The canvas runtime** (`canvas/runtime.ts`, served as `canvas-runtime.js`, #17) sends `ready`, `hover` and `select`, and handles `setSelection`, `highlight` and `setReadonly`.
+- **The Visual editor view** handles `ready` and `select`, and sends `setSelection` and `setDevice`.
+- **Not used yet:** `inlineEdit`, the block messages and `render` arrive with the issues listed above.
+
+Add new messages here and in `messages.ts` together, with tests.
