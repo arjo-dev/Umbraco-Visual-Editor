@@ -77,6 +77,11 @@ export class CanvasOverlay {
 		this.#render();
 	}
 
+	/** Something is being edited in place with a toolbar above it (#57): the selection's label would sit under it. */
+	setEditing(editing: boolean) {
+		this.#root.querySelector('.layer')!.classList.toggle('editing', editing);
+	}
+
 	setSelection(target: CanvasTarget | null, ancestors: CanvasTarget[] = []) {
 		this.#selection = target ? { target, ancestors } : null;
 		this.#observeTargets();
@@ -226,6 +231,7 @@ const STYLES = `
 	}
 	.block > .label { background: ${BLOCK_COLOR}; color: #1b264f; }
 	.label.inside { bottom: auto; top: 4px; left: 4px; }
+	.editing .box.selected .label { display: none; }
 	.crumb {
 		all: unset; cursor: pointer; pointer-events: auto; text-decoration: underline; text-underline-offset: 2px;
 		opacity: 0.85;

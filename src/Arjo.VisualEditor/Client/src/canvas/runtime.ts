@@ -260,6 +260,7 @@ export function handleHostMessage(runtime: CanvasRuntime, message: HostMessage) 
 			break;
 		case 'richTextEditing':
 			runtime.richText.setActive(message.target, message.active);
+			runtime.overlay.setEditing(message.active);
 			break;
 		// 'setDevice' is handled by the host (it sizes the frame).
 	}

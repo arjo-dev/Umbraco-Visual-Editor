@@ -1,4 +1,4 @@
-import { css, customElement, html, nothing, property, state } from '@umbraco-cms/backoffice/external/lit';
+import { css, customElement, html, nothing, property, query, state } from '@umbraco-cms/backoffice/external/lit';
 import { UmbLitElement } from '@umbraco-cms/backoffice/lit-element';
 import { loadManifestApi } from '@umbraco-cms/backoffice/extension-api';
 import { umbExtensionsRegistry } from '@umbraco-cms/backoffice/extension-registry';
@@ -11,6 +11,7 @@ import {
 	type UmbTiptapExtensionApi,
 } from '@umbraco-cms/backoffice/tiptap';
 import { createFrameFocus } from './frame-focus.js';
+import { placeToolbars, type Box } from './toolbar-position.js';
 
 /** Always on, as in `umb-input-tiptap`. */
 const ESSENTIALS = 'Umb.Tiptap.RichTextEssentials';
@@ -27,8 +28,11 @@ type StatusbarValue = string[][];
 /**
  * Edits rich text in place on the canvas (#57, ADR 0004). It creates the same Tiptap editor as the Content tab's
  * `umb-input-tiptap` (the data type's configuration and `tiptapExtension`s, created here in the backoffice) and mounts
- * it on the rich text's element *in the canvas frame*, so the site's CSS styles it. The toolbar and statusbar render
- * here, in the side panel.
+ * it on the rich text's element *in the canvas frame*, so the site's CSS styles it.
+ *
+ * The toolbar floats over the page just above the text (and the statusbar just below it). They're backoffice
+ * elements, which can't render inside the frame, so this element is a layer laid over the canvas: it covers the
+ * canvas area and positions them from the edited element's box in the frame, allowing for the canvas's scale.
  *
  * @fires change - the markup changed (detail: the new markup).
  * @fires cancel - Escape was pressed in the editor.
@@ -37,6 +41,8 @@ type StatusbarValue = string[][];
 export class ArjoVisualEditorRichTextEditorElement extends UmbLitElement {
 	/** The element in the canvas frame to edit: its content is replaced by the editor. */
 	@property({ attribute: false }) mount?: HTMLElement;
+	/** The canvas iframe holding `mount`. */
+	@property({ attribute: false }) frame?: HTMLIFrameElement;
 	@property({ attribute: false }) configuration?: UmbPropertyEditorConfigCollection;
 	/** The stored markup (not the rendered page HTML: links, media and blocks are resolved there). */
 	@property({ attribute: false }) markup = '';
@@ -45,7 +51,12 @@ export class ArjoVisualEditorRichTextEditorElement extends UmbLitElement {
 	@state() private _toolbar: ToolbarValue = [[[]]];
 	@state() private _statusbar: StatusbarValue = [];
 
+	@query('.toolbar') private _toolbarBox?: HTMLElement;
+	@query('.statusbar') private _statusbarBox?: HTMLElement;
+
 	#context = new UmbTiptapRteContext(this);
+	#frame = 0;
+	#last = '';
 	#extensions: UmbTiptapExtensionApi[] = [];
 	#onKeyDown = (event: KeyboardEvent) => {
 		if (event.key !== 'Escape') return;
@@ -59,12 +70,57 @@ export class ArjoVisualEditorRichTextEditorElement extends UmbLitElement {
 		if (this.isConnected) this.#createEditor();
 	}
 
+	override connectedCallback() {
+		super.connectedCallback();
+		this.#follow();
+	}
+
 	override disconnectedCallback() {
 		super.disconnectedCallback();
+		cancelAnimationFrame(this.#frame);
 		this._editor?.view.dom.removeEventListener('keydown', this.#onKeyDown);
 		this._editor?.destroy();
 		this._editor = undefined;
 	}
+
+	/**
+	 * Keeps the toolbar and statusbar on the edited element while the page scrolls, reflows or is scaled. One read of
+	 * a few rects per animation frame, written only when something moved.
+	 */
+	#follow = () => {
+		this.#frame = requestAnimationFrame(this.#follow);
+		const frame = this.frame;
+		const mount = this.mount;
+		const toolbar = this._toolbarBox;
+		if (!frame || !mount || !toolbar) return;
+
+		const layer = this.getBoundingClientRect();
+		const frameRect = frame.getBoundingClientRect();
+		const scale = frame.offsetWidth ? frameRect.width / frame.offsetWidth : 1;
+		const r = mount.getBoundingClientRect();
+		const element: Box = {
+			left: frameRect.left - layer.left + r.left * scale,
+			top: frameRect.top - layer.top + r.top * scale,
+			width: r.width * scale,
+			height: r.height * scale,
+		};
+		const statusbar = this._statusbarBox;
+		const placed = placeToolbars(
+			element,
+			{ width: layer.width, height: layer.height },
+			{ width: toolbar.offsetWidth, height: toolbar.offsetHeight },
+			statusbar ? { width: statusbar.offsetWidth, height: statusbar.offsetHeight } : null,
+		);
+		const key = JSON.stringify(placed);
+		if (key === this.#last) return;
+		this.#last = key;
+		toolbar.style.transform = `translate(${placed.toolbar.left}px, ${placed.toolbar.top}px)`;
+		toolbar.style.visibility = placed.visible ? 'visible' : 'hidden';
+		if (statusbar && placed.statusbar) {
+			statusbar.style.transform = `translate(${placed.statusbar.left}px, ${placed.statusbar.top}px)`;
+			statusbar.style.visibility = placed.visible ? 'visible' : 'hidden';
+		}
+	};
 
 	async #loadExtensions() {
 		const enabled = (this.configuration?.getValueByAlias<string[]>('extensions') ?? []).filter(
@@ -129,46 +185,61 @@ export class ArjoVisualEditorRichTextEditorElement extends UmbLitElement {
 	}
 
 	override render() {
-		if (!this._editor) return html`<uui-loader-bar></uui-loader-bar>`;
+		if (!this._editor) return nothing;
 		return html`
-			<p class="hint">Editing on the page. Esc cancels; click elsewhere on the page when you're done.</p>
-			${
-				this._toolbar.flat(2).length
-					? html`<umb-tiptap-toolbar
-							.toolbar=${this._toolbar}
-							.editor=${this._editor}
-							.configuration=${this.configuration}
-						></umb-tiptap-toolbar>`
-					: nothing
-			}
+			<div class="toolbar" role="toolbar" aria-label="Formatting">
+				${
+					this._toolbar.flat(2).length
+						? html`<umb-tiptap-toolbar
+								.toolbar=${this._toolbar}
+								.editor=${this._editor}
+								.configuration=${this.configuration}
+							></umb-tiptap-toolbar>`
+						: nothing
+				}
+			</div>
 			${
 				this._statusbar.flat().length
-					? html`<umb-tiptap-statusbar
-							.statusbar=${this._statusbar}
-							.editor=${this._editor}
-							.configuration=${this.configuration}
-						></umb-tiptap-statusbar>`
+					? html`<div class="statusbar">
+							<umb-tiptap-statusbar
+								.statusbar=${this._statusbar}
+								.editor=${this._editor}
+								.configuration=${this.configuration}
+							></umb-tiptap-statusbar>
+						</div>`
 					: nothing
 			}
 		`;
 	}
 
 	static override styles = css`
+		/* A layer over the canvas area; only the bars take pointer events. */
 		:host {
-			display: flex;
-			flex-direction: column;
-			gap: var(--uui-size-space-3);
+			position: absolute;
+			inset: 0;
+			overflow: hidden;
+			pointer-events: none;
+			z-index: 2;
 		}
 
-		.hint {
-			margin: 0;
-			color: var(--uui-color-text-alt);
+		.toolbar,
+		.statusbar {
+			position: absolute;
+			top: 0;
+			left: 0;
+			visibility: hidden;
+			max-width: 100%;
+			box-sizing: border-box;
+			pointer-events: auto;
+			background: var(--uui-color-surface);
+			border: 1px solid var(--uui-color-border);
+			border-radius: var(--uui-border-radius);
+			box-shadow: var(--uui-shadow-depth-3);
 		}
 
 		umb-tiptap-toolbar {
 			--umb-tiptap-top: 0;
-			border: 1px solid var(--uui-color-border);
-			border-radius: var(--uui-border-radius);
+			display: block;
 		}
 	`;
 }
