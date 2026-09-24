@@ -17,6 +17,7 @@ import {
 import { VISUAL_EDITOR_DEVICES, type VisualEditorDeviceAlias } from './devices.js';
 import './visual-editor-toolbar.element.js';
 import './visual-editor-side-panel.element.js';
+import './visual-editor-canvas.element.js';
 
 const RENDER_DEBOUNCE_MS = 300;
 const PANEL_STORAGE_KEY = 'arjo.visualEditor.panelOpen';
@@ -46,11 +47,9 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 	#variantNames: Array<{ culture: string | null; segment: string | null; name: string }> = [];
 	#timer?: ReturnType<typeof setTimeout>;
 	#requestId = 0;
-	#restoreScrollY = 0;
 	#visualMode?: ArjoVisualModeContext;
 	readonly #nonce = createNonce();
 	#channel?: HostChannel;
-	#channelIframe?: HTMLIFrameElement;
 	/** The document URL this view was opened on; the "Standard editor" link goes to its Content tab. */
 	#documentBase?: string;
 
@@ -105,31 +104,23 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 		clearTimeout(this.#timer);
 		this.#channel?.close();
 		this.#channel = undefined;
-		this.#channelIframe = undefined;
 		super.disconnectedCallback();
 	}
 
-	override updated() {
-		// The iframe exists once a render URL arrives, and is replaced if the canvas showed a message in between
-		// (unsaved page, render error). Bind the channel to whichever iframe is current.
-		const iframe = this.#iframe;
-		if (iframe === this.#channelIframe) return;
+	/** The canvas has a new iframe (first render, or after a message replaced it): bind the channel to it. */
+	#onFrameChanged(event: CustomEvent<HTMLIFrameElement>) {
 		this.#channel?.close();
-		this.#channel = undefined;
-		this.#channelIframe = iframe ?? undefined;
-		if (iframe) {
-			this.#channel = createHostChannel({
-				iframe,
-				nonce: this.#nonce,
-				onMessage: (message) => this.#onCanvasMessage(message),
-				onConnect: () => {
-					// A re-render is a fresh page: give it the current state again.
-					this.#channel?.send({ type: 'setSelection', target: this._selected });
-					this.#channel?.send({ type: 'setDevice', width: this.#deviceWidth });
-				},
-				onInvalid: (data) => console.warn('[Arjo.VisualEditor] ignored invalid canvas message', data),
-			});
-		}
+		this.#channel = createHostChannel({
+			iframe: event.detail,
+			nonce: this.#nonce,
+			onMessage: (message) => this.#onCanvasMessage(message),
+			onConnect: () => {
+				// A re-render is a fresh page: give it the current state again.
+				this.#channel?.send({ type: 'setSelection', target: this._selected });
+				this.#channel?.send({ type: 'setDevice', width: this.#deviceWidth });
+			},
+			onInvalid: (data) => console.warn('[Arjo.VisualEditor] ignored invalid canvas message', data),
+		});
 	}
 
 	get #deviceWidth() {
@@ -196,18 +187,7 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 			return;
 		}
 
-		this.#restoreScrollY = this.#iframe?.contentWindow?.scrollY ?? 0;
 		this._url = withNonce(data.url, this.#nonce);
-	}
-
-	get #iframe() {
-		return this.shadowRoot?.querySelector('iframe') ?? null;
-	}
-
-	#onLoad() {
-		// Same-origin, so we can keep the reader's place across re-renders.
-		this.#iframe?.contentWindow?.scrollTo(0, this.#restoreScrollY);
-		this._status = 'idle';
 	}
 
 	#renderCanvas() {
@@ -217,17 +197,12 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 		if (this._status === 'error') {
 			return html`<uui-box class="message"><p class="error">${this._error}</p></uui-box>`;
 		}
-		if (!this._url) {
-			return html`<uui-loader-bar class="loading"></uui-loader-bar>`;
-		}
-		const width = this.#deviceWidth;
-		return html`<iframe
-			src=${this._url}
-			title="Page preview"
-			class=${width ? 'device' : 'full'}
-			style=${width ? `width: ${width}px` : nothing}
-			@load=${this.#onLoad}
-		></iframe>`;
+		return html`<arjo-visual-editor-canvas
+			.url=${this._url}
+			.deviceWidth=${this.#deviceWidth}
+			@frame-changed=${this.#onFrameChanged}
+			@page-loaded=${() => (this._status = 'idle')}
+		></arjo-visual-editor-canvas>`;
 	}
 
 	override render() {
@@ -274,32 +249,16 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 			flex: 1;
 			min-width: 0;
 			display: flex;
-			justify-content: center;
-			align-items: stretch;
-			overflow: auto;
 			background: var(--uui-color-background);
+		}
+
+		arjo-visual-editor-canvas {
+			flex: 1;
 		}
 
 		arjo-visual-editor-side-panel {
 			width: 360px;
 			flex: none;
-		}
-
-		iframe {
-			border: 0;
-			background: white;
-		}
-
-		iframe.full {
-			width: 100%;
-		}
-
-		iframe.device {
-			margin: var(--uui-size-space-5) 0;
-			flex: none;
-			border: 1px solid var(--uui-color-border);
-			border-radius: var(--uui-border-radius);
-			box-shadow: var(--uui-shadow-depth-2);
 		}
 
 		.message {
@@ -314,11 +273,6 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 
 		.error {
 			color: var(--uui-color-danger);
-		}
-
-		.loading {
-			align-self: flex-start;
-			width: 100%;
 		}
 	`;
 }

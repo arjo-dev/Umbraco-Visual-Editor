@@ -6,6 +6,10 @@
  */
 import { readManifest, resolveMarkers, type MarkerInfo, type ResolvedTarget } from './markers.js';
 import { connectToHost, readNonce, sameTarget, type CanvasChannel, type TargetRef } from '../protocol/index.js';
+import { guardNavigation } from './navigation.js';
+
+// Keep the canvas on the page being edited (links, forms), whether or not markers resolve.
+guardNavigation();
 
 const toTargetRef = (m: MarkerInfo): TargetRef => ({
 	kind: m.kind,
