@@ -4,9 +4,9 @@ import { VISUAL_EDITOR_VIEW_PATHNAME } from '../visual-mode/routes.js';
 export const manifests: Array<UmbExtensionManifest> = [
 	{
 		type: 'workspaceView',
-		alias: 'Arjo.VisualEditor.WorkspaceView.Preview',
-		name: 'Arjo Visual Editor Preview Workspace View',
-		element: () => import('./visual-preview-workspace-view.element.js'),
+		alias: 'Arjo.VisualEditor.WorkspaceView.VisualEditor',
+		name: 'Arjo Visual Editor Workspace View',
+		element: () => import('./visual-editor-workspace-view.element.js'),
 		// After Content (200), before Info (100): documents still open on Content.
 		weight: 150,
 		meta: {
