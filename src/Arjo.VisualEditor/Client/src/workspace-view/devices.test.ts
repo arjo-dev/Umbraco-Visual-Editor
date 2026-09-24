@@ -1,5 +1,5 @@
 import { expect } from '@open-wc/testing';
-import { deviceFor, sizeFor, sizeLabel, VISUAL_EDITOR_DEVICES } from './devices.js';
+import { deviceFor, fitScale, sizeFor, sizeLabel, VISUAL_EDITOR_DEVICES } from './devices.js';
 
 describe('devices', () => {
 	it('defaults each device to its first size', () => {
@@ -18,8 +18,8 @@ describe('devices', () => {
 		expect(sizeFor('desktop', 'no-such-size').id).to.equal('fill');
 	});
 
-	it('labels sizes with their width', () => {
-		expect(sizeLabel(sizeFor('desktop', 'desktop-1920'))).to.equal('Standard desktop (1920px)');
+	it('labels sizes with their dimensions', () => {
+		expect(sizeLabel(sizeFor('desktop', 'desktop-1920'))).to.equal('Standard desktop (1920 × 1080)');
 		expect(sizeLabel(sizeFor('desktop', 'fill'))).to.equal('Fill available space');
 	});
 
@@ -30,7 +30,38 @@ describe('devices', () => {
 		}
 	});
 
+	it('gives every fixed size both a width and a height', () => {
+		for (const size of VISUAL_EDITOR_DEVICES.flatMap((d) => d.sizes)) {
+			expect(size.width === null, size.id).to.equal(size.height === null);
+		}
+	});
+
 	it('returns desktop for an unknown device', () => {
 		expect(deviceFor('watch' as never).alias).to.equal('desktop');
+	});
+});
+
+describe('fitScale', () => {
+	const desktop = { width: 1920, height: 1080 };
+
+	it('does not scale when the size fits', () => {
+		expect(fitScale(desktop, 2000, 1200)).to.equal(1);
+	});
+
+	it('never enlarges', () => {
+		expect(fitScale({ width: 375, height: 667 }, 3000, 3000)).to.equal(1);
+	});
+
+	it('is limited by whichever dimension is tighter', () => {
+		expect(fitScale(desktop, 960, 1080)).to.equal(0.5); // width-bound
+		expect(fitScale(desktop, 1920, 270)).to.equal(0.25); // height-bound
+	});
+
+	it('does not scale sizes that fill the space', () => {
+		expect(fitScale({ width: null, height: null }, 500, 500)).to.equal(1);
+	});
+
+	it('does not scale before the canvas has any size', () => {
+		expect(fitScale(desktop, 0, 0)).to.equal(1);
 	});
 });

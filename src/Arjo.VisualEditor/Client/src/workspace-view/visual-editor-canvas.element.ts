@@ -1,6 +1,7 @@
 import { css, customElement, html, nothing, property, state } from '@umbraco-cms/backoffice/external/lit';
 import type { PropertyValues } from '@umbraco-cms/backoffice/external/lit';
 import { UmbLitElement } from '@umbraco-cms/backoffice/lit-element';
+import { fitScale, type VisualEditorSize } from './devices.js';
 
 /** Path prefix of render-session URLs (RenderSessionContentFinder.PathPrefix). */
 const RENDER_PATH_PREFIX = '/__visual-editor/render/';
@@ -12,7 +13,7 @@ const RENDER_PATH_PREFIX = '/__visual-editor/render/';
  *   the host can keep the scroll position across re-renders.
  * - `sandbox` omits `allow-top-navigation`, so the site's scripts can't navigate the backoffice window. With
  *   `allow-scripts` + `allow-same-origin` it is not a security boundary (the page is the site's own code).
- * - Widths wider than the available space are scaled down to fit.
+ * - Device sizes (width and height) that don't fit the available space are scaled down to fit both.
  * - If the frame ends up anywhere other than the render page (a script navigated it, a meta refresh), the render
  *   page is loaded again. The in-page runtime stops ordinary link clicks and form submits.
  * - A load without the edit-mode marker manifest means the template failed (an error page): shown as a warning
@@ -26,8 +27,8 @@ const RENDER_PATH_PREFIX = '/__visual-editor/render/';
 export class ArjoVisualEditorCanvasElement extends UmbLitElement {
 	/** Render-session URL (with the protocol nonce fragment). */
 	@property() url?: string;
-	/** Device width in CSS pixels; null fills the available space. */
-	@property({ attribute: false }) deviceWidth: number | null = null;
+	/** Device size in CSS pixels; null (or a size without dimensions) fills the available space. */
+	@property({ attribute: false }) deviceSize: Pick<VisualEditorSize, 'width' | 'height'> | null = null;
 
 	@state() private _loaded = false;
 	@state() private _renderError = false;
@@ -55,7 +56,8 @@ export class ArjoVisualEditorCanvasElement extends UmbLitElement {
 	}
 
 	protected override updated(changed: PropertyValues<this>) {
-		if (changed.has('deviceWidth')) this.#updateScale();
+		// The error banner takes height too, so refit when it appears or goes.
+		if (changed.has('deviceSize') || (changed as Map<PropertyKey, unknown>).has('_renderError')) this.#updateScale();
 		const frame = this.shadowRoot?.querySelector('iframe') ?? undefined;
 		if (frame !== this.#frame) {
 			this.#frame = frame;
@@ -68,8 +70,10 @@ export class ArjoVisualEditorCanvasElement extends UmbLitElement {
 	}
 
 	#updateScale() {
-		const available = this.clientWidth - 2 * CANVAS_GUTTER;
-		const scale = this.deviceWidth && available > 0 ? Math.min(1, available / this.deviceWidth) : 1;
+		const banner = this.shadowRoot?.querySelector<HTMLElement>('.warning')?.offsetHeight ?? 0;
+		const scale = this.deviceSize
+			? fitScale(this.deviceSize, this.clientWidth - 2 * CANVAS_GUTTER, this.clientHeight - banner - 2 * CANVAS_GUTTER)
+			: 1;
 		if (scale === this._scale) return;
 		this._scale = scale;
 		this.dispatchEvent(new CustomEvent<number>('scale-changed', { detail: scale }));
@@ -100,8 +104,10 @@ export class ArjoVisualEditorCanvasElement extends UmbLitElement {
 	override render() {
 		if (!this.url) return html`<uui-loader-bar></uui-loader-bar>`;
 
-		const width = this.deviceWidth;
-		const scaled = width !== null && this._scale < 1;
+		const width = this.deviceSize?.width ?? null;
+		const height = this.deviceSize?.height ?? null;
+		const sized = width !== null && height !== null;
+		const scaled = sized && this._scale < 1;
 		return html`
 			${!this._loaded ? html`<uui-loader-bar class="first-load"></uui-loader-bar>` : nothing}
 			${
@@ -113,14 +119,17 @@ export class ArjoVisualEditorCanvasElement extends UmbLitElement {
 						</div>`
 					: nothing
 			}
-			<div class="stage ${width ? 'device' : 'full'}" style=${width ? `width: ${width * this._scale}px` : nothing}>
+			<div
+				class="stage ${sized ? 'device' : 'full'}"
+				style=${sized ? `width: ${width! * this._scale}px; height: ${height! * this._scale}px` : nothing}
+			>
 				<iframe
 					src=${this.url}
 					title="Page preview"
 					sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals"
 					style=${
-						width
-							? `width: ${width}px; height: ${100 / this._scale}%; transform: scale(${this._scale}); transform-origin: 0 0`
+						sized
+							? `width: ${width}px; height: ${height}px; transform: scale(${this._scale}); transform-origin: 0 0`
 							: nothing
 					}
 					class=${scaled ? 'scaled' : ''}
@@ -175,7 +184,7 @@ export class ArjoVisualEditorCanvasElement extends UmbLitElement {
 		.stage.device {
 			margin: var(--arjo-canvas-gutter) 0;
 			flex: none;
-			height: calc(100% - 2 * var(--arjo-canvas-gutter));
+			box-sizing: content-box;
 			overflow: hidden;
 			border: 1px solid var(--uui-color-border);
 			border-radius: var(--uui-border-radius);

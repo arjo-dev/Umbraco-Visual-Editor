@@ -127,8 +127,12 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 		});
 	}
 
+	get #deviceSize() {
+		return sizeFor(this._device, this._sizes[this._device]);
+	}
+
 	get #deviceWidth() {
-		return sizeFor(this._device, this._sizes[this._device]).width;
+		return this.#deviceSize.width;
 	}
 
 	#onCanvasMessage(message: CanvasMessage) {
@@ -213,7 +217,7 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 		}
 		return html`<arjo-visual-editor-canvas
 			.url=${this._url}
-			.deviceWidth=${this.#deviceWidth}
+			.deviceSize=${this.#deviceSize}
 			@frame-changed=${this.#onFrameChanged}
 			@page-loaded=${() => (this._status = 'idle')}
 			@scale-changed=${(e: CustomEvent<number>) => (this._scale = e.detail)}
