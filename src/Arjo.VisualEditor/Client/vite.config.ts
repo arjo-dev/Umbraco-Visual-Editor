@@ -7,7 +7,7 @@ export default defineConfig({
 				// Backoffice bundle: registers the extension's manifests.
 				'arjo-visual-editor': 'src/bundle.manifests.ts',
 				// Loaded inside rendered pages (render sessions), not the backoffice.
-				'canvas-debug': 'src/canvas/debug.ts',
+				'canvas-runtime': 'src/canvas/runtime.ts',
 			},
 			formats: ['es'],
 			fileName: (_format, entryName) => `${entryName}.js`,

@@ -13,9 +13,10 @@ export class ArjoVisualEditorSidePanelElement extends UmbLitElement {
 	@property({ attribute: false }) targetCount?: number;
 
 	#describe(target: TargetRef) {
-		const owner = target.ownerIsBlock ? `Block ${target.ownerKey.slice(0, 8)}` : 'Page';
-		if (target.kind === 'Block') return { heading: owner, detail: 'Block' };
-		return { heading: target.alias ?? '', detail: `${owner}${target.culture ? ` · ${target.culture}` : ''}` };
+		const culture = target.culture ? ` · ${target.culture}` : '';
+		if (target.kind === 'Block') return { heading: target.label ?? 'Block', detail: `Block${culture}` };
+		const owner = target.ownerIsBlock ? `In ${target.ownerLabel ?? 'a block'}` : 'Page';
+		return { heading: target.label ?? target.alias ?? '', detail: `${owner}${culture}` };
 	}
 
 	override render() {

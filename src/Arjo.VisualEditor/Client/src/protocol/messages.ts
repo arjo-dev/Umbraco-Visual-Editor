@@ -18,6 +18,10 @@ export interface TargetRef {
 	/** Property alias; null for a whole block. */
 	alias: string | null;
 	culture: string | null;
+	/** Display name: the property's name, or the block's content type name. Not part of the identity. */
+	label?: string;
+	/** For a property inside a block: the block's content type name. Not part of the identity. */
+	ownerLabel?: string;
 }
 
 /** Where a block goes: into `propertyAlias` on `ownerKey` (a document or block), optionally a grid area, at `index`. */
@@ -62,6 +66,7 @@ const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !
 const isStr = (v: unknown): v is string => typeof v === 'string';
 const isNullableStr = (v: unknown): v is string | null => v === null || typeof v === 'string';
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+const isOptionalStr = (v: unknown) => v === undefined || typeof v === 'string';
 const isIndex = (v: unknown): v is number => isNum(v) && Number.isInteger(v) && v >= 0;
 
 export function isTargetRef(v: unknown): v is TargetRef {
@@ -71,7 +76,9 @@ export function isTargetRef(v: unknown): v is TargetRef {
 		isStr(v.ownerKey) &&
 		typeof v.ownerIsBlock === 'boolean' &&
 		isNullableStr(v.alias) &&
-		isNullableStr(v.culture)
+		isNullableStr(v.culture) &&
+		isOptionalStr(v.label) &&
+		isOptionalStr(v.ownerLabel)
 	);
 }
 
