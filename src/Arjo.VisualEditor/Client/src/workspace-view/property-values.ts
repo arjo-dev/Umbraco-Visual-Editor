@@ -287,3 +287,48 @@ export function withBlockEditorValue(
 		? { ...value, contentData }
 		: value;
 }
+
+/** The block editor property that directly holds a block: whose property it is, which, and its culture. */
+export interface BlockHolder {
+	/** The document property the block is in (at any depth). */
+	property: PropertyValueModel;
+	/** The holding property's owner: null for the document, else a block's content key. */
+	ownerKey: string | null;
+	alias: string;
+	culture: string | null;
+}
+
+/** Finds the block editor property holding block `contentKey` directly (e.g. the nested Block Grid it's an item of). */
+export function locateBlockHolder(
+	values: readonly PropertyValueModel[],
+	contentKey: string,
+	activeCulture: string | null,
+): BlockHolder | null {
+	const search = (
+		value: unknown,
+		ownerKey: string | null,
+		alias: string,
+		culture: string | null,
+		property: PropertyValueModel,
+	): BlockHolder | null => {
+		const blockValue = blockValueOf(value);
+		if (!isObj(blockValue) || !Array.isArray(blockValue.contentData)) return null;
+		if (blockValue.contentData.some((entry) => isBlockData(entry) && entry.key === contentKey)) {
+			return { property, ownerKey, alias, culture };
+		}
+		for (const entry of blockValue.contentData) {
+			if (!isBlockData(entry)) continue;
+			for (const v of entry.values) {
+				const found = search(v.value, entry.key, v.alias, v.culture ?? null, property);
+				if (found) return found;
+			}
+		}
+		return null;
+	};
+	const rank = (v: PropertyValueModel) => ((v.culture ?? null) === activeCulture ? 0 : v.culture == null ? 1 : 2);
+	for (const property of [...values].sort((a, b) => rank(a) - rank(b))) {
+		const found = search(property.value, null, property.alias, property.culture ?? null, property);
+		if (found) return found;
+	}
+	return null;
+}

@@ -17,6 +17,8 @@ describe('parseCanvasMessage', () => {
 		{ type: 'inlineEdit', target: title, value: 'New title' },
 		{ type: 'inlineEditEnd', target: title, cancelled: false },
 		{ type: 'blockAction', blockKey: 'block-1', action: 'duplicate' },
+		{ type: 'blockMove', blockKey: 'b', to: { ...position, areaKey: null, areaOwnerKey: 'row', areaAlias: 'left' } },
+		{ type: 'blockResize', blockKey: 'block-1', columnSpan: 6 },
 		{ type: 'blockMove', blockKey: 'block-1', to: { ...position, areaKey: 'area-1', index: 2 } },
 		{ type: 'blockInsertRequest', at: position },
 		{ type: 'scroll', x: 0, y: 120.5 },
@@ -48,6 +50,8 @@ describe('parseCanvasMessage', () => {
 		['blockMove with a fractional index', { type: 'blockMove', blockKey: 'b', to: { ...position, index: 1.5 } }],
 		['rendered without ok', { type: 'rendered', url: '/__visual-editor/render/abc' }],
 		['inlineEditEnd without cancelled', { type: 'inlineEditEnd', target: title }],
+		['blockResize with a zero span', { type: 'blockResize', blockKey: 'b', columnSpan: 0 }],
+		['blockMove with a numeric area alias', { type: 'blockMove', blockKey: 'b', to: { ...position, areaAlias: 3 } }],
 		['blockAction with an unknown action', { type: 'blockAction', blockKey: 'b', action: 'explode' }],
 		['scroll with NaN', { type: 'scroll', x: Number.NaN, y: 0 }],
 	];

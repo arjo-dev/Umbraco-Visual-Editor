@@ -70,19 +70,19 @@ describe('drop spots', () => {
 
 	it('drops before the first block whose middle is below the pointer', () => {
 		const spot = dropSpotAt(200, 20, p.get('c'), p.lists, p.targets)!;
-		expect(spot.list.propertyAlias).to.equal('blocks');
-		expect(spot.index).to.equal(0);
-		expect(spot.line).to.deep.equal({ left: 0, top: -4, width: 400 });
+		expect(spot.to.propertyAlias).to.equal('blocks');
+		expect(spot.to.index).to.equal(0);
+		expect(spot.line).to.deep.equal({ left: 0, top: -5.5, width: 400, height: 3 });
 
 		const between = dropSpotAt(200, 80, p.get('c'), p.lists, p.targets)!;
-		expect(between.index).to.equal(1);
-		expect(between.line.top).to.equal(100);
+		expect(between.to.index).to.equal(1);
+		expect(between.line.top).to.equal(98.5);
 	});
 
 	it('drops at the end below the last block', () => {
 		const spot = dropSpotAt(200, 290, p.get('a'), p.lists, p.targets)!;
-		expect(spot.index).to.equal(3);
-		expect(spot.line.top).to.equal(304);
+		expect(spot.to.index).to.equal(3);
+		expect(spot.line.top).to.equal(302.5);
 	});
 
 	it("is nowhere when the block wouldn't move", () => {
@@ -93,8 +93,8 @@ describe('drop spots', () => {
 
 	it('uses the innermost list under the pointer', () => {
 		const spot = dropSpotAt(200, 125, p.get('a'), p.lists, p.targets)!;
-		expect(spot.list.propertyAlias).to.equal('items');
-		expect(spot.index).to.equal(0);
+		expect(spot.to.propertyAlias).to.equal('items');
+		expect(spot.to.index).to.equal(0);
 	});
 
 	it("doesn't drop a block into a list inside itself", () => {

@@ -3,6 +3,7 @@ import type { TargetRef } from '../protocol/index.js';
 import {
 	contentKeyOfSettings,
 	locateBlock,
+	locateBlockHolder,
 	locateValue,
 	showsValue,
 	withBlockEditorValue,
@@ -200,5 +201,19 @@ describe('withBlockEditorValue', () => {
 	it('returns the value itself when the block is not there', () => {
 		const before = grid('en-US', 'Caption').value;
 		expect(withBlockEditorValue(before, 'missing', (v) => ({ ...v }))).to.equal(before);
+	});
+});
+
+describe('locateBlockHolder', () => {
+	it('finds the block editor property holding a block: the document, or a block', () => {
+		expect(locateBlockHolder(values, 'two-column', 'en-US')).to.deep.include({
+			ownerKey: null,
+			alias: 'grid',
+			culture: 'en-US',
+		});
+		const nested = locateBlockHolder(values, 'image-row', 'en-US')!;
+		expect(nested).to.deep.include({ ownerKey: 'two-column', alias: 'items', culture: null });
+		expect(nested.property.alias).to.equal('grid');
+		expect(locateBlockHolder(values, 'missing', 'en-US')).to.equal(null);
 	});
 });

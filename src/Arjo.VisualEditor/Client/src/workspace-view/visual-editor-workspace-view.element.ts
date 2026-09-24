@@ -229,6 +229,10 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 				// A block dropped on the canvas (#26); the re-render shows it in its new place, still selected.
 				void this.#blocks.moveTo(message.blockKey, message.to, this.#culture);
 				break;
+			case 'blockResize':
+				// A grid block's column span dragged on the canvas (#27); the host snaps it to the allowed spans.
+				void this.#blocks.resize(message.blockKey, message.columnSpan, this.#culture);
+				break;
 			case 'blockAction':
 				void this.#onBlockAction(message.blockKey, message.action);
 				break;
