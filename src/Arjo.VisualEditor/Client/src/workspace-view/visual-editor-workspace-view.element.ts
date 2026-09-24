@@ -14,14 +14,15 @@ import {
 	type HostChannel,
 	type TargetRef,
 } from '../protocol/index.js';
-import { sizeFor, type VisualEditorDeviceAlias } from './devices.js';
+import { deviceFor, sizeFor, type VisualEditorDeviceAlias } from './devices.js';
 import './visual-editor-toolbar.element.js';
 import './visual-editor-side-panel.element.js';
 import './visual-editor-canvas.element.js';
 
 const RENDER_DEBOUNCE_MS = 300;
 const PANEL_STORAGE_KEY = 'arjo.visualEditor.panelOpen';
-const SIZES_STORAGE_KEY = 'arjo.visualEditor.sizes';
+/** Chosen device and per-device sizes are remembered for the browser session. */
+const PREVIEW_STORAGE_KEY = 'arjo.visualEditor.preview';
 
 /**
  * The Visual editor: a document workspace view (ADR 0003) laid out as toolbar, canvas and side panel (#14).
@@ -39,9 +40,11 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 	@state() private _selected: TargetRef | null = null;
 	/** Never saved: there's no draft to render yet (render sessions overlay it, ADR 0001). */
 	@state() private _isNew = false;
-	@state() private _device: VisualEditorDeviceAlias = 'desktop';
-	/** Last size chosen for each device, e.g. { desktop: 'macbook-pro-14' }. Remembered per browser. */
-	@state() private _sizes: Partial<Record<VisualEditorDeviceAlias, string>> = readSizes();
+	@state() private _device: VisualEditorDeviceAlias = readPreview().device;
+	/** Last size chosen for each device, e.g. { desktop: 'macbook-pro-14' }. */
+	@state() private _sizes: Partial<Record<VisualEditorDeviceAlias, string>> = readPreview().sizes;
+	/** The user wants the content tree visible in visual mode (remembered by the visual mode context). */
+	@state() private _treeVisible = false;
 	@state() private _panelOpen = readPanelOpen();
 	@state() private _scale = 1;
 
@@ -66,6 +69,7 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 			if (!context) return;
 			this.#visualMode = context;
 			if (this.isConnected) context.setActive(true);
+			this.observe(context.showTree, (show) => (this._treeVisible = show), 'arjoShowTree');
 		});
 
 		this.consumeContext(UMB_PROPERTY_DATASET_CONTEXT, (dataset) => {
@@ -151,15 +155,21 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 	#onDeviceChange(event: CustomEvent<VisualEditorDeviceAlias>) {
 		this._device = event.detail;
 		this.#channel?.send({ type: 'setDevice', width: this.#deviceWidth });
+		this.#savePreview();
 	}
 
-	#onSizeChange(event: CustomEvent<string>) {
-		this._sizes = { ...this._sizes, [this._device]: event.detail };
+	#onSizeChange(event: CustomEvent<{ device: VisualEditorDeviceAlias; sizeId: string }>) {
+		const { device, sizeId } = event.detail;
+		this._sizes = { ...this._sizes, [device]: sizeId };
 		this.#channel?.send({ type: 'setDevice', width: this.#deviceWidth });
+		this.#savePreview();
+	}
+
+	#savePreview() {
 		try {
-			localStorage.setItem(SIZES_STORAGE_KEY, JSON.stringify(this._sizes));
+			sessionStorage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify({ device: this._device, sizes: this._sizes }));
 		} catch {
-			// A per-browser convenience only.
+			// A convenience only.
 		}
 	}
 
@@ -230,11 +240,13 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 				.standardEditorHref=${this.#documentBase ? `${this.#documentBase}/view/content` : undefined}
 				.device=${this._device}
 				.sizeId=${this._sizes[this._device]}
+				.treeVisible=${this._treeVisible}
 				.panelOpen=${this._panelOpen}
 				.rendering=${this._status === 'rendering'}
 				.scale=${this._scale}
 				@device-change=${this.#onDeviceChange}
 				@size-change=${this.#onSizeChange}
+				@toggle-tree=${() => this.#visualMode?.setShowTree(!this._treeVisible)}
 				@toggle-panel=${() => this.#setPanelOpen(!this._panelOpen)}
 			></arjo-visual-editor-toolbar>
 			<div class="body">
@@ -299,12 +311,14 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 	`;
 }
 
-function readSizes(): Partial<Record<VisualEditorDeviceAlias, string>> {
+function readPreview(): { device: VisualEditorDeviceAlias; sizes: Partial<Record<VisualEditorDeviceAlias, string>> } {
 	try {
-		const stored = JSON.parse(localStorage.getItem(SIZES_STORAGE_KEY) ?? '{}');
-		return typeof stored === 'object' && stored !== null ? stored : {};
+		const stored = JSON.parse(sessionStorage.getItem(PREVIEW_STORAGE_KEY) ?? '{}');
+		const device = deviceFor(stored?.device).alias; // unknown values fall back to desktop
+		const sizes = typeof stored?.sizes === 'object' && stored.sizes !== null ? stored.sizes : {};
+		return { device, sizes };
 	} catch {
-		return {};
+		return { device: 'desktop', sizes: {} };
 	}
 }
 

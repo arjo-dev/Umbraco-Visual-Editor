@@ -1,4 +1,4 @@
-import { css, customElement, html, nothing, property } from '@umbraco-cms/backoffice/external/lit';
+import { css, customElement, html, keyed, nothing, property } from '@umbraco-cms/backoffice/external/lit';
 import { UmbLitElement } from '@umbraco-cms/backoffice/lit-element';
 import { deviceFor, sizeFor, sizeLabel, VISUAL_EDITOR_DEVICES, type VisualEditorDeviceAlias } from './devices.js';
 
@@ -8,7 +8,8 @@ import { deviceFor, sizeFor, sizeLabel, VISUAL_EDITOR_DEVICES, type VisualEditor
  * reflects state passed in and reports what the user asks for as events.
  *
  * @fires device-change - detail: the chosen device alias.
- * @fires size-change - detail: the chosen size id within the current device.
+ * @fires size-change - detail: { device, sizeId } - the size chosen for that device.
+ * @fires toggle-tree - the content tree toggle was pressed.
  * @fires toggle-panel - the side panel toggle was pressed.
  */
 @customElement('arjo-visual-editor-toolbar')
@@ -19,6 +20,8 @@ export class ArjoVisualEditorToolbarElement extends UmbLitElement {
 	/** Selected size within the device (see devices.ts). */
 	@property({ attribute: false }) sizeId?: string;
 	@property({ type: Boolean }) panelOpen = true;
+	/** Whether the section sidebar (content tree) is shown in visual mode. */
+	@property({ type: Boolean }) treeVisible = false;
 	@property({ type: Boolean }) rendering = false;
 	/** Zoom the canvas applies so the device width fits (1 = not scaled). */
 	@property({ type: Number }) scale = 1;
@@ -27,9 +30,26 @@ export class ArjoVisualEditorToolbarElement extends UmbLitElement {
 		this.dispatchEvent(new CustomEvent<VisualEditorDeviceAlias>('device-change', { detail: alias }));
 	}
 
-	#chooseSize(event: Event) {
-		const id = (event.target as HTMLSelectElement).value;
-		this.dispatchEvent(new CustomEvent<string>('size-change', { detail: id }));
+	#chooseSize(device: VisualEditorDeviceAlias, event: Event) {
+		const sizeId = (event.target as HTMLSelectElement).value;
+		this.dispatchEvent(new CustomEvent('size-change', { detail: { device, sizeId } }));
+	}
+
+	/**
+	 * A native <select>, recreated per device: its change event only fires when the user picks a size, so switching
+	 * device (which swaps the options) can never report a different size. The device is captured at render time.
+	 */
+	#renderSizes() {
+		const device = this.device;
+		const selected = sizeFor(device, this.sizeId).id;
+		return keyed(
+			device,
+			html`<select aria-label="Preview size" title="Preview size" @change=${(e: Event) => this.#chooseSize(device, e)}>
+				${deviceFor(device).sizes.map(
+					(size) => html`<option value=${size.id} ?selected=${size.id === selected}>${sizeLabel(size)}</option>`,
+				)}
+			</select>`,
+		);
 	}
 
 	override render() {
@@ -37,6 +57,16 @@ export class ArjoVisualEditorToolbarElement extends UmbLitElement {
 			<div class="group">
 				<uui-button look="secondary" compact label="Standard editor" href=${this.standardEditorHref ?? nothing}>
 					<uui-icon name="icon-arrow-left"></uui-icon> Standard editor
+				</uui-button>
+				<uui-button
+					compact
+					look=${this.treeVisible ? 'primary' : 'secondary'}
+					label=${this.treeVisible ? 'Hide content tree' : 'Show content tree'}
+					title=${this.treeVisible ? 'Hide content tree' : 'Show content tree'}
+					aria-pressed=${this.treeVisible}
+					@click=${() => this.dispatchEvent(new CustomEvent('toggle-tree'))}
+				>
+					<uui-icon name="icon-layout-panel-left"></uui-icon>
 				</uui-button>
 			</div>
 
@@ -68,15 +98,7 @@ export class ArjoVisualEditorToolbarElement extends UmbLitElement {
 						`,
 					)}
 				</uui-button-group>
-				<uui-select
-					label="Preview size"
-					.options=${deviceFor(this.device).sizes.map((s) => ({
-						name: sizeLabel(s),
-						value: s.id,
-						selected: s.id === sizeFor(this.device, this.sizeId).id,
-					}))}
-					@change=${this.#chooseSize}
-				></uui-select>
+				${this.#renderSizes()}
 				${
 					this.scale < 1
 						? html`<span class="scale" title="The page is scaled down so the whole width fits"
@@ -126,6 +148,26 @@ export class ArjoVisualEditorToolbarElement extends UmbLitElement {
 			align-items: center;
 			gap: var(--uui-size-space-3);
 			margin: 0 auto;
+		}
+
+		select {
+			height: var(--uui-button-height, 30px);
+			padding: 0 var(--uui-size-space-3);
+			font: inherit;
+			color: var(--uui-color-text);
+			background: var(--uui-color-surface);
+			border: 1px solid var(--uui-color-border-standalone, var(--uui-color-border));
+			border-radius: var(--uui-border-radius);
+			cursor: pointer;
+		}
+
+		select:hover {
+			border-color: var(--uui-color-border-emphasis);
+		}
+
+		select:focus-visible {
+			outline: 2px solid var(--uui-color-focus);
+			outline-offset: 1px;
 		}
 
 		.scale {
