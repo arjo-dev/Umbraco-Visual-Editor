@@ -42,6 +42,11 @@ export type CanvasMessage =
 	| { type: 'select'; target: TargetRef | null }
 	/** Asks to edit a text property in place (#20); `text` is what the element shows. Answered by `beginInlineEdit`. */
 	| { type: 'inlineEditStart'; target: TargetRef; text: string }
+	/**
+	 * Asks to edit rich text in place (#57, ADR 0004). The canvas has marked the element to mount the editor on with
+	 * `data-uve-rte="{mountId}"`; the host creates the editor on it. Answered by `richTextEditing`.
+	 */
+	| { type: 'richTextEditStart'; target: TargetRef; mountId: string }
 	/** The text being edited in place changed. */
 	| { type: 'inlineEdit'; target: TargetRef; value: string }
 	/** Editing in place finished: committed (blur, Enter) or `cancelled` (Escape; the host restores the value). */
@@ -61,6 +66,8 @@ export type HostMessage =
 	/** Validation errors to mark on the page (#23); replaces the previous set. */
 	| { type: 'setErrors'; errors: Array<{ target: TargetRef; message: string }> }
 	| { type: 'setReadonly'; readonly: boolean }
+	/** Rich text is (or is no longer) being edited in place: the canvas leaves that element alone meanwhile. */
+	| { type: 'richTextEditing'; target: TargetRef; active: boolean }
 	/** Go ahead with an `inlineEditStart`. Not sent when it can't be edited in place (the side panel is used instead). */
 	| { type: 'beginInlineEdit'; target: TargetRef; maxLength: number | null; multiline: boolean }
 	/** Emulated viewport width in CSS pixels; null for the full width. */
@@ -107,6 +114,7 @@ const canvasValidators: Record<CanvasMessageType, (m: Obj) => boolean> = {
 	hover: (m) => isNullableTarget(m.target),
 	select: (m) => isNullableTarget(m.target),
 	inlineEditStart: (m) => isTargetRef(m.target) && isStr(m.text),
+	richTextEditStart: (m) => isTargetRef(m.target) && isStr(m.mountId),
 	inlineEdit: (m) => isTargetRef(m.target) && isStr(m.value),
 	inlineEditEnd: (m) => isTargetRef(m.target) && typeof m.cancelled === 'boolean',
 	blockMove: (m) => isStr(m.blockKey) && isBlockPosition(m.to),
@@ -121,6 +129,7 @@ const hostValidators: Record<HostMessageType, (m: Obj) => boolean> = {
 	setErrors: (m) =>
 		Array.isArray(m.errors) && m.errors.every((e) => isObj(e) && isTargetRef(e.target) && isStr(e.message)),
 	setReadonly: (m) => typeof m.readonly === 'boolean',
+	richTextEditing: (m) => isTargetRef(m.target) && typeof m.active === 'boolean',
 	beginInlineEdit: (m) =>
 		isTargetRef(m.target) &&
 		(m.maxLength === null || (isIndex(m.maxLength) && m.maxLength > 0)) &&

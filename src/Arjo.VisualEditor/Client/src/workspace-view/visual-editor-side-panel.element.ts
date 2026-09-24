@@ -3,6 +3,8 @@ import type { PropertyValues } from '@umbraco-cms/backoffice/external/lit';
 import { UmbLitElement } from '@umbraco-cms/backoffice/lit-element';
 import { sameTarget, type TargetRef } from '../protocol/index.js';
 import type { VisualEditorError } from './validation.controller.js';
+import type { RichTextSession } from './inline-edit.controller.js';
+import '../rich-text/visual-editor-rich-text-editor.element.js';
 import './visual-editor-property-editor.element.js';
 import './visual-editor-page-settings.element.js';
 
@@ -14,7 +16,12 @@ import './visual-editor-page-settings.element.js';
  * Selecting something on the canvas switches to Selection. Validation errors (#23) are listed above both views while
  * there are any; clicking one fires `show-error` (the workspace view selects it on the page).
  *
+ * While rich text is edited on the canvas (#57), its editor (toolbar and statusbar) takes the place of the property
+ * editor.
+ *
  * @fires show-error - detail: the VisualEditorError clicked.
+ * @fires rich-text-change - detail: the new markup of the rich text being edited on the canvas.
+ * @fires rich-text-cancel - Escape was pressed while editing rich text on the canvas.
  */
 @customElement('arjo-visual-editor-side-panel')
 export class ArjoVisualEditorSidePanelElement extends UmbLitElement {
@@ -26,6 +33,8 @@ export class ArjoVisualEditorSidePanelElement extends UmbLitElement {
 	@property({ attribute: false }) errors: VisualEditorError[] = [];
 	/** Targets on the page (from the canvas), for error labels and whether an error can be shown on the page. */
 	@property({ attribute: false }) targets: TargetRef[] = [];
+	/** Rich text being edited on the canvas, with the element its editor mounts on. */
+	@property({ attribute: false }) richText?: RichTextSession & { mount: HTMLElement };
 
 	@state() private _view: 'selection' | 'settings' = 'selection';
 
@@ -91,6 +100,17 @@ export class ArjoVisualEditorSidePanelElement extends UmbLitElement {
 	#renderSelection() {
 		const target = this.selected;
 		if (!target) return html`<p class="hint">Click something on the page to select it.</p>`;
+
+		if (this.richText && sameTarget(this.richText.target, target)) {
+			return html`<arjo-visual-editor-rich-text-editor
+				.mount=${this.richText.mount}
+				.markup=${this.richText.markup}
+				.configuration=${this.richText.configuration}
+				@change=${(e: CustomEvent<string>) =>
+					this.dispatchEvent(new CustomEvent('rich-text-change', { detail: e.detail }))}
+				@cancel=${() => this.dispatchEvent(new CustomEvent('rich-text-cancel'))}
+			></arjo-visual-editor-rich-text-editor>`;
+		}
 
 		if (target.kind === 'Property' && !target.ownerIsBlock && target.alias) {
 			return html`<arjo-visual-editor-property-editor

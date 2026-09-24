@@ -9,13 +9,14 @@ import { viewInPath } from '../visual-mode/routes.js';
 import {
 	createHostChannel,
 	createNonce,
+	sameTarget,
 	withNonce,
 	type CanvasMessage,
 	type HostChannel,
 	type TargetRef,
 } from '../protocol/index.js';
 import { deviceFor, sizeFor, type VisualEditorDeviceAlias } from './devices.js';
-import { ArjoInlineEditController } from './inline-edit.controller.js';
+import { ArjoInlineEditController, type RichTextSession } from './inline-edit.controller.js';
 import { clampPanelWidth, PANEL_DEFAULT_WIDTH } from './panel-width.js';
 import { ArjoValidationController, type VisualEditorError } from './validation.controller.js';
 import type { ArjoVisualEditorSidePanelElement } from './visual-editor-side-panel.element.js';
@@ -53,6 +54,8 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 	@state() private _targets: TargetRef[] = [];
 	/** Validation errors for the variant being edited (#23). */
 	@state() private _errors: VisualEditorError[] = [];
+	/** Rich text being edited on the canvas (#57): the editor and its toolbar live in the side panel. */
+	@state() private _richText?: RichTextSession & { mount: HTMLElement };
 	@state() private _selected: TargetRef | null = null;
 	/** Never saved: there's no draft to render yet (render sessions overlay it, ADR 0001). */
 	@state() private _isNew = false;
@@ -137,6 +140,7 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 		// Leaving the view (another tab, another document, another section) restores the normal backoffice.
 		// Before super: that tears down this element's context consumers and controllers.
 		this.#visualMode?.setActive(false);
+		this.#endRichText(false);
 		clearTimeout(this.#timer);
 		this.#channel?.close();
 		this.#channel = undefined;
@@ -153,6 +157,7 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 			onConnect: () => {
 				// A re-render is a fresh page: give it the current state again.
 				this.#inline.reset();
+				this._richText = undefined;
 				this.#channel?.send({ type: 'setSelection', target: this._selected });
 				this.#channel?.send({ type: 'setDevice', width: this.#deviceWidth });
 				this.#sendErrors();
@@ -191,6 +196,9 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 					if (!started && !this._panelOpen) this.#setPanelOpen(true);
 				});
 				break;
+			case 'richTextEditStart':
+				void this.#startRichText(message.target, message.mountId);
+				break;
 			case 'inlineEdit':
 				this.#inline.write(message.target, message.value);
 				break;
@@ -200,11 +208,41 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 				this.#scheduleRender();
 				break;
 			case 'select':
+				// Selecting something else on the page finishes editing rich text.
+				if (this._richText && !sameTarget(this._richText.target, message.target)) this.#endRichText(false);
 				this._selected = message.target;
 				this.#channel?.send({ type: 'setSelection', target: message.target });
 				if (message.target && !this._panelOpen) this.#setPanelOpen(true);
 				break;
 		}
+	}
+
+	/** Starts editing rich text on the canvas (#57): the editor mounts on the element the canvas marked. */
+	async #startRichText(target: TargetRef, mountId: string) {
+		const session = await this.#inline.startRichText(target, this.#culture);
+		const frameDoc = this.shadowRoot?.querySelector('arjo-visual-editor-canvas')?.frame?.contentDocument;
+		const mount = frameDoc?.querySelector<HTMLElement>(`[data-uve-rte="${CSS.escape(mountId)}"]`);
+		if (!session || !mount) {
+			if (session) this.#inline.end(target, false);
+			// Not editable in place (blocks in it, permissions, …): the side panel is the way to edit it.
+			if (!this._panelOpen) this.#setPanelOpen(true);
+			return;
+		}
+		if (!this._panelOpen) this.#setPanelOpen(true);
+		this._selected = target;
+		this._richText = { ...session, mount };
+		this.#channel?.send({ type: 'richTextEditing', target, active: true });
+	}
+
+	/** Finishes editing rich text; the edits were written as they were made, a cancelled edit is put back. */
+	#endRichText(cancelled: boolean) {
+		const session = this._richText;
+		if (!session) return;
+		this._richText = undefined;
+		this.#inline.end(session.target, cancelled);
+		this.#channel?.send({ type: 'richTextEditing', target: session.target, active: false });
+		// Render the stored markup through the template again (links, media, the markers).
+		this.#scheduleRender();
 	}
 
 	#onErrors(errors: VisualEditorError[]) {
@@ -231,6 +269,7 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 	 * only that is, or the property under Page settings when it isn't on the page at all.
 	 */
 	async #showError(error: VisualEditorError) {
+		this.#endRichText(false);
 		if (!this._panelOpen) this.#setPanelOpen(true);
 		await this.updateComplete;
 		const panel = this.shadowRoot?.querySelector<ArjoVisualEditorSidePanelElement>('arjo-visual-editor-side-panel');
@@ -310,6 +349,8 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 	}
 
 	#setPanelOpen(open: boolean) {
+		// The rich text toolbar lives in the panel: closing it finishes the edit.
+		if (!open) this.#endRichText(false);
 		this._panelOpen = open;
 		try {
 			localStorage.setItem(PANEL_STORAGE_KEY, String(open));
@@ -430,6 +471,10 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 									.visibleAliases=${this._visibleAliases}
 									.errors=${this._errors}
 									.targets=${this._targets}
+									.richText=${this._richText}
+									@rich-text-change=${(e: CustomEvent<string>) =>
+										this._richText && this.#inline.writeRichText(this._richText.target, e.detail)}
+									@rich-text-cancel=${() => this.#endRichText(true)}
 									@show-error=${(e: CustomEvent<VisualEditorError>) => this.#showError(e.detail)}
 									.contentHref=${this.#documentBase ? `${this.#documentBase}/view/content` : undefined}
 								></arjo-visual-editor-side-panel>`

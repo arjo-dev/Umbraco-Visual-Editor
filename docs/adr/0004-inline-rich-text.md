@@ -1,6 +1,6 @@
 # ADR 0004: Inline rich text: the backoffice's Tiptap editor, mounted on the element in the canvas
 
-- **Status:** Proposed
+- **Status:** Accepted, implemented in #57
 - **Date:** 2026-09-24
 - **Issue:** #21 (spike). Prototype: `src/Arjo.VisualEditor/Client/src/spike/` (automated, runs with the client tests).
 
@@ -74,7 +74,11 @@ If the data type enables an extension whose node view is a Lit element that we d
 - **The Content tab and the canvas share one editor implementation.** Behaviour, extensions and permissions don't drift.
 - **Cross-window use has sharp edges.** prosemirror-view creates nodes with the global `document`; they're adopted into the frame when inserted, which works. Extensions that position UI with `window` (bubble or floating menus) position against the backoffice window. They need checking one by one, and the toolbar in the side panel avoids most of them.
 - **Readonly, permissions and validation** follow the property dataset, as in #19 and #20.
-- **Follow-up:** implement this as its own issue (M2). Until then, rich text is edited in the side panel (#19), which is option 3 and remains the fallback.
+- **Implemented in #57:**
+  - The canvas marks the mount element and asks with `richTextEditStart`. The host (`rich-text/visual-editor-rich-text-editor.element.ts`) creates the editor on it and shows the toolbar in the side panel.
+  - Tiptap's `focus` command is replaced (`rich-text/frame-focus.ts`), because toolbar buttons call `chain().focus()` after focus has left the frame.
+  - Editing ends when something else is selected, when Escape is pressed, or when the side panel closes. Blur doesn't end it: toolbar popovers and modals (link and media pickers) take focus out of the frame.
+  - **Not yet:** the plain-DOM node view for RTE blocks. Values containing blocks fall back to the side panel, and the block extension and block picker are left out when editing on the canvas. Extensions' own editor styles (`getStyles()`) aren't applied in the frame either.
 
 ## Options considered
 
