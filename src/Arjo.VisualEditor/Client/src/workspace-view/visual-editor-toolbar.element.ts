@@ -17,6 +17,8 @@ export class ArjoVisualEditorToolbarElement extends UmbLitElement {
 	@property({ attribute: false }) device: VisualEditorDeviceAlias = 'desktop';
 	@property({ type: Boolean }) panelOpen = true;
 	@property({ type: Boolean }) rendering = false;
+	/** Zoom the canvas applies so the device width fits (1 = not scaled). */
+	@property({ type: Number }) scale = 1;
 
 	#chooseDevice(alias: VisualEditorDeviceAlias) {
 		this.dispatchEvent(new CustomEvent<VisualEditorDeviceAlias>('device-change', { detail: alias }));
@@ -57,6 +59,13 @@ export class ArjoVisualEditorToolbarElement extends UmbLitElement {
 					`,
 				)}
 			</uui-button-group>
+			${
+				this.scale < 1
+					? html`<span class="scale" title="The page is scaled down so the whole width fits"
+							>${Math.round(this.scale * 100)}%</span
+						>`
+					: nothing
+			}
 
 			<div class="group end">
 				${this.rendering ? html`<uui-loader-circle aria-label="Updating preview"></uui-loader-circle>` : nothing}
@@ -93,7 +102,14 @@ export class ArjoVisualEditorToolbarElement extends UmbLitElement {
 		}
 
 		.devices {
-			margin: 0 auto;
+			margin-left: auto;
+		}
+
+		/* The device switcher (with the zoom level, when shown) stays centred between the left and right groups. */
+		.scale {
+			margin-right: auto;
+			font-size: var(--uui-type-small-size);
+			color: var(--uui-color-text-alt);
 		}
 
 		.end {

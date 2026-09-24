@@ -40,6 +40,7 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 	@state() private _isNew = false;
 	@state() private _device: VisualEditorDeviceAlias = 'desktop';
 	@state() private _panelOpen = readPanelOpen();
+	@state() private _scale = 1;
 
 	#documentKey?: string;
 	#culture: string | null = null;
@@ -202,6 +203,7 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 			.deviceWidth=${this.#deviceWidth}
 			@frame-changed=${this.#onFrameChanged}
 			@page-loaded=${() => (this._status = 'idle')}
+			@scale-changed=${(e: CustomEvent<number>) => (this._scale = e.detail)}
 		></arjo-visual-editor-canvas>`;
 	}
 
@@ -212,6 +214,7 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 				.device=${this._device}
 				.panelOpen=${this._panelOpen}
 				.rendering=${this._status === 'rendering'}
+				.scale=${this._scale}
 				@device-change=${this.#onDeviceChange}
 				@toggle-panel=${() => this.#setPanelOpen(!this._panelOpen)}
 			></arjo-visual-editor-toolbar>

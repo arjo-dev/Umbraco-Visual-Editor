@@ -20,6 +20,7 @@ const RENDER_PATH_PREFIX = '/__visual-editor/render/';
  *
  * @fires frame-changed - a new iframe element is in place (detail: the iframe); bind the protocol channel to it.
  * @fires page-loaded - a render page finished loading (detail: whether it rendered normally, i.e. has markers).
+ * @fires scale-changed - the zoom applied to fit the device width changed (detail: 0-1; 1 when not scaled).
  */
 @customElement('arjo-visual-editor-canvas')
 export class ArjoVisualEditorCanvasElement extends UmbLitElement {
@@ -68,7 +69,10 @@ export class ArjoVisualEditorCanvasElement extends UmbLitElement {
 
 	#updateScale() {
 		const available = this.clientWidth - 2 * CANVAS_GUTTER;
-		this._scale = this.deviceWidth && available > 0 ? Math.min(1, available / this.deviceWidth) : 1;
+		const scale = this.deviceWidth && available > 0 ? Math.min(1, available / this.deviceWidth) : 1;
+		if (scale === this._scale) return;
+		this._scale = scale;
+		this.dispatchEvent(new CustomEvent<number>('scale-changed', { detail: scale }));
 	}
 
 	#onLoad() {
@@ -123,7 +127,6 @@ export class ArjoVisualEditorCanvasElement extends UmbLitElement {
 					@load=${this.#onLoad}
 				></iframe>
 			</div>
-			${scaled ? html`<p class="scale-note">Shown at ${Math.round(this._scale * 100)}% to fit</p>` : nothing}
 		`;
 	}
 
@@ -185,12 +188,6 @@ export class ArjoVisualEditorCanvasElement extends UmbLitElement {
 			height: 100%;
 			border: 0;
 			background: white;
-		}
-
-		.scale-note {
-			margin: 0 0 var(--uui-size-space-3);
-			font-size: var(--uui-type-small-size);
-			color: var(--uui-color-text-alt);
 		}
 	`;
 }
