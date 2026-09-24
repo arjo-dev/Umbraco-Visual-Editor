@@ -18,7 +18,7 @@ import { readManifest, resolveMarkers } from './markers.js';
 import { InlineEditor, inlineEditableElement } from './inline-edit.js';
 import { RichTextEditState } from './rich-text-edit.js';
 import { guardNavigation } from './navigation.js';
-import { CanvasOverlay, type BlockTool } from './overlay.js';
+import { CanvasOverlay, unionRect, type BlockTool } from './overlay.js';
 import { BLOCK_LIST, blockListsOf, dropSpotAt, type DropSpot } from './drag.js';
 import { fetchRender, patchDocument } from './patch.js';
 import { TargetIndex, type CanvasTarget } from './targets.js';
@@ -233,11 +233,42 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 		channel?.send({ type: 'hover', target: target?.ref ?? null });
 	}
 
+	/**
+	 * A draggable block's hover reaches a little beyond it (more on the left, where its handle sits), so the pointer
+	 * can travel from the block to the handle across the page's margin without the handle disappearing.
+	 */
+	const HOVER_SLOP = { left: 32, right: 8, top: 8, bottom: 8 };
+
+	/**
+	 * What to hover when the pointer moves onto `next` (the innermost target under it, or null): `next`, unless it is
+	 * outside every block (or one of the blocks around what's hovered) and the pointer is still within the slop of a
+	 * draggable block around what's hovered; then that block, so its handle stays in reach.
+	 */
+	function hoverTarget(next: CanvasTarget | null, x: number, y: number): CanvasTarget | null {
+		if (!hovered || next === hovered) return next;
+		const around = [hovered, ...index.ancestorsOf(hovered)];
+		if (next && !around.includes(next)) return next;
+		for (const candidate of around) {
+			if (candidate.ref.kind !== 'Block' || candidate.block?.editorAlias !== BLOCK_LIST) continue;
+			const r = unionRect(candidate.elements);
+			if (
+				r &&
+				x >= r.left - HOVER_SLOP.left &&
+				x <= r.right + HOVER_SLOP.right &&
+				y >= r.top - HOVER_SLOP.top &&
+				y <= r.bottom + HOVER_SLOP.bottom
+			) {
+				return candidate;
+			}
+		}
+		return next;
+	}
+
 	const onPointerOver = (event: PointerEvent) => {
 		// Over our own overlay (a drag handle, the toolbar): keep what's hovered, so its handle stays.
 		if (event.target === overlay.host || drag) return;
 		if (readonly || editing()?.contains(event.target as Node)) return;
-		hover(index.targetAt(event.target as Element));
+		hover(hoverTarget(index.targetAt(event.target as Element), event.clientX, event.clientY));
 	};
 	const onPointerLeave = () => hover(null);
 	const onClick = (event: MouseEvent) => {
