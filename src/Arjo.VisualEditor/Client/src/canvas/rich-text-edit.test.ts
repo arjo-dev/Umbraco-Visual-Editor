@@ -73,4 +73,19 @@ describe('RichTextEditState', () => {
 		expect(ended).to.equal(1);
 		host.remove();
 	});
+
+	it('asks the host to finish, keeping the changes', () => {
+		const { host, target } = richText('<div class="richtext" data-region><p class="rt">One</p></div>');
+		const sent: CanvasMessage[] = [];
+		const state = new RichTextEditState(
+			(m) => sent.push(m),
+			() => {},
+		);
+		state.finish(); // nothing being edited: nothing to finish
+		state.request(target);
+		state.setActive(ref, true);
+		state.finish();
+		expect(sent.slice(1)).to.deep.equal([{ type: 'inlineEditEnd', target: ref, cancelled: false }]);
+		host.remove();
+	});
 });

@@ -75,6 +75,11 @@ export class RichTextEditState {
 		return true;
 	}
 
+	/** Asks the host to finish editing, keeping the changes (e.g. a click on the page outside the editor). */
+	finish() {
+		if (this.#active) this.#send({ type: 'inlineEditEnd', target: this.#active.target.ref, cancelled: false });
+	}
+
 	/** The host started or ended editing. */
 	setActive(target: TargetRef, active: boolean) {
 		if (active) {

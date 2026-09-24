@@ -207,6 +207,11 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 				this.#inline.write(message.target, message.value);
 				break;
 			case 'inlineEditEnd':
+				// Rich text: the canvas asks to finish (a click on the page outside the editor).
+				if (this._richText && sameTarget(this._richText.target, message.target)) {
+					this.#endRichText(message.cancelled);
+					break;
+				}
 				this.#inline.end(message.target, message.cancelled);
 				// Renders wait while text is edited in place; catch up now.
 				this.#scheduleRender();

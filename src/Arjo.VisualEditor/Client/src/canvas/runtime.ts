@@ -100,7 +100,14 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 		// Clicks inside the text being edited place the caret.
 		if (editing()?.contains(event.target as Node)) return;
 		const target = index.targetAt(event.target as Element);
-		if (!target) return;
+		if (!target) {
+			// A click on the page outside rich text being edited finishes it (another target just selects that).
+			if (richText.active) {
+				event.preventDefault();
+				richText.finish();
+			}
+			return;
+		}
 		// Selecting, not following links or triggering the site's own click handlers.
 		event.preventDefault();
 		event.stopPropagation();

@@ -89,7 +89,7 @@ The message *set* is the initial one from #12.
 - **Rich text (#57, ADR 0004):**
   - The host runs the editor itself. It creates the same Tiptap editor as the Content tab and mounts it on the marked element in the frame; the toolbar floats over the page, above the text.
   - Edits are written to the workspace as they're made. Re-renders wait, as for inline text.
-  - Editing ends when something else is selected, or when Escape is pressed (cancel). The host then sends `richTextEditing` with `active: false` and renders the stored markup through the template again.
+  - Editing ends when something else is selected, when the page is clicked outside the editor (the canvas sends `inlineEditEnd`), or when Escape is pressed (cancel). The host then sends `richTextEditing` with `active: false` and renders the stored markup through the template again.
 - **Not used yet:** the block messages arrive with the issues listed above.
 
 Add new messages here and in `messages.ts` together, with tests.
