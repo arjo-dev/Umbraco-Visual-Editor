@@ -4,7 +4,8 @@
  * - Hover outlines and labels; click selects the innermost target; the breadcrumb (or Escape) selects parent blocks.
  * - Talks to the backoffice over the protocol (docs/protocol.md): ready, hover, select, rendered; render,
  *   setSelection, highlight, setReadonly.
- * - Inline editing of plain text properties (#20, inline-edit.ts): double-click, or Enter on the selection.
+ * - Inline editing of plain text properties (#20, inline-edit.ts): double-click, or Enter on the selection. Rich text
+ *   (#57, rich-text-edit.ts) the same way, with the backoffice's own editor mounted on the element.
  * - Live re-render (#18): a `render` message patches the newer page in (patch.ts) rather than reloading, then
  *   re-resolves the markers and keeps the selection, scroll position and focus.
  * Only active inside the visual editor (a nonce in the URL fragment); opening a render URL directly just shows the page.
@@ -12,6 +13,7 @@
 import { connectToHost, readNonce, type CanvasChannel, type HostMessage, type TargetRef } from '../protocol/index.js';
 import { readManifest, resolveMarkers } from './markers.js';
 import { InlineEditor, inlineEditableElement } from './inline-edit.js';
+import { RichTextEditState } from './rich-text-edit.js';
 import { guardNavigation } from './navigation.js';
 import { CanvasOverlay } from './overlay.js';
 import { fetchRender, patchDocument } from './patch.js';
@@ -31,6 +33,8 @@ export interface CanvasRuntime {
 	setHighlight(target: TargetRef | null): void;
 	/** Editing text in place (#20). */
 	readonly inline: InlineEditor;
+	/** Editing rich text in place (#57). */
+	readonly richText: RichTextEditState;
 	/** Patches a newer render (render-session URL) into the page. Resolves false if it was superseded or failed. */
 	render(url: string): Promise<boolean>;
 	destroy(): void;
@@ -53,16 +57,17 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 	let deferredRender: string | null = null;
 
 	const overlay = new CanvasOverlay(doc, { onBreadcrumb: (target) => select(target) });
-	const inline = new InlineEditor(
-		doc,
-		(message) => channel?.send(message),
-		() => {
-			if (!deferredRender) return;
-			const url = deferredRender;
-			deferredRender = null;
-			void render(url);
-		},
-	);
+	/** Editing ended: patch in any render that waited for it. */
+	const catchUp = () => {
+		if (!deferredRender) return;
+		const url = deferredRender;
+		deferredRender = null;
+		void render(url);
+	};
+	const inline = new InlineEditor(doc, (message) => channel?.send(message), catchUp);
+	const richText = new RichTextEditState((message) => channel?.send(message), catchUp);
+	/** Something is being edited in place: the element, whose events belong to the editor. */
+	const editing = () => inline.element ?? richText.element;
 
 	/** Asks to edit `target` in place; false when it isn't plain text shown as it is stored. */
 	function requestInlineEdit(target: CanvasTarget | null, from?: Node | null) {
@@ -86,31 +91,40 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 	}
 
 	const onPointerOver = (event: PointerEvent) => {
-		if (!readonly) hover(index.targetAt(event.target as Element));
+		if (readonly || editing()?.contains(event.target as Node)) return;
+		hover(index.targetAt(event.target as Element));
 	};
 	const onPointerLeave = () => hover(null);
 	const onClick = (event: MouseEvent) => {
 		if (readonly || event.button !== 0) return;
 		// Clicks inside the text being edited place the caret.
-		if (inline.element?.contains(event.target as Node)) return;
+		if (editing()?.contains(event.target as Node)) return;
 		const target = index.targetAt(event.target as Element);
-		if (!target) return;
+		if (!target) {
+			// A click on the page outside rich text being edited finishes it (another target just selects that).
+			if (richText.active) {
+				event.preventDefault();
+				richText.finish();
+			}
+			return;
+		}
 		// Selecting, not following links or triggering the site's own click handlers.
 		event.preventDefault();
 		event.stopPropagation();
 		select(target);
 	};
 	const onDoubleClick = (event: MouseEvent) => {
-		if (readonly || inline.active) return;
+		if (readonly || editing()) return;
 		const target = index.targetAt(event.target as Element);
-		if (!requestInlineEdit(target, event.target as Node)) return;
+		if (!requestInlineEdit(target, event.target as Node) && !richText.request(target)) return;
 		event.preventDefault();
 		event.stopPropagation();
 	};
 	const onKeyDown = (event: KeyboardEvent) => {
-		if (!selected || inline.active || readonly) return;
+		if (!selected || editing() || readonly) return;
 		if (event.key === 'Escape') select(index.ancestorsOf(selected)[0] ?? null);
-		else if (event.key === 'Enter' && requestInlineEdit(selected)) event.preventDefault();
+		else if (event.key === 'Enter' && (requestInlineEdit(selected) || richText.request(selected)))
+			event.preventDefault();
 	};
 
 	doc.addEventListener('pointerover', onPointerOver, true);
@@ -139,7 +153,7 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 
 	async function render(url: string): Promise<boolean> {
 		pending?.abort();
-		if (inline.active) {
+		if (editing()) {
 			// Patching would overwrite the text being typed; catch up when editing ends.
 			deferredRender = url;
 			return false;
@@ -153,7 +167,7 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 		}
 		if (controller.signal.aborted) return false; // A newer render took over; it answers instead.
 		pending = null;
-		if (inline.active) {
+		if (editing()) {
 			// Editing started while this was being fetched.
 			deferredRender = url;
 			return false;
@@ -215,6 +229,7 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 		},
 		render,
 		inline,
+		richText,
 		destroy() {
 			pending?.abort();
 			inline.destroy();
@@ -249,6 +264,10 @@ export function handleHostMessage(runtime: CanvasRuntime, message: HostMessage) 
 			break;
 		case 'beginInlineEdit':
 			runtime.inline.begin(message);
+			break;
+		case 'richTextEditing':
+			runtime.richText.setActive(message.target, message.active);
+			runtime.overlay.setEditing(message.active);
 			break;
 		// 'setDevice' is handled by the host (it sizes the frame).
 	}

@@ -9,15 +9,17 @@ import { viewInPath } from '../visual-mode/routes.js';
 import {
 	createHostChannel,
 	createNonce,
+	sameTarget,
 	withNonce,
 	type CanvasMessage,
 	type HostChannel,
 	type TargetRef,
 } from '../protocol/index.js';
 import { deviceFor, sizeFor, type VisualEditorDeviceAlias } from './devices.js';
-import { ArjoInlineEditController } from './inline-edit.controller.js';
+import { ArjoInlineEditController, type RichTextSession } from './inline-edit.controller.js';
 import { clampPanelWidth, PANEL_DEFAULT_WIDTH } from './panel-width.js';
 import { ArjoValidationController, type VisualEditorError } from './validation.controller.js';
+import '../rich-text/visual-editor-rich-text-editor.element.js';
 import type { ArjoVisualEditorSidePanelElement } from './visual-editor-side-panel.element.js';
 import './visual-editor-toolbar.element.js';
 import './visual-editor-side-panel.element.js';
@@ -53,6 +55,8 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 	@state() private _targets: TargetRef[] = [];
 	/** Validation errors for the variant being edited (#23). */
 	@state() private _errors: VisualEditorError[] = [];
+	/** Rich text being edited on the canvas (#57): its toolbar floats over the page, above the text. */
+	@state() private _richText?: RichTextSession & { mount: HTMLElement };
 	@state() private _selected: TargetRef | null = null;
 	/** Never saved: there's no draft to render yet (render sessions overlay it, ADR 0001). */
 	@state() private _isNew = false;
@@ -76,6 +80,8 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 	#visualMode?: ArjoVisualModeContext;
 	readonly #nonce = createNonce();
 	#channel?: HostChannel;
+	/** The canvas iframe, for laying the rich text toolbar over it. */
+	#frame?: HTMLIFrameElement;
 	/** Editing text in place on the canvas (#20). */
 	#inline = new ArjoInlineEditController(this, (message) => this.#channel?.send(message));
 	/** Validation messages, placed on the page (#23). */
@@ -137,6 +143,7 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 		// Leaving the view (another tab, another document, another section) restores the normal backoffice.
 		// Before super: that tears down this element's context consumers and controllers.
 		this.#visualMode?.setActive(false);
+		this.#endRichText(false);
 		clearTimeout(this.#timer);
 		this.#channel?.close();
 		this.#channel = undefined;
@@ -145,6 +152,7 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 
 	/** The canvas has a new iframe (first render, or after a message replaced it): bind the channel to it. */
 	#onFrameChanged(event: CustomEvent<HTMLIFrameElement>) {
+		this.#frame = event.detail;
 		this.#channel?.close();
 		this.#channel = createHostChannel({
 			iframe: event.detail,
@@ -153,6 +161,7 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 			onConnect: () => {
 				// A re-render is a fresh page: give it the current state again.
 				this.#inline.reset();
+				this._richText = undefined;
 				this.#channel?.send({ type: 'setSelection', target: this._selected });
 				this.#channel?.send({ type: 'setDevice', width: this.#deviceWidth });
 				this.#sendErrors();
@@ -191,20 +200,57 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 					if (!started && !this._panelOpen) this.#setPanelOpen(true);
 				});
 				break;
+			case 'richTextEditStart':
+				void this.#startRichText(message.target, message.mountId);
+				break;
 			case 'inlineEdit':
 				this.#inline.write(message.target, message.value);
 				break;
 			case 'inlineEditEnd':
+				// Rich text: the canvas asks to finish (a click on the page outside the editor).
+				if (this._richText && sameTarget(this._richText.target, message.target)) {
+					this.#endRichText(message.cancelled);
+					break;
+				}
 				this.#inline.end(message.target, message.cancelled);
 				// Renders wait while text is edited in place; catch up now.
 				this.#scheduleRender();
 				break;
 			case 'select':
+				// Selecting something else on the page finishes editing rich text.
+				if (this._richText && !sameTarget(this._richText.target, message.target)) this.#endRichText(false);
 				this._selected = message.target;
 				this.#channel?.send({ type: 'setSelection', target: message.target });
 				if (message.target && !this._panelOpen) this.#setPanelOpen(true);
 				break;
 		}
+	}
+
+	/** Starts editing rich text on the canvas (#57): the editor mounts on the element the canvas marked. */
+	async #startRichText(target: TargetRef, mountId: string) {
+		const session = await this.#inline.startRichText(target, this.#culture);
+		const frameDoc = this.shadowRoot?.querySelector('arjo-visual-editor-canvas')?.frame?.contentDocument;
+		const mount = frameDoc?.querySelector<HTMLElement>(`[data-uve-rte="${CSS.escape(mountId)}"]`);
+		if (!session || !mount) {
+			if (session) this.#inline.end(target, false);
+			// Not editable in place (blocks in it, permissions, …): the side panel is the way to edit it.
+			if (!this._panelOpen) this.#setPanelOpen(true);
+			return;
+		}
+		this._selected = target;
+		this._richText = { ...session, mount };
+		this.#channel?.send({ type: 'richTextEditing', target, active: true });
+	}
+
+	/** Finishes editing rich text; the edits were written as they were made, a cancelled edit is put back. */
+	#endRichText(cancelled: boolean) {
+		const session = this._richText;
+		if (!session) return;
+		this._richText = undefined;
+		this.#inline.end(session.target, cancelled);
+		this.#channel?.send({ type: 'richTextEditing', target: session.target, active: false });
+		// Render the stored markup through the template again (links, media, the markers).
+		this.#scheduleRender();
 	}
 
 	#onErrors(errors: VisualEditorError[]) {
@@ -231,6 +277,7 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 	 * only that is, or the property under Page settings when it isn't on the page at all.
 	 */
 	async #showError(error: VisualEditorError) {
+		this.#endRichText(false);
 		if (!this._panelOpen) this.#setPanelOpen(true);
 		await this.updateComplete;
 		const panel = this.shadowRoot?.querySelector<ArjoVisualEditorSidePanelElement>('arjo-visual-editor-side-panel');
@@ -375,6 +422,20 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 		this._status = 'idle';
 	}
 
+	/** The rich text editor being used on the canvas: a layer over it with the toolbar above the text (#57). */
+	#renderRichTextEditor() {
+		const session = this._richText;
+		if (!session || !this.#frame) return nothing;
+		return html`<arjo-visual-editor-rich-text-editor
+			.mount=${session.mount}
+			.frame=${this.#frame}
+			.markup=${session.markup}
+			.configuration=${session.configuration}
+			@change=${(e: CustomEvent<string>) => this.#inline.writeRichText(session.target, e.detail)}
+			@cancel=${() => this.#endRichText(true)}
+		></arjo-visual-editor-rich-text-editor>`;
+	}
+
 	#renderCanvas() {
 		if (this._isNew) {
 			return html`<uui-box class="message"><p>You must first save your page to use the visual editor.</p></uui-box>`;
@@ -408,7 +469,7 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 				@toggle-panel=${() => this.#setPanelOpen(!this._panelOpen)}
 			></arjo-visual-editor-toolbar>
 			<div class="body ${this._resizing ? 'resizing' : ''}">
-				<div class="canvas">${this.#renderCanvas()}</div>
+				<div class="canvas">${this.#renderCanvas()}${this.#renderRichTextEditor()}</div>
 				${
 					this._panelOpen
 						? html`<div
@@ -430,6 +491,7 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 									.visibleAliases=${this._visibleAliases}
 									.errors=${this._errors}
 									.targets=${this._targets}
+									.richText=${this._richText}
 									@show-error=${(e: CustomEvent<VisualEditorError>) => this.#showError(e.detail)}
 									.contentHref=${this.#documentBase ? `${this.#documentBase}/view/content` : undefined}
 								></arjo-visual-editor-side-panel>`
@@ -456,6 +518,8 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 		}
 
 		.canvas {
+			/* The rich text toolbar layer is positioned over it. */
+			position: relative;
 			flex: 1;
 			min-width: 0;
 			display: flex;
