@@ -270,7 +270,9 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 	async #onInsert(at: BlockPosition) {
 		const picker = this.shadowRoot?.querySelector('arjo-visual-editor-block-picker');
 		if (!picker) return;
-		const key = await this.#blocks.insert(at, this.#culture, (blocks, groups) => picker.pick(blocks, groups));
+		const key = await this.#blocks.insert(at, this.#culture, (blocks, groups, clipboardFilter) =>
+			picker.pick(blocks, groups, clipboardFilter),
+		);
 		if (!key) return;
 		this._selected = this.#blockRef(key);
 		this._blockTab = 'content';

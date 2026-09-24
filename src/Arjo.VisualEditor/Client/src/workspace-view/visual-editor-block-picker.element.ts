@@ -43,8 +43,8 @@ export class ArjoVisualEditorBlockPickerElement extends UmbLitElement {
 	 */
 	async pick(
 		blocks: CatalogueBlockType[],
-		blockGroups: CatalogueBlockGroup[] = [],
-		clipboardFilter: (entry: UmbClipboardEntryDetailModel) => Promise<boolean> = async () => false,
+		blockGroups: CatalogueBlockGroup[],
+		clipboardFilter: (entry: UmbClipboardEntryDetailModel) => Promise<boolean>,
 	): Promise<{ create: string } | { paste: string[] } | null> {
 		try {
 			const value = await umbOpenModal(this, UMB_BLOCK_CATALOGUE_MODAL, {
