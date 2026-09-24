@@ -3,7 +3,7 @@
  * under a point, and a target's parent blocks (for the breadcrumb). Built from resolved markers (markers.ts).
  */
 import { sameTarget, type TargetRef } from '../protocol/index.js';
-import type { MarkerInfo, ResolvedTarget } from './markers.js';
+import type { BlockPlacement, MarkerInfo, ResolvedTarget } from './markers.js';
 
 export interface CanvasTarget {
 	ref: TargetRef;
@@ -11,6 +11,8 @@ export interface CanvasTarget {
 	elements: Element[];
 	/** Property editor alias (e.g. Umbraco.TextBox); null for blocks. */
 	editorAlias: string | null;
+	/** Blocks: where the block sits in the document (#24); null when the server couldn't place it. */
+	block: BlockPlacement | null;
 }
 
 export function toTargetRef(marker: MarkerInfo): TargetRef {
@@ -38,7 +40,7 @@ export class TargetIndex {
 			const ref = toTargetRef(marker);
 			let target = this.targets.find((t) => sameTarget(t.ref, ref));
 			if (!target) {
-				target = { ref, elements: [], editorAlias: marker.editorAlias ?? null };
+				target = { ref, elements: [], editorAlias: marker.editorAlias ?? null, block: marker.block ?? null };
 				this.targets.push(target);
 			}
 			for (const el of elements) {
