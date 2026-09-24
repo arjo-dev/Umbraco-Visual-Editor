@@ -15,6 +15,7 @@ import {
 	type TargetRef,
 } from '../protocol/index.js';
 import { deviceFor, sizeFor, type VisualEditorDeviceAlias } from './devices.js';
+import { recallView, rememberView } from './view-memory.js';
 import './visual-editor-toolbar.element.js';
 import './visual-editor-side-panel.element.js';
 import './visual-editor-canvas.element.js';
@@ -50,6 +51,8 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 	@state() private _treeVisible = false;
 	@state() private _panelOpen = readPanelOpen();
 	@state() private _scale = 1;
+	/** Scroll position to open the page at, when coming back to a document. */
+	@state() private _initialScrollY = 0;
 
 	#documentKey?: string;
 	#culture: string | null = null;
@@ -64,6 +67,12 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 	#canPatch = false;
 	/** Render URL sent to the canvas, awaiting its `rendered` answer. */
 	#pendingRender?: string;
+	/** The latest render request sent (JSON): unchanged values don't render again. */
+	#requested?: string;
+	/** The request behind the render on show, and its URL (without the nonce). */
+	#shown?: { request: string; url: string };
+	/** Whether this view has looked for what it was showing last time (view-memory.ts). */
+	#recalled = false;
 	/** The document URL this view was opened on; the "Standard editor" link goes to its Content tab. */
 	#documentBase?: string;
 
@@ -117,6 +126,14 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 		// Before super: that tears down this element's context consumers and controllers.
 		this.#visualMode?.setActive(false);
 		clearTimeout(this.#timer);
+		// Switching to another view destroys this one; remember the page, selection and scroll for coming back.
+		if (this.#documentKey && this.#shown) {
+			rememberView(this.#documentKey, this.#culture, {
+				...this.#shown,
+				selected: this._selected,
+				scrollY: this.shadowRoot?.querySelector('arjo-visual-editor-canvas')?.pageScrollY ?? 0,
+			});
+		}
 		this.#channel?.close();
 		this.#channel = undefined;
 		super.disconnectedCallback();
@@ -204,24 +221,46 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 	async #render() {
 		if (this._isNew || !this.#documentKey || !this.#values) return;
 
+		const body = {
+			documentKey: this.#documentKey,
+			culture: this.#culture,
+			segment: null,
+			values: this.#values.map((v) => ({ alias: v.alias, culture: v.culture, segment: v.segment, value: v.value })),
+			variants: this.#variantNames,
+		};
+		const request = JSON.stringify(body);
+
+		if (!this.#recalled) {
+			this.#recalled = true;
+			const last = recallView(this.#documentKey, this.#culture);
+			if (last) {
+				this._selected = last.selected;
+				this._initialScrollY = last.scrollY;
+				// Nothing changed while away: show the same render again, without rendering it again.
+				if (last.reusable && last.request === request) {
+					this.#requested = request;
+					this.#shown = { request, url: last.url };
+					this._latestUrl = withNonce(last.url, this.#nonce);
+					this.#load(this._latestUrl);
+					return;
+				}
+			}
+		}
+		// The workspace re-emitted the same values (e.g. after a save): nothing new to show.
+		if (request === this.#requested) return;
+		this.#requested = request;
+
 		const requestId = ++this.#requestId;
 		this._status = 'rendering';
 
-		const { data, response } = await postRenderSession({
-			body: {
-				documentKey: this.#documentKey,
-				culture: this.#culture,
-				segment: null,
-				values: this.#values.map((v) => ({ alias: v.alias, culture: v.culture, segment: v.segment, value: v.value })),
-				variants: this.#variantNames,
-			},
-		});
+		const { data, response } = await postRenderSession({ body });
 
 		// A newer render started while this one was in flight.
 		if (requestId !== this.#requestId) return;
 
 		if (!data) {
 			this._status = 'error';
+			this.#requested = undefined; // try again on the next change
 			this.#canPatch = false; // the canvas is replaced by the message
 			this._error =
 				response?.status === 404
@@ -230,6 +269,7 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 			return;
 		}
 
+		this.#shown = { request, url: data.url };
 		this._latestUrl = withNonce(data.url, this.#nonce);
 		// Patch the newer render into the page rather than reloading it: scroll, focus and selection survive.
 		if (this.#canPatch && this.#channel?.send({ type: 'render', url: data.url })) {
@@ -261,6 +301,7 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 		return html`<arjo-visual-editor-canvas
 			.url=${this._url}
 			.latestUrl=${this._latestUrl}
+			.initialScrollY=${this._initialScrollY}
 			.deviceSize=${this.#deviceSize}
 			@frame-changed=${this.#onFrameChanged}
 			@page-loaded=${this.#onPageLoaded}
