@@ -79,6 +79,8 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 
 	#documentKey?: string;
 	#culture: string | null = null;
+	/** The segment being edited, when segments are enabled (#30). */
+	#segment: string | null = null;
 	#values?: Array<UmbElementValueModel>;
 	#variantNames: Array<{ culture: string | null; segment: string | null; name: string }> = [];
 	#timer?: ReturnType<typeof setTimeout>;
@@ -115,6 +117,7 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 
 		this.consumeContext(UMB_PROPERTY_DATASET_CONTEXT, (dataset) => {
 			this.#culture = dataset?.getVariantId().culture ?? null;
+			this.#segment = dataset?.getVariantId().segment ?? null;
 			this.#validation.setCulture(this.#culture);
 			this.#scheduleRender();
 		});
@@ -206,7 +209,7 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 				else this.#load(withNonce(message.url, this.#nonce));
 				break;
 			case 'inlineEditStart':
-				void this.#inline.start(message.target, message.text, this.#culture).then((started) => {
+				void this.#inline.start(message.target, message.text, this.#culture, this.#segment).then((started) => {
 					// Not plain text shown as stored (or not editable): the side panel is the way to edit it.
 					if (!started && !this._panelOpen) this.#setPanelOpen(true);
 				});
@@ -304,7 +307,7 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 
 	/** Starts editing rich text on the canvas (#57): the editor mounts on the element the canvas marked. */
 	async #startRichText(target: TargetRef, mountId: string) {
-		const session = await this.#inline.startRichText(target, this.#culture);
+		const session = await this.#inline.startRichText(target, this.#culture, this.#segment);
 		const frameDoc = this.shadowRoot?.querySelector('arjo-visual-editor-canvas')?.frame?.contentDocument;
 		const mount = frameDoc?.querySelector<HTMLElement>(`[data-uve-rte="${CSS.escape(mountId)}"]`);
 		if (!session || !mount) {
@@ -458,7 +461,7 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 			body: {
 				documentKey: this.#documentKey,
 				culture: this.#culture,
-				segment: null,
+				segment: this.#segment,
 				values: this.#values.map((v) => ({ alias: v.alias, culture: v.culture, segment: v.segment, value: v.value })),
 				variants: this.#variantNames,
 			},
@@ -507,6 +510,7 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 			.frame=${this.#frame}
 			.markup=${session.markup}
 			.configuration=${session.configuration}
+			?shared=${session.shared}
 			@change=${(e: CustomEvent<string>) => this.#inline.writeRichText(session.target, e.detail)}
 			@cancel=${() => this.#endRichText(true)}
 		></arjo-visual-editor-rich-text-editor>`;

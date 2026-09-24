@@ -78,6 +78,11 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 
 	const overlay = new CanvasOverlay(doc, {
 		onBreadcrumb: (target) => select(target),
+		// A page property that doesn't vary, on a page shown in one of its languages: editing it changes them all (#30).
+		note: (target) =>
+			manifest?.culture && target.ref.kind === 'Property' && !target.ref.ownerIsBlock && target.ref.culture === null
+				? 'Shared across languages'
+				: null,
 		blockTools: (target) => blockTools(target),
 		onBlockTool: (target, action) => channel?.send({ type: 'blockAction', blockKey: target.ref.ownerKey, action }),
 		draggable: (target) =>
