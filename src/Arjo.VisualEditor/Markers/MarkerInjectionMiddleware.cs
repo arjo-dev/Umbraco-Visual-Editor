@@ -40,7 +40,8 @@ internal sealed class MarkerInjectionMiddleware(RequestDelegate next)
 
         EditModeRequest? editMode = EditModeRequest.Get(context);
         var isHtml = context.Response.ContentType?.StartsWith("text/html", StringComparison.OrdinalIgnoreCase) == true;
-        if (editMode is null || !isHtml)
+        // Only successful renders get the manifest: its absence is how the canvas knows the template failed (#16).
+        if (editMode is null || !isHtml || context.Response.StatusCode != StatusCodes.Status200OK)
         {
             buffer.Position = 0;
             await buffer.CopyToAsync(original);

@@ -5,7 +5,7 @@ import { ARJO_VISUAL_MODE_CONTEXT } from './visual-mode.context.js';
 
 export const ARJO_VISUAL_MODE_INACTIVE_CONDITION_ALIAS = 'Arjo.VisualEditor.Condition.VisualModeInactive';
 
-/** Permits an extension only while the visual editor is *not* showing. */
+/** Permits an extension unless the visual editor is showing with the content tree hidden (the default). */
 export class ArjoVisualModeInactiveCondition
 	extends UmbConditionBase<UmbConditionConfigBase>
 	implements UmbExtensionCondition
@@ -18,7 +18,7 @@ export class ArjoVisualModeInactiveCondition
 		// Permit until told otherwise, so chrome doesn't flicker away while the context resolves.
 		this.permitted = true;
 		this.consumeContext(ARJO_VISUAL_MODE_CONTEXT, (context) => {
-			this.observe(context?.active, (active) => (this.permitted = !active));
+			this.observe(context?.hideSidebar, (hide) => (this.permitted = !hide));
 		});
 	}
 }
