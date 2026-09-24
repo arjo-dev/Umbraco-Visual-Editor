@@ -7,6 +7,30 @@
 
 export type MarkerKind = 'Property' | 'Block';
 
+/** Where a block sits in the document (#24; Markers/BlockLayout.cs), for the block tools. */
+export interface BlockPlacement {
+	/** Its layout: Umbraco.BlockList, Umbraco.BlockGrid, Umbraco.SingleBlock or Umbraco.RichText. */
+	editorAlias: string;
+	/** The block editor property holding it, and that value's culture. */
+	propertyAlias: string;
+	propertyCulture: string | null;
+	/** Whose property that is: the document key, or a block's content key. */
+	ownerKey: string;
+	ownerIsBlock: boolean;
+	/** Its position among its siblings (in the layout, or in its grid area). */
+	index: number;
+	/** Block Grid: its area (null at the grid's root) and the block whose area that is. */
+	areaKey: string | null;
+	areaOwnerKey: string | null;
+	columnSpan: number | null;
+	rowSpan: number | null;
+	settingsKey: string | null;
+	contentTypeKey: string | null;
+	contentTypeAlias: string | null;
+	/** Content keys of the blocks it is inside, outermost first. */
+	path: string[];
+}
+
 export interface MarkerInfo {
 	id: number;
 	kind: MarkerKind;
@@ -20,6 +44,8 @@ export interface MarkerInfo {
 	label?: string | null;
 	/** For properties inside blocks: the block content type name. */
 	ownerLabel?: string | null;
+	/** Block markers: where the block sits in the document (#24). */
+	block?: BlockPlacement | null;
 }
 
 export interface MarkerManifest {

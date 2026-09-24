@@ -38,7 +38,20 @@ The server emits three kinds of marker, only during render-session requests. It 
 </script>
 ```
 
-Block markers carry only the block's **content key**, and properties inside blocks carry the block key as `ownerKey`. The backoffice finds the block by key in the document's block values, so the server doesn't need to know the path (property, then area, then nesting).
+Block markers are identified by the block's **content key**, and properties inside blocks carry the block key as `ownerKey`. The backoffice finds the block by key in the document's block values.
+
+**Block placement (#24).** Block markers also carry `block`, which says where the block sits. The block tools (moving, inserting, drag and drop) need this. `Markers/BlockLayout.cs` reads it from the render session's raw block values rather than from the partials, because a block partial only sees its own item. The site's partials are unchanged.
+
+```json
+"block": {"editorAlias":"Umbraco.BlockGrid","propertyAlias":"grid","propertyCulture":null,
+          "ownerKey":"<document or block key>","ownerIsBlock":false,"index":0,
+          "areaKey":"<area key>","areaOwnerKey":"<block whose area it is>","columnSpan":6,"rowSpan":1,
+          "settingsKey":null,"contentTypeKey":"…","contentTypeAlias":"imageRow","path":["<outer block key>"]}
+```
+
+- `ownerKey` is whose block editor property it is: the document, or a block for nested block editors.
+- `path` lists every block it is inside, including the block whose grid area holds it.
+- Rich text blocks are placed too, with `editorAlias: "Umbraco.RichText"`.
 
 Render-session responses also get `Cache-Control: no-store` and `X-Robots-Tag: noindex`.
 

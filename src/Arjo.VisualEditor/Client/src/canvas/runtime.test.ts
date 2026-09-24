@@ -40,6 +40,22 @@ const manifest = {
 			culture: null,
 			editorAlias: null,
 			label: 'Image Row',
+			block: {
+				editorAlias: 'Umbraco.BlockList',
+				propertyAlias: 'items',
+				propertyCulture: null,
+				ownerKey: 'outer',
+				ownerIsBlock: true,
+				index: 0,
+				areaKey: null,
+				areaOwnerKey: null,
+				columnSpan: null,
+				rowSpan: null,
+				settingsKey: null,
+				contentTypeKey: 'image-row-type',
+				contentTypeAlias: 'imageRow',
+				path: ['outer'],
+			},
 		},
 		{
 			id: 4,
@@ -205,6 +221,18 @@ describe('canvas runtime', () => {
 		const rect = doc.getElementById('title')!.getBoundingClientRect();
 		expect(Math.round(parseFloat(box.style.top))).to.equal(Math.round(rect.top));
 		expect(Math.round(parseFloat(box.style.width))).to.equal(Math.round(rect.width));
+	});
+
+	it('gives block targets their placement in the document', () => {
+		const inner = runtime.index.targets.find((t) => t.ref.ownerKey === 'inner' && t.ref.kind === 'Block')!;
+		expect(inner.block).to.include({
+			propertyAlias: 'items',
+			ownerKey: 'outer',
+			index: 0,
+			contentTypeAlias: 'imageRow',
+		});
+		const outer = runtime.index.targets.find((t) => t.ref.ownerKey === 'outer')!;
+		expect(outer.block).to.equal(null);
 	});
 
 	it('keeps the overlay out of the page: its own element, in the top layer', () => {

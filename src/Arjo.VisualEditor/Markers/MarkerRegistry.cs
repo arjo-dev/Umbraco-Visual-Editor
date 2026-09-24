@@ -16,6 +16,7 @@ public enum MarkerKind
 /// What a marker id points at. <see cref="ContentTypeKey"/> is the owner's (page or block element) content type;
 /// <see cref="Label"/> and <see cref="OwnerLabel"/> are display names filled in from it when the manifest is written. <see cref="OwnerKey"/> is the document key, or a block's content key when
 /// <see cref="OwnerIsBlock"/> is set; the backoffice finds the block by content key in the document's block values.
+/// Block markers also carry the block's <see cref="Block"/> placement (#24), added when the manifest is written.
 /// </summary>
 public sealed record MarkerInfo(
     int Id,
@@ -27,7 +28,8 @@ public sealed record MarkerInfo(
     string? EditorAlias,
     Guid? ContentTypeKey = null,
     string? Label = null,
-    string? OwnerLabel = null);
+    string? OwnerLabel = null,
+    BlockPlacement? Block = null);
 
 /// <summary>Assigns small integer ids to marker targets during one render; each target gets one id.</summary>
 public sealed class MarkerRegistry

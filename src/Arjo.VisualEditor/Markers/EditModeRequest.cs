@@ -15,6 +15,12 @@ public sealed class EditModeRequest(RenderSession session)
 
     public MarkerRegistry Markers { get; } = new();
 
+    private IReadOnlyDictionary<Guid, BlockPlacement>? _blockPlacements;
+
+    /// <summary>Where each block of the edited document sits (#24), by content key; read from the session's values.</summary>
+    public IReadOnlyDictionary<Guid, BlockPlacement> BlockPlacements
+        => _blockPlacements ??= BlockLayout.Collect(Session.Values, Session.DocumentKey, Session.Culture);
+
     /// <summary>
     /// Content and settings keys of every block in the edited document's values, including nested blocks and
     /// grid areas. Only these are marked: other pages' blocks (e.g. a footer rendering the home page's blocks) aren't.

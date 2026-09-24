@@ -12,7 +12,12 @@ function richText(html: string): { host: HTMLElement; target: CanvasTarget } {
 	const region = host.querySelector('[data-region]') ?? host;
 	return {
 		host,
-		target: { ref, elements: [...region.querySelectorAll(':scope > .rt')], editorAlias: 'Umbraco.RichText' },
+		target: {
+			ref,
+			elements: [...region.querySelectorAll(':scope > .rt')],
+			editorAlias: 'Umbraco.RichText',
+			block: null,
+		},
 	};
 }
 
