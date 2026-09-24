@@ -5,6 +5,7 @@ import { UMB_PROPERTY_DATASET_CONTEXT } from '@umbraco-cms/backoffice/property';
 import type { UmbElementValueModel } from '@umbraco-cms/backoffice/content';
 import { postRenderSession } from '../api/index.js';
 import { ARJO_VISUAL_MODE_CONTEXT, type ArjoVisualModeContext } from '../visual-mode/visual-mode.context.js';
+import { viewInPath } from '../visual-mode/routes.js';
 import {
 	createHostChannel,
 	createNonce,
@@ -31,6 +32,8 @@ export class ArjoVisualPreviewWorkspaceViewElement extends UmbLitElement {
 	@state() private _connected = false;
 	@state() private _targetCount?: number;
 	@state() private _selected: TargetRef | null = null;
+	/** Never saved: there's no draft to render yet (render sessions overlay it, ADR 0001). */
+	@state() private _isNew = false;
 
 	#documentKey?: string;
 	#culture: string | null = null;
@@ -42,6 +45,8 @@ export class ArjoVisualPreviewWorkspaceViewElement extends UmbLitElement {
 	#visualMode?: ArjoVisualModeContext;
 	readonly #nonce = createNonce();
 	#channel?: HostChannel;
+	/** The document URL this view was opened on, to tell "switched tab" from "left the document". */
+	#documentBase?: string;
 
 	constructor() {
 		super();
@@ -61,6 +66,10 @@ export class ArjoVisualPreviewWorkspaceViewElement extends UmbLitElement {
 
 		this.consumeContext(UMB_DOCUMENT_WORKSPACE_CONTEXT, (workspace) => {
 			if (!workspace) return;
+			this.observe(workspace.isNew, (isNew) => {
+				this._isNew = isNew === true;
+				this.#scheduleRender();
+			});
 			this.observe(workspace.unique, (unique) => {
 				this.#documentKey = unique ?? undefined;
 				this.#scheduleRender();
@@ -80,6 +89,7 @@ export class ArjoVisualPreviewWorkspaceViewElement extends UmbLitElement {
 	override connectedCallback() {
 		super.connectedCallback();
 		this.#visualMode?.setActive(true);
+		this.#documentBase = viewInPath(location.pathname)?.base;
 	}
 
 	override disconnectedCallback() {
@@ -128,7 +138,7 @@ export class ArjoVisualPreviewWorkspaceViewElement extends UmbLitElement {
 	}
 
 	async #render() {
-		if (!this.#documentKey || !this.#values) return;
+		if (this._isNew || !this.#documentKey || !this.#values) return;
 
 		const requestId = ++this.#requestId;
 		const started = performance.now();
@@ -181,6 +191,14 @@ export class ArjoVisualPreviewWorkspaceViewElement extends UmbLitElement {
 	override render() {
 		return html`
 			<div class="bar">
+				<uui-button
+					look="outline"
+					compact
+					label="Standard editor"
+					href=${this.#documentBase ? `${this.#documentBase}/view/content` : nothing}
+				>
+					<uui-icon name="icon-arrow-left"></uui-icon> Standard editor
+				</uui-button>
 				<uui-tag look="secondary">Visual editor prototype · unsaved values</uui-tag>
 				${this.#culture ? html`<uui-tag look="outline">${this.#culture}</uui-tag>` : nothing}
 				${this._status === 'rendering' ? html`<uui-loader-circle></uui-loader-circle>` : nothing}
@@ -191,8 +209,13 @@ export class ArjoVisualPreviewWorkspaceViewElement extends UmbLitElement {
 				${this._selected ? html`<uui-tag look="primary">Selected: ${this.#describe(this._selected)}</uui-tag>` : nothing}
 				${this._url ? html`<a href=${this._url} target="_blank" rel="noopener">Open in new tab</a>` : nothing}
 			</div>
+			${
+				this._isNew
+					? html`<uui-box class="notice"><p>You must first save your page to use the visual editor.</p></uui-box>`
+					: nothing
+			}
 			${this._status === 'error' ? html`<uui-box><p class="error">${this._error}</p></uui-box>` : nothing}
-			${this._url ? html`<iframe src=${this._url} title="Visual preview" @load=${this.#onLoad}></iframe>` : nothing}
+			${this._url && !this._isNew ? html`<iframe src=${this._url} title="Visual preview" @load=${this.#onLoad}></iframe>` : nothing}
 		`;
 	}
 
@@ -224,6 +247,10 @@ export class ArjoVisualPreviewWorkspaceViewElement extends UmbLitElement {
 			border: 1px solid var(--uui-color-border);
 			border-radius: var(--uui-border-radius);
 			background: white;
+		}
+
+		.notice p {
+			margin: 0;
 		}
 
 		.error {
