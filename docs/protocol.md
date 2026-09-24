@@ -27,7 +27,8 @@ iframe.contentWindow.postMessage(          ───────►  check: even
 
 - **Why the nonce is in the fragment:** fragments are never sent to the server, so the nonce doesn't show up in server logs or `Referer` headers.
 - **Why a private port:** the site's own scripts run in the same iframe window, so they could `postMessage` to the parent. They never receive the port, so after the handshake they can't pose as the canvas.
-- **Every page load reconnects.** Each re-render is a new page in the iframe, so the handshake runs again and replaces the port. The host's `onConnect` should resend any state the canvas needs, such as the selection, the device width and read-only mode.
+- **Every page load reconnects.** When the frame loads a page, the handshake runs again and replaces the port. The host's `onConnect` should resend any state the canvas needs, such as the selection, the device width and read-only mode.
+- **Re-renders are patched in, not loaded (#18).** Once a page has loaded normally, the host sends each newer render as `render`. The canvas fetches it, morphs it into the page (idiomorph) and answers `ready` then `rendered`. The port, selection, scroll position and focus all survive. If the canvas answers `rendered` with `ok: false` (the new render has no markers, e.g. the template threw), the host loads that URL into the frame instead.
 - **Messages are validated at runtime** on both sides (`parseCanvasMessage` / `parseHostMessage`). Unknown types and malformed payloads are dropped and reported through `onInvalid`, never delivered.
 - **Default origin:** render sessions are same-origin with the backoffice (ADR 0001), so both sides default to `location.origin`.
 
@@ -55,6 +56,7 @@ Block positions use `{ ownerKey, propertyAlias, areaKey | null, index }`.
 | Type | Payload | Sent when |
 |---|---|---|
 | `ready` | `documentKey`, `culture`, `targets: TargetRef[]` | Markers resolved and connected (after every render) |
+| `rendered` | `url`, `ok: boolean` | A `render` was patched in (`ok`), or couldn't be. A render that a newer one overtook gets no answer. |
 | `hover` | `target \| null` | The pointer enters or leaves a target (#17) |
 | `select` | `target \| null` | A target is clicked, or the selection is cleared |
 | `inlineEdit` | `target`, `value: string` | Inline text edited (#20) |
@@ -66,7 +68,7 @@ Block positions use `{ ownerKey, propertyAlias, areaKey | null, index }`.
 
 | Type | Payload | Meaning |
 |---|---|---|
-| `render` | `url` | Load a new render-session URL. For when the canvas navigates itself instead of the host setting `src`, e.g. DOM morphing in #18. |
+| `render` | `url` | Patch in a newer render-session page (#18); answered by `rendered` |
 | `highlight` | `target \| null` | Emphasise a target, e.g. while hovering its field in the side panel |
 | `setSelection` | `target \| null` | The selected target (the host is the source of truth) |
 | `setReadonly` | `readonly: boolean` | Turn editing affordances off or on (#31) |
@@ -75,8 +77,8 @@ Block positions use `{ ownerKey, propertyAlias, areaKey | null, index }`.
 ## Status
 
 The message *set* is the initial one from #12.
-- **The canvas runtime** (`canvas/runtime.ts`, served as `canvas-runtime.js`, #17) sends `ready`, `hover` and `select`, and handles `setSelection`, `highlight` and `setReadonly`.
-- **The Visual editor view** handles `ready` and `select`, and sends `setSelection` and `setDevice`.
-- **Not used yet:** `inlineEdit`, the block messages and `render` arrive with the issues listed above.
+- **The canvas runtime** (`canvas/runtime.ts`, served as `canvas-runtime.js`, #17) sends `ready`, `rendered`, `hover` and `select`, and handles `render`, `setSelection`, `highlight` and `setReadonly`.
+- **The Visual editor view** handles `ready`, `rendered` and `select`, and sends `render`, `setSelection` and `setDevice`.
+- **Not used yet:** `inlineEdit` and the block messages arrive with the issues listed above.
 
 Add new messages here and in `messages.ts` together, with tests.

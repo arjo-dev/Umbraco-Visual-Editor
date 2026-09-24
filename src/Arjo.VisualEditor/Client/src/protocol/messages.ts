@@ -36,6 +36,8 @@ export interface BlockPosition {
 
 export type CanvasMessage =
 	| { type: 'ready'; documentKey: string; culture: string | null; targets: TargetRef[] }
+	/** Outcome of a `render` message: patched in (`ok`), or it couldn't be and the host should reload the frame. */
+	| { type: 'rendered'; url: string; ok: boolean }
 	| { type: 'hover'; target: TargetRef | null }
 	| { type: 'select'; target: TargetRef | null }
 	| { type: 'inlineEdit'; target: TargetRef; value: string }
@@ -46,7 +48,7 @@ export type CanvasMessage =
 // ---- host -> canvas ----
 
 export type HostMessage =
-	/** Load a new render (render-session URL, ADR 0001). */
+	/** Show a newer render (render-session URL, ADR 0001): the canvas patches it in and answers with `rendered`. */
 	| { type: 'render'; url: string }
 	| { type: 'highlight'; target: TargetRef | null }
 	| { type: 'setSelection'; target: TargetRef | null }
@@ -91,6 +93,7 @@ export function isBlockPosition(v: unknown): v is BlockPosition {
 const canvasValidators: Record<CanvasMessageType, (m: Obj) => boolean> = {
 	ready: (m) =>
 		isStr(m.documentKey) && isNullableStr(m.culture) && Array.isArray(m.targets) && m.targets.every(isTargetRef),
+	rendered: (m) => isStr(m.url) && typeof m.ok === 'boolean',
 	hover: (m) => isNullableTarget(m.target),
 	select: (m) => isNullableTarget(m.target),
 	inlineEdit: (m) => isTargetRef(m.target) && isStr(m.value),

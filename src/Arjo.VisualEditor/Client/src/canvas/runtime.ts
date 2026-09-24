@@ -2,36 +2,46 @@
  * The canvas runtime (#17): injected into render-session pages (MarkerInjectionMiddleware), framework-free.
  * - Resolves the edit-mode markers (ADR 0002) into selectable targets.
  * - Hover outlines and labels; click selects the innermost target; the breadcrumb (or Escape) selects parent blocks.
- * - Talks to the backoffice over the protocol (docs/protocol.md): ready, hover, select; setSelection, highlight,
- *   setReadonly.
+ * - Talks to the backoffice over the protocol (docs/protocol.md): ready, hover, select, rendered; render,
+ *   setSelection, highlight, setReadonly.
+ * - Live re-render (#18): a `render` message patches the newer page in (patch.ts) rather than reloading, then
+ *   re-resolves the markers and keeps the selection, scroll position and focus.
  * Only active inside the visual editor (a nonce in the URL fragment); opening a render URL directly just shows the page.
  */
-import { connectToHost, readNonce, type CanvasChannel, type HostMessage } from '../protocol/index.js';
+import { connectToHost, readNonce, type CanvasChannel, type HostMessage, type TargetRef } from '../protocol/index.js';
 import { readManifest, resolveMarkers } from './markers.js';
 import { guardNavigation } from './navigation.js';
 import { CanvasOverlay } from './overlay.js';
+import { fetchRender, patchDocument } from './patch.js';
 import { TargetIndex, type CanvasTarget } from './targets.js';
 
 export interface CanvasRuntime {
-	index: TargetIndex;
+	/** Rebuilt after every live re-render. */
+	readonly index: TargetIndex;
 	overlay: CanvasOverlay;
 	select(target: CanvasTarget | null): void;
 	/** Show a selection made by the host, without reporting it back. */
 	showSelection(target: CanvasTarget | null): void;
 	/** Read-only (e.g. no Update permission, #31): no hover or selection from the page. */
 	setReadonly(readonly: boolean): void;
+	setHighlight(target: TargetRef | null): void;
+	/** Patches a newer render (render-session URL) into the page. Resolves false if it was superseded or failed. */
+	render(url: string): Promise<boolean>;
 	destroy(): void;
 }
 
 /** Starts the runtime against `doc` and `channel`. Exported for tests; the page entry point is `start()` below. */
 export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'> | null): CanvasRuntime | null {
-	const manifest = readManifest(doc);
+	let manifest = readManifest(doc);
 	if (!manifest) return null;
 
-	const index = new TargetIndex(resolveMarkers(manifest, doc));
+	let index = new TargetIndex(resolveMarkers(manifest, doc));
 	let selected: CanvasTarget | null = null;
 	let hovered: CanvasTarget | null = null;
+	let highlighted: TargetRef | null = null;
 	let readonly = false;
+	/** The render in flight; a newer `render` aborts it. */
+	let pending: AbortController | null = null;
 
 	const overlay = new CanvasOverlay(doc, { onBreadcrumb: (target) => select(target) });
 
@@ -71,15 +81,58 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 	doc.addEventListener('click', onClick, true);
 	doc.addEventListener('keydown', onKeyDown);
 
-	channel?.send({
-		type: 'ready',
-		documentKey: manifest.documentKey,
-		culture: manifest.culture,
-		targets: index.targets.map((t) => t.ref),
-	});
+	const sendReady = () =>
+		channel?.send({
+			type: 'ready',
+			documentKey: manifest!.documentKey,
+			culture: manifest!.culture,
+			targets: index.targets.map((t) => t.ref),
+		});
+
+	async function render(url: string): Promise<boolean> {
+		pending?.abort();
+		const controller = (pending = new AbortController());
+		let next: Document | null = null;
+		try {
+			next = await fetchRender(url, controller.signal);
+		} catch {
+			// Network error or aborted; handled below.
+		}
+		if (controller.signal.aborted) return false; // A newer render took over; it answers instead.
+		pending = null;
+		if (!next) {
+			channel?.send({ type: 'rendered', url, ok: false });
+			return false;
+		}
+
+		patchDocument(doc, next, (node) => node === overlay.host);
+		manifest = readManifest(doc)!;
+		index = new TargetIndex(resolveMarkers(manifest, doc));
+		// Targets are identified by what they point at, so the same things stay selected (unless they're gone).
+		const selectedRef = selected?.ref ?? null;
+		selected = null;
+		select(index.find(selectedRef), false);
+		hovered = null;
+		overlay.setHover(null);
+		overlay.setHighlight(index.find(highlighted));
+		// A reload of the frame (or the navigation guard) should come back to this render, not the first one.
+		try {
+			doc.defaultView?.history.replaceState(null, '', url + (doc.defaultView?.location.hash ?? ''));
+		} catch {
+			// Not a same-origin URL for this document (e.g. an about:srcdoc test page); nothing to remember.
+		}
+
+		sendReady();
+		channel?.send({ type: 'rendered', url, ok: true });
+		return true;
+	}
+
+	sendReady();
 
 	return {
-		index,
+		get index() {
+			return index;
+		},
 		overlay,
 		select: (target) => select(target),
 		showSelection: (target) => select(target, false),
@@ -87,7 +140,13 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 			readonly = value;
 			if (readonly) hover(null);
 		},
+		setHighlight(ref) {
+			highlighted = ref;
+			overlay.setHighlight(index.find(ref));
+		},
+		render,
 		destroy() {
+			pending?.abort();
 			doc.removeEventListener('pointerover', onPointerOver, true);
 			doc.documentElement.removeEventListener('pointerleave', onPointerLeave);
 			doc.removeEventListener('click', onClick, true);
@@ -105,12 +164,15 @@ export function handleHostMessage(runtime: CanvasRuntime, message: HostMessage) 
 			runtime.showSelection(runtime.index.find(message.target));
 			break;
 		case 'highlight':
-			runtime.overlay.setHighlight(runtime.index.find(message.target));
+			runtime.setHighlight(message.target);
 			break;
 		case 'setReadonly':
 			runtime.setReadonly(message.readonly);
 			break;
-		// 'render' and 'setDevice' are handled by the host (it loads the URL and sizes the frame).
+		case 'render':
+			void runtime.render(message.url);
+			break;
+		// 'setDevice' is handled by the host (it sizes the frame).
 	}
 }
 
@@ -128,6 +190,8 @@ async function start() {
 			nonce,
 			onMessage: (message) => {
 				if (runtime) handleHostMessage(runtime, message);
+				// No markers (the template failed): nothing to patch into, so have the host reload the frame.
+				else if (message.type === 'render') channel.send({ type: 'rendered', url: message.url, ok: false });
 			},
 		});
 	} catch {
