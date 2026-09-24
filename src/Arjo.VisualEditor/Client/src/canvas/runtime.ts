@@ -7,8 +7,9 @@
  * - Inline editing of plain text properties (#20, inline-edit.ts): double-click, or Enter on the selection. Rich text
  *   (#57, rich-text-edit.ts) the same way, with the backoffice's own editor mounted on the element.
  * - A toolbar on the selected block (#25): move up/down, duplicate, delete, settings (the host changes the document).
- * - Drag and drop of Block List blocks (#26, drag.ts): a handle on hovered and selected blocks, a drop line between
- *   blocks, autoscroll near the edges; Alt+Up/Down moves the selected block from the keyboard.
+ * - Drag and drop of Block List (#26, drag.ts) and Block Grid blocks (#27, grid.ts, into and between areas): a handle
+ *   on hovered and selected blocks, a drop line, autoscroll near the edges; Alt+Up/Down moves the selected block from
+ *   the keyboard. Grid blocks can also be resized: a handle on the selected block's right edge changes its column span.
  * - Live re-render (#18): a `render` message patches the newer page in (patch.ts) rather than reloading, then
  *   re-resolves the markers and keeps the selection, scroll position and focus.
  * Only active inside the visual editor (a nonce in the URL fragment); opening a render URL directly just shows the page.
@@ -20,6 +21,7 @@ import { RichTextEditState } from './rich-text-edit.js';
 import { guardNavigation } from './navigation.js';
 import { CanvasOverlay, unionRect, type BlockTool } from './overlay.js';
 import { BLOCK_LIST, blockListsOf, dropSpotAt, type DropSpot } from './drag.js';
+import { BLOCK_GRID, containerOf, gridContainersOf, gridDropSpotAt, spanAt } from './grid.js';
 import { fetchRender, patchDocument } from './patch.js';
 import { TargetIndex, type CanvasTarget } from './targets.js';
 
@@ -69,9 +71,76 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 		onBreadcrumb: (target) => select(target),
 		blockTools: (target) => blockTools(target),
 		onBlockTool: (target, action) => channel?.send({ type: 'blockAction', blockKey: target.ref.ownerKey, action }),
-		draggable: (target) => !readonly && !editing() && target.block?.editorAlias === BLOCK_LIST,
+		draggable: (target) =>
+			!readonly && !editing() && (target.block?.editorAlias === BLOCK_LIST || target.block?.editorAlias === BLOCK_GRID),
 		onDragStart: (target, event) => startDrag(target, event),
+		resizable: (target) => !readonly && !editing() && target.block?.editorAlias === BLOCK_GRID,
+		onResizeStart: (target, event) => startResize(target, event),
 	});
+
+	/** Where a dragged block would drop: in a Block List for list blocks, in a grid's root or area for grid blocks. */
+	function spotFor(target: CanvasTarget, x: number, y: number): DropSpot | null {
+		return target.block?.editorAlias === BLOCK_GRID
+			? gridDropSpotAt(x, y, target, gridContainersOf(index.targets), index.targets)
+			: dropSpotAt(x, y, target, blockListsOf(index.targets), index.targets);
+	}
+
+	/**
+	 * Resizing a grid block by its right-edge handle (#27): previews the new column span in whole columns of its
+	 * container and sends it on release; the host snaps it to the spans the block type allows.
+	 */
+	function startResize(target: CanvasTarget, event: PointerEvent) {
+		if (drag || readonly || editing()) return;
+		const container = containerOf(target, gridContainersOf(index.targets));
+		const box = unionRect(target.elements);
+		if (!container || !box) return;
+		const win = doc.defaultView!;
+		const from = target.block?.columnSpan ?? container.columns;
+		let span = from;
+		const column = container.element.getBoundingClientRect().width / container.columns;
+		doc.documentElement.style.setProperty('cursor', 'col-resize');
+		doc.documentElement.style.setProperty('user-select', 'none');
+
+		const preview = () =>
+			overlay.setResizePreview({
+				left: box.left,
+				top: box.top,
+				width: span * column,
+				height: box.height,
+				label: `${span} / ${container.columns} columns`,
+			});
+		const onMove = (e: PointerEvent) => {
+			span = spanAt(e.clientX, box, container);
+			preview();
+		};
+		const end = (apply: boolean) => {
+			win.removeEventListener('pointermove', onMove, true);
+			win.removeEventListener('pointerup', onUp, true);
+			win.removeEventListener('pointercancel', onCancel, true);
+			win.removeEventListener('keydown', onKey, true);
+			doc.documentElement.style.removeProperty('cursor');
+			doc.documentElement.style.removeProperty('user-select');
+			overlay.setResizePreview(null);
+			swallowClick = true;
+			setTimeout(() => (swallowClick = false));
+			if (apply && span !== from) {
+				channel?.send({ type: 'blockResize', blockKey: target.ref.ownerKey, columnSpan: span });
+			}
+		};
+		const onUp = () => end(true);
+		const onCancel = () => end(false);
+		const onKey = (e: KeyboardEvent) => {
+			if (e.key !== 'Escape') return;
+			e.preventDefault();
+			e.stopPropagation();
+			end(false);
+		};
+		win.addEventListener('pointermove', onMove, true);
+		win.addEventListener('pointerup', onUp, true);
+		win.addEventListener('pointercancel', onCancel, true);
+		win.addEventListener('keydown', onKey, true);
+		onMove(event);
+	}
 
 	/** A block being dragged by its handle (#26). */
 	let drag: { target: CanvasTarget; spot: DropSpot | null; x: number; y: number; scroll: number } | null = null;
@@ -93,7 +162,7 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 
 		const update = () => {
 			if (!drag) return;
-			drag.spot = dropSpotAt(drag.x, drag.y, drag.target, blockListsOf(index.targets), index.targets);
+			drag.spot = spotFor(drag.target, drag.x, drag.y);
 			overlay.setDropLine(drag.spot?.line ?? null);
 		};
 		const autoscroll = () => {
@@ -134,16 +203,7 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 			if (drop && spot) {
 				swallowClick = true;
 				setTimeout(() => (swallowClick = false));
-				channel?.send({
-					type: 'blockMove',
-					blockKey: dragged.ref.ownerKey,
-					to: {
-						ownerKey: spot.list.ownerKey,
-						propertyAlias: spot.list.propertyAlias,
-						areaKey: null,
-						index: spot.index,
-					},
-				});
+				channel?.send({ type: 'blockMove', blockKey: dragged.ref.ownerKey, to: spot.to });
 			}
 		};
 		const onUp = () => end(true);
@@ -249,7 +309,7 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 		const around = [hovered, ...index.ancestorsOf(hovered)];
 		if (next && !around.includes(next)) return next;
 		for (const candidate of around) {
-			if (candidate.ref.kind !== 'Block' || candidate.block?.editorAlias !== BLOCK_LIST) continue;
+			if (candidate.ref.kind !== 'Block' || !isMovable(candidate)) continue;
 			const r = unionRect(candidate.elements);
 			if (
 				r &&
@@ -262,6 +322,11 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 			}
 		}
 		return next;
+	}
+
+	/** Blocks that can be dragged: Block List and Block Grid blocks. */
+	function isMovable(target: CanvasTarget) {
+		return target.block?.editorAlias === BLOCK_LIST || target.block?.editorAlias === BLOCK_GRID;
 	}
 
 	const onPointerOver = (event: PointerEvent) => {

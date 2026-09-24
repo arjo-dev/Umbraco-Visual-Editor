@@ -249,3 +249,115 @@ export function putBlock(
 		expose: [...(value.expose ?? []), ...taken.expose],
 	};
 }
+
+/** Where a block sits in its value: its layout (editor alias), the grid area it's in (if any) and its layout item. */
+export interface LayoutPosition {
+	editorAlias: string;
+	areaOwnerKey: string | null;
+	areaKey: string | null;
+	item: LayoutItem;
+}
+
+export function layoutPosition(value: BlockEditorValue, contentKey: string): LayoutPosition | null {
+	const search = (
+		items: LayoutItem[],
+		editorAlias: string,
+		areaOwnerKey: string | null,
+		areaKey: string | null,
+	): LayoutPosition | null => {
+		for (const item of items) {
+			if (item.contentKey === contentKey) return { editorAlias, areaOwnerKey, areaKey, item };
+			for (const area of item.areas ?? []) {
+				const found = search(area.items, editorAlias, item.contentKey, area.key);
+				if (found) return found;
+			}
+		}
+		return null;
+	};
+	for (const [editorAlias, items] of Object.entries(value.layout)) {
+		if (!Array.isArray(items)) continue;
+		const found = search(items, editorAlias, null, null);
+		if (found) return found;
+	}
+	return null;
+}
+
+/**
+ * The value with a taken block put in grid area `areaKey` of block `areaOwnerKey`, at `index` (clamped). The area's
+ * layout entry is added when the block's layout doesn't have it yet (an area that was never used).
+ */
+export function putBlockInArea(
+	value: BlockEditorValue,
+	areaOwnerKey: string,
+	areaKey: string,
+	taken: TakenBlock,
+	index: number,
+): BlockEditorValue {
+	const insert = (items: LayoutItem[]): LayoutItem[] | null => {
+		let changed = false;
+		const next = items.map((item) => {
+			if (changed) return item;
+			if (item.contentKey === areaOwnerKey) {
+				changed = true;
+				const areas = [...(item.areas ?? [])];
+				let at = areas.findIndex((a) => a.key === areaKey);
+				if (at < 0) at = areas.push({ key: areaKey, items: [] }) - 1;
+				const areaItems = [...areas[at].items];
+				areaItems.splice(Math.max(0, Math.min(index, areaItems.length)), 0, taken.item);
+				areas[at] = { ...areas[at], items: areaItems };
+				return { ...item, areas };
+			}
+			for (let a = 0; a < (item.areas?.length ?? 0); a++) {
+				const nested = insert(item.areas![a].items);
+				if (nested) {
+					changed = true;
+					const areas = [...item.areas!];
+					areas[a] = { ...areas[a], items: nested };
+					return { ...item, areas };
+				}
+			}
+			return item;
+		});
+		return changed ? next : null;
+	};
+	for (const [editorAlias, items] of Object.entries(value.layout)) {
+		if (!Array.isArray(items)) continue;
+		const next = insert(items);
+		if (next) {
+			return {
+				...value,
+				layout: { ...value.layout, [editorAlias]: next },
+				contentData: [...value.contentData, ...taken.contentData],
+				settingsData: [...(value.settingsData ?? []), ...taken.settingsData],
+				expose: [...(value.expose ?? []), ...taken.expose],
+			};
+		}
+	}
+	return value;
+}
+
+/** The value with a grid block's column span set. */
+export function withColumnSpan(value: BlockEditorValue, contentKey: string, columnSpan: number): BlockEditorValue {
+	const found = findSiblings(value, contentKey);
+	if (!found || found.items[found.index].columnSpan === columnSpan) return value;
+	const items = [...found.items];
+	items[found.index] = { ...items[found.index], columnSpan };
+	return found.replace(items);
+}
+
+/**
+ * A column span that fits a container `columns` wide: `wanted` when it's allowed and fits; otherwise the allowed
+ * span nearest to it that fits. `allowed` empty means any span. Null when no allowed span fits.
+ */
+export function fitSpan(wanted: number, columns: number, allowed: readonly number[]): number | null {
+	const options = (allowed.length ? [...allowed] : Array.from({ length: columns }, (_, i) => i + 1)).filter(
+		(span) => span > 0 && span <= columns,
+	);
+	if (!options.length) return null;
+	return options.reduce((best, span) =>
+		Math.abs(span - wanted) < Math.abs(best - wanted) ||
+		(Math.abs(span - wanted) === Math.abs(best - wanted) && span > best)
+			? span
+			: best,
+	);
+}

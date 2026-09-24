@@ -17,9 +17,15 @@ import {
 	takeBlock,
 	type BlockEditorValue,
 	type TakenBlock,
+	fitSpan,
+	layoutPosition,
+	putBlockInArea,
+	withColumnSpan,
 } from './block-operations.js';
+import { areaOf, checkGridDrop, columnsIn, gridConfigOf, spansOf, type GridConfig } from './grid-rules.js';
 import {
 	locateBlock,
+	locateBlockHolder,
 	locateValue,
 	withBlockEditorValue,
 	withBlockPropertyValue,
@@ -36,6 +42,13 @@ export type BlockLayoutAction = 'moveUp' | 'moveDown' | 'duplicate' | 'delete';
  * other blocks, in grid areas, in rich text); the change is written to the document property they're in, as an
  * ordinary workspace change: Save stores it, and the canvas re-renders it.
  */
+/** The layout items of a grid's root (`areaOwnerKey` null) or of one block's area. */
+function containerItems(value: BlockEditorValue, areaOwnerKey: string | null, areaKey: string | null) {
+	if (!areaOwnerKey) return value.layout['Umbraco.BlockGrid'] ?? [];
+	const owner = layoutPosition(value, areaOwnerKey)?.item;
+	return owner?.areas?.find((a) => a.key === areaKey)?.items ?? [];
+}
+
 /** A block editor value to put into: the value, or an empty one when the property has none yet. */
 const asBlockValue = (value: unknown): BlockEditorValue =>
 	isBlockEditorValue(value) ? value : { layout: {}, contentData: [], settingsData: [], expose: [] };
@@ -111,6 +124,8 @@ export class ArjoBlockEditController extends UmbControllerBase {
 	 * Returns whether the document changed.
 	 */
 	async moveTo(blockKey: string, to: BlockPosition, activeCulture: string | null): Promise<boolean> {
+		// Grid drops say which area (or the root): #27.
+		if (to.areaOwnerKey !== undefined) return this.#moveInGrid(blockKey, to, activeCulture);
 		const workspace = this.#workspace;
 		const values = workspace?.getValues() ?? [];
 		const source = workspace && locateBlock(values, blockKey, activeCulture);
@@ -206,22 +221,147 @@ export class ArjoBlockEditController extends UmbControllerBase {
 
 	/** The data type configuration of the Block List property at `to`. */
 	async #listConfiguration(to: BlockPosition, activeCulture: string | null) {
+		const documentKey = this.#workspace?.getUnique();
+		return this.#configurationOf(to.ownerKey === documentKey ? null : to.ownerKey, to.propertyAlias, activeCulture);
+	}
+
+	/** The data type configuration of a block editor property: the document's (`ownerKey` null) or a block's. */
+	async #configurationOf(ownerKey: string | null, alias: string, activeCulture: string | null) {
 		const workspace = this.#workspace;
 		if (!workspace) return null;
 		let dataTypeKey: string | undefined;
-		if (to.ownerKey === workspace.getUnique()) {
-			dataTypeKey = (await workspace.structure.getPropertyStructureByAlias(to.propertyAlias))?.dataType.unique;
+		if (!ownerKey) {
+			dataTypeKey = (await workspace.structure.getPropertyStructureByAlias(alias))?.dataType.unique;
 		} else {
-			const owner = locateBlock(workspace.getValues() ?? [], to.ownerKey, activeCulture);
+			const owner = locateBlock(workspace.getValues() ?? [], ownerKey, activeCulture);
 			if (!owner) return null;
 			const { data: elementType } = await new UmbDocumentTypeDetailRepository(this).requestByUnique(
 				owner.content.contentTypeKey,
 			);
-			dataTypeKey = elementType?.properties.find((p) => p.alias === to.propertyAlias)?.dataType.unique;
+			dataTypeKey = elementType?.properties.find((p) => p.alias === alias)?.dataType.unique;
 		}
 		if (!dataTypeKey) return null;
 		const { data } = await new UmbDataTypeDetailRepository(this).requestByUnique(dataTypeKey);
 		return data?.values ?? null;
+	}
+
+	/** Tells the user why something couldn't be done. */
+	async #warn(headline: string, message: string) {
+		const notifications = await this.getContext(UMB_NOTIFICATION_CONTEXT);
+		notifications?.peek('warning', { data: { headline, message } });
+	}
+
+	/**
+	 * Moves a Block Grid block to the grid's root or an area (#27): a reorder in its own container; otherwise only
+	 * where the grid's configuration allows it (type, maximum), with its column span fitted to the new container.
+	 */
+	async #moveInGrid(blockKey: string, to: BlockPosition, activeCulture: string | null): Promise<boolean> {
+		const workspace = this.#workspace;
+		const source = workspace && locateBlock(workspace.getValues() ?? [], blockKey, activeCulture);
+		const target = workspace && this.#listAt(to, activeCulture);
+		if (!workspace || !source || !target || !isBlockEditorValue(target.value)) return false;
+		if (!(await this.#canWrite(source.property, activeCulture))) return false;
+		if (target.property !== source.property && !(await this.#canWrite(target.property, activeCulture))) return false;
+
+		const values = await this.#listConfiguration(to, activeCulture);
+		if (!values) return false;
+		const config = gridConfigOf(values);
+		const grid = target.value;
+
+		// The area (or root) it goes into, by key, or by the alias the page shows for an empty area.
+		let area: ReturnType<typeof areaOf> = null;
+		if (to.areaOwnerKey) {
+			const ownerType = grid.contentData.find((d) => d.key === to.areaOwnerKey)?.contentTypeKey as string | undefined;
+			area = ownerType ? areaOf(config, ownerType, to.areaKey, to.areaAlias) : null;
+			if (!area) return false;
+		}
+
+		let holder: unknown;
+		withBlockEditorValue(source.property.value, blockKey, (value) => {
+			holder = value;
+			return value;
+		});
+		const from = isBlockEditorValue(holder) ? layoutPosition(holder, blockKey) : null;
+		if (!from) return false;
+
+		// Its own container: a reorder.
+		if (holder === grid && from.areaOwnerKey === (to.areaOwnerKey ?? null) && from.areaKey === (area?.key ?? null)) {
+			const next = withBlockEditorValue(source.property.value, blockKey, (value) =>
+				isBlockEditorValue(value) ? moveBlockTo(value, blockKey, to.index) : value,
+			);
+			if (next === source.property.value) return false;
+			await this.#set(source.property, next);
+			return true;
+		}
+
+		const count = containerItems(grid, to.areaOwnerKey ?? null, area?.key ?? null).filter(
+			(i) => i.contentKey !== blockKey,
+		).length;
+		const check = checkGridDrop(
+			config,
+			source.content.contentTypeKey,
+			(from.item.columnSpan as number | undefined) ?? null,
+			area,
+			count,
+		);
+		if (!check.ok) {
+			await this.#warn('The block can’t go there', check.reason);
+			return false;
+		}
+
+		let taken: TakenBlock | null = null;
+		const without = withBlockEditorValue(source.property.value, blockKey, (value) => {
+			const result = isBlockEditorValue(value) ? takeBlock(value, blockKey) : null;
+			taken = result?.taken ?? null;
+			return result?.value ?? value;
+		});
+		const moving = taken as TakenBlock | null;
+		if (!moving) return false;
+		const resized: TakenBlock = { ...moving, item: { ...moving.item, columnSpan: check.columnSpan } };
+		const put = (value: unknown) =>
+			to.areaOwnerKey && area
+				? putBlockInArea(asBlockValue(value), to.areaOwnerKey, area.key, resized, to.index)
+				: putBlock(asBlockValue(value), 'Umbraco.BlockGrid', resized, to.index);
+
+		if (target.property === source.property) {
+			await this.#set(source.property, this.#withList(without, to, target.culture, put));
+		} else {
+			await this.#set(source.property, without);
+			await this.#set(target.property, this.#withList(target.property.value, to, target.culture, put));
+		}
+		return true;
+	}
+
+	/**
+	 * Resizes a Block Grid block (#27, its resize handle): the span snaps to the block type's allowed spans that fit
+	 * its container. Returns whether the document changed.
+	 */
+	async resize(blockKey: string, columnSpan: number, activeCulture: string | null): Promise<boolean> {
+		const workspace = this.#workspace;
+		const values = workspace?.getValues() ?? [];
+		const holder = workspace && locateBlockHolder(values, blockKey, activeCulture);
+		const block = workspace && locateBlock(values, blockKey, activeCulture);
+		if (!workspace || !holder || !block || !(await this.#canWrite(holder.property, activeCulture))) return false;
+
+		const configValues = await this.#configurationOf(holder.ownerKey, holder.alias, activeCulture);
+		if (!configValues) return false;
+		const config: GridConfig = gridConfigOf(configValues);
+
+		let snapped: number | null = null;
+		const next = withBlockEditorValue(holder.property.value, blockKey, (value) => {
+			if (!isBlockEditorValue(value)) return value;
+			const at = layoutPosition(value, blockKey);
+			if (!at) return value;
+			const ownerType = at.areaOwnerKey
+				? (value.contentData.find((d) => d.key === at.areaOwnerKey)?.contentTypeKey as string | undefined)
+				: undefined;
+			const area = ownerType ? areaOf(config, ownerType, at.areaKey) : null;
+			snapped = fitSpan(columnSpan, columnsIn(config, area), spansOf(config, block.content.contentTypeKey));
+			return snapped === null ? value : withColumnSpan(value, blockKey, snapped);
+		});
+		if (next === holder.property.value) return false;
+		await this.#set(holder.property, next);
+		return true;
 	}
 
 	/** Sets one of a block's content (or settings) values, from the side panel. */

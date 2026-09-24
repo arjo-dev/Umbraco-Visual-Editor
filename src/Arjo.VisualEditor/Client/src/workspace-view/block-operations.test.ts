@@ -2,6 +2,10 @@ import { expect } from '@open-wc/testing';
 import {
 	canMoveBlock,
 	duplicateBlock,
+	fitSpan,
+	layoutPosition,
+	putBlockInArea,
+	withColumnSpan,
 	moveBlock,
 	moveBlockTo,
 	putBlock,
@@ -206,5 +210,44 @@ describe('takeBlock and putBlock', () => {
 		const { taken } = takeBlock(list(), 'b')!;
 		const into = putBlock({ layout: {}, contentData: [] }, 'Umbraco.BlockList', taken, 5);
 		expect(into.layout['Umbraco.BlockList'].map((i) => i.contentKey)).to.deep.equal(['b']);
+	});
+});
+
+describe('grid moves and spans', () => {
+	it('finds where a block sits: its layout, and its area', () => {
+		expect(layoutPosition(grid(), 'l2')).to.deep.include({
+			editorAlias: 'Umbraco.BlockGrid',
+			areaOwnerKey: 'two',
+			areaKey: 'left',
+		});
+		expect(layoutPosition(grid(), 'row')).to.deep.include({ areaOwnerKey: null, areaKey: null });
+		expect(layoutPosition(grid(), 'missing')).to.equal(null);
+	});
+
+	it('puts a block into an area, adding the area when the layout has none for it', () => {
+		const { value, taken } = takeBlock(grid(), 'row')!;
+		const into = putBlockInArea(value, 'two', 'right', taken, 0);
+		const two = into.layout['Umbraco.BlockGrid'][0];
+		expect(two.areas!.find((a) => a.key === 'right')!.items.map((i) => i.contentKey)).to.deep.equal(['row', 'r1']);
+		expect(into.contentData.map((d) => d.key)).to.include('row');
+
+		const intoNew = putBlockInArea(value, 'two', 'bottom', taken, 3);
+		expect(intoNew.layout['Umbraco.BlockGrid'][0].areas!.map((a) => a.key)).to.deep.equal(['left', 'right', 'bottom']);
+		expect(intoNew.layout['Umbraco.BlockGrid'][0].areas![2].items.map((i) => i.contentKey)).to.deep.equal(['row']);
+	});
+
+	it('sets a column span', () => {
+		const value = grid();
+		const next = withColumnSpan(value, 'l1', 3);
+		expect(next.layout['Umbraco.BlockGrid'][1].areas![0].items[0].columnSpan).to.equal(3);
+		expect(withColumnSpan(value, 'row', 12)).to.equal(value);
+	});
+
+	it('fits a span to a container: the allowed span nearest to what was asked, that fits', () => {
+		expect(fitSpan(6, 12, [12, 6, 4])).to.equal(6);
+		expect(fitSpan(12, 6, [12, 6, 4])).to.equal(6);
+		expect(fitSpan(5, 12, [12, 6, 4])).to.equal(6); // 4 and 6 are as near: the wider
+		expect(fitSpan(9, 12, [])).to.equal(9);
+		expect(fitSpan(12, 4, [12, 6])).to.equal(null);
 	});
 });

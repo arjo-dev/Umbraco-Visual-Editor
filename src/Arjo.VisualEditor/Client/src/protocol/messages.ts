@@ -30,6 +30,12 @@ export interface BlockPosition {
 	propertyAlias: string;
 	areaKey: string | null;
 	index: number;
+	/**
+	 * Block Grid (#27): the block whose area it goes into, and the area's alias. The page shows areas by alias, so an
+	 * empty area's key isn't known there; the host finds it from the block type's configuration.
+	 */
+	areaOwnerKey?: string | null;
+	areaAlias?: string | null;
 }
 
 // ---- canvas -> host ----
@@ -58,6 +64,8 @@ export type CanvasMessage =
 	/** A block toolbar button was pressed (#25): the host changes the document (or shows the block's settings). */
 	| { type: 'blockAction'; blockKey: string; action: BlockAction }
 	| { type: 'blockMove'; blockKey: string; to: BlockPosition }
+	/** A Block Grid block's column span was dragged to `columnSpan` (#27); the host snaps it to the allowed spans. */
+	| { type: 'blockResize'; blockKey: string; columnSpan: number }
 	| { type: 'blockInsertRequest'; at: BlockPosition }
 	| { type: 'scroll'; x: number; y: number };
 
@@ -110,7 +118,15 @@ export function isTargetRef(v: unknown): v is TargetRef {
 const isNullableTarget = (v: unknown) => v === null || isTargetRef(v);
 
 export function isBlockPosition(v: unknown): v is BlockPosition {
-	return isObj(v) && isStr(v.ownerKey) && isStr(v.propertyAlias) && isNullableStr(v.areaKey) && isIndex(v.index);
+	return (
+		isObj(v) &&
+		isStr(v.ownerKey) &&
+		isStr(v.propertyAlias) &&
+		isNullableStr(v.areaKey) &&
+		isIndex(v.index) &&
+		(v.areaOwnerKey === undefined || isNullableStr(v.areaOwnerKey)) &&
+		(v.areaAlias === undefined || isNullableStr(v.areaAlias))
+	);
 }
 
 const canvasValidators: Record<CanvasMessageType, (m: Obj) => boolean> = {
@@ -125,6 +141,7 @@ const canvasValidators: Record<CanvasMessageType, (m: Obj) => boolean> = {
 	inlineEditEnd: (m) => isTargetRef(m.target) && typeof m.cancelled === 'boolean',
 	blockAction: (m) => isStr(m.blockKey) && isStr(m.action) && BLOCK_ACTIONS.includes(m.action),
 	blockMove: (m) => isStr(m.blockKey) && isBlockPosition(m.to),
+	blockResize: (m) => isStr(m.blockKey) && isIndex(m.columnSpan) && m.columnSpan > 0,
 	blockInsertRequest: (m) => isBlockPosition(m.at),
 	scroll: (m) => isNum(m.x) && isNum(m.y),
 };

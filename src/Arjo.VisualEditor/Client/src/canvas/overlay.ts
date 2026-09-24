@@ -24,6 +24,19 @@ export interface OverlayOptions {
 	draggable?: (target: CanvasTarget) => boolean;
 	/** A drag handle was pressed. */
 	onDragStart?: (target: CanvasTarget, event: PointerEvent) => void;
+	/** Whether a selected block gets a resize handle on its right edge (Block Grid column span, #27). */
+	resizable?: (target: CanvasTarget) => boolean;
+	/** A resize handle was pressed. */
+	onResizeStart?: (target: CanvasTarget, event: PointerEvent) => void;
+}
+
+/** What a resize would give (#27): the block's new box, and a label such as "6 / 12". */
+export interface ResizePreview {
+	left: number;
+	top: number;
+	width: number;
+	height: number;
+	label: string;
 }
 
 const BLOCK_COLOR = '#f79c37';
@@ -40,7 +53,8 @@ export class CanvasOverlay {
 	#selection: { target: CanvasTarget; ancestors: CanvasTarget[] } | null = null;
 	#errors: Array<{ target: CanvasTarget; message: string }> = [];
 	#dragging: CanvasTarget | null = null;
-	#dropLine: { left: number; top: number; width: number } | null = null;
+	#dropLine: { left: number; top: number; width: number; height: number } | null = null;
+	#resizePreview: ResizePreview | null = null;
 	#frame = 0;
 	#resizeObserver: ResizeObserver;
 	#mutationObserver: MutationObserver;
@@ -95,9 +109,15 @@ export class CanvasOverlay {
 		this.#render();
 	}
 
-	/** Where the dragged block would drop: a line between blocks (viewport coordinates), or none. */
-	setDropLine(line: { left: number; top: number; width: number } | null) {
+	/** Where the dragged block would drop: a line between or beside blocks (viewport coordinates), or none. */
+	setDropLine(line: { left: number; top: number; width: number; height: number } | null) {
 		this.#dropLine = line;
+		this.#render();
+	}
+
+	/** A block being resized (#27): its new size, drawn over it. */
+	setResizePreview(preview: ResizePreview | null) {
+		this.#resizePreview = preview;
 		this.#render();
 	}
 
@@ -148,6 +168,19 @@ export class CanvasOverlay {
 
 		for (const { target, message } of this.#errors) layer.append(this.#errorBox(target, message));
 
+		if (this.#resizePreview) {
+			const { left, top, width, height, label } = this.#resizePreview;
+			const box = this.#doc.createElement('div');
+			box.className = 'resizing';
+			Object.assign(box.style, { left: `${left}px`, top: `${top}px`, width: `${width}px`, height: `${height}px` });
+			const tag = this.#doc.createElement('span');
+			tag.className = 'label';
+			tag.textContent = label;
+			box.append(tag);
+			layer.append(box);
+			return;
+		}
+
 		if (this.#dragging) {
 			const box = this.#box(this.#dragging, 'dragging');
 			layer.append(box);
@@ -156,8 +189,9 @@ export class CanvasOverlay {
 				line.className = 'drop';
 				Object.assign(line.style, {
 					left: `${this.#dropLine.left}px`,
-					top: `${this.#dropLine.top - 1.5}px`,
+					top: `${this.#dropLine.top}px`,
 					width: `${this.#dropLine.width}px`,
+					height: `${this.#dropLine.height}px`,
 				});
 				layer.append(line);
 			}
@@ -189,6 +223,26 @@ export class CanvasOverlay {
 		badge.title = message;
 		box.append(badge);
 		return box;
+	}
+
+	/** The resize handle: the block's right edge, dragged sideways to change its column span. */
+	#resizer(target: CanvasTarget) {
+		const handle = this.#doc.createElement('button');
+		handle.type = 'button';
+		handle.className = 'resize';
+		handle.title = `Drag to change the width of ${targetLabel(target.ref)}`;
+		handle.setAttribute('aria-label', handle.title);
+		handle.addEventListener('pointerdown', (event) => {
+			if (event.button !== 0) return;
+			event.preventDefault();
+			event.stopPropagation();
+			this.#options.onResizeStart?.(target, event);
+		});
+		handle.addEventListener('click', (event) => {
+			event.preventDefault();
+			event.stopPropagation();
+		});
+		return handle;
 	}
 
 	/** The drag handle, at the block's left edge (inside it when there's no room outside). */
@@ -253,6 +307,7 @@ export class CanvasOverlay {
 		if (kind === 'highlight' || kind === 'dragging') return box;
 
 		if (this.#options.draggable?.(target)) box.append(this.#grip(target, rect.left < 24));
+		if (kind === 'selected' && this.#options.resizable?.(target)) box.append(this.#resizer(target));
 
 		const label = this.#doc.createElement('div');
 		label.className = `label${rect.top < 24 ? ' inside' : ''}`;
@@ -346,7 +401,18 @@ const STYLES = `
 	.block > .label { background: ${BLOCK_COLOR}; color: #1b264f; }
 	.label.inside { bottom: auto; top: 4px; left: 4px; }
 	.box.dragging { background: color-mix(in srgb, ${BLOCK_COLOR} 18%, transparent); outline: 2px dashed ${BLOCK_COLOR}; outline-offset: 3px; }
-	.drop { position: fixed; height: 3px; border-radius: 2px; background: ${BLOCK_COLOR}; box-shadow: 0 0 0 1px #fff; }
+	.drop { position: fixed; border-radius: 2px; background: ${BLOCK_COLOR}; box-shadow: 0 0 0 1px #fff; }
+	.resize {
+		all: unset; position: absolute; right: -8px; top: 50%; transform: translateY(-50%); width: 8px; height: 36px;
+		border-radius: 3px; cursor: col-resize; pointer-events: auto; background: ${BLOCK_COLOR};
+		box-shadow: 0 1px 3px rgb(0 0 0 / 0.25);
+	}
+	.resize::after { content: ''; position: absolute; inset: 8px 3px; border-left: 1px solid #1b264f; border-right: 1px solid #1b264f; }
+	.resizing {
+		position: fixed; box-sizing: border-box; outline: 2px dashed ${BLOCK_COLOR}; outline-offset: 3px;
+		background: color-mix(in srgb, ${BLOCK_COLOR} 12%, transparent);
+	}
+	.resizing .label { background: ${BLOCK_COLOR}; color: #1b264f; }
 	.grip {
 		all: unset; position: absolute; left: -24px; top: 50%; transform: translateY(-50%); display: grid; place-items: center;
 		width: 18px; height: 28px; border-radius: 3px; cursor: grab; pointer-events: auto; color: #1b264f;
