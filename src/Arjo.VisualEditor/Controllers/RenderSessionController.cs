@@ -1,9 +1,12 @@
 using System.Text.Json;
+using Arjo.VisualEditor.Configuration;
 using Arjo.VisualEditor.Rendering;
 using Asp.Versioning;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
+using Umbraco.Cms.Core.Models.PublishedContent;
 using Umbraco.Cms.Core.Actions;
 using Umbraco.Cms.Core.PublishedCache;
 using Umbraco.Cms.Core.Security;
@@ -43,7 +46,8 @@ public sealed class RenderSessionController(
     RenderSessionStore sessions,
     IAuthorizationService authorizationService,
     IPublishedContentCache contentCache,
-    IBackOfficeSecurityAccessor backOfficeSecurityAccessor) : ArjoVisualEditorApiControllerBase
+    IBackOfficeSecurityAccessor backOfficeSecurityAccessor,
+    IOptionsMonitor<VisualEditorOptions> options) : ArjoVisualEditorApiControllerBase
 {
     [HttpPost("render-session")]
     [ProducesResponseType<RenderSessionResponseModel>(StatusCodes.Status200OK)]
@@ -60,9 +64,18 @@ public sealed class RenderSessionController(
         }
 
         // Rendering overlays the document's draft, so it must have been saved at least once.
-        if (await contentCache.GetByIdAsync(model.DocumentKey, preview: true) is null)
+        IPublishedContent? draft = await contentCache.GetByIdAsync(model.DocumentKey, preview: true);
+        if (draft is null)
         {
             return NotFound();
+        }
+
+        // The settings may rule this document type out (#32); the backoffice doesn't offer the Visual editor then.
+        if (!options.CurrentValue.IsEnabledFor(draft.ContentType.Alias))
+        {
+            return Problem(
+                statusCode: StatusCodes.Status403Forbidden,
+                title: "The visual editor isn't enabled for this document type.");
         }
 
         var userKey = backOfficeSecurityAccessor.BackOfficeSecurity?.CurrentUser?.Key ?? Guid.Empty;

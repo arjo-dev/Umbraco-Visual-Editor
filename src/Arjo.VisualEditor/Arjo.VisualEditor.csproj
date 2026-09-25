@@ -45,6 +45,10 @@
 
     <!-- However make the Umbraco-package.json included for dotnet pack or nuget package and visible to the solution -->
     <None Include="Client\public\umbraco-package.json" Pack="false" />
+
+    <!-- The VisualEditor settings' JSON schema (#32), registered with the site's appsettings schema by the props. -->
+    <None Include="appsettings-schema.Arjo.VisualEditor.json" Pack="true" PackagePath="" />
+    <None Include="buildTransitive\Arjo.VisualEditor.props" Pack="true" PackagePath="buildTransitive" />
   </ItemGroup>
 
   <!--

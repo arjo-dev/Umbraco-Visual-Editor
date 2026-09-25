@@ -58,4 +58,7 @@
     <RazorCompileOnPublish>false</RazorCompileOnPublish>
   </PropertyGroup>
 
+  <!-- As the NuGet package does it (buildTransitive): the VisualEditor settings in the appsettings schema. -->
+  <Import Project="..\src\Arjo.VisualEditor\buildTransitive\Arjo.VisualEditor.props" />
+
 </Project>

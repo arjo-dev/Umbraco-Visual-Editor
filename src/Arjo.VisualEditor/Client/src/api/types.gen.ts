@@ -32,6 +32,35 @@ export type RenderVariantModel = {
     name: string;
 };
 
+export type VisualEditorConfigurationResponseModel = {
+    enabled: boolean;
+    allowedDocumentTypes: Array<string>;
+    excludedDocumentTypes: Array<string>;
+};
+
+export type GetConfigurationData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/umbraco/arjovisualeditor/api/v1/configuration';
+};
+
+export type GetConfigurationErrors = {
+    /**
+     * The resource is protected and requires an authentication token
+     */
+    401: unknown;
+};
+
+export type GetConfigurationResponses = {
+    /**
+     * OK
+     */
+    200: VisualEditorConfigurationResponseModel;
+};
+
+export type GetConfigurationResponse = GetConfigurationResponses[keyof GetConfigurationResponses];
+
 export type GetPingData = {
     body?: never;
     path?: never;

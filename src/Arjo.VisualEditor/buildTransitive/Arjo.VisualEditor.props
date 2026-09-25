@@ -1,0 +1,6 @@
+<Project>
+  <!-- Adds the VisualEditor settings to the site's appsettings JSON schema (merged by Umbraco's build targets). -->
+  <ItemGroup>
+    <UmbracoJsonSchemaFiles Include="$(MSBuildThisFileDirectory)..\appsettings-schema.Arjo.VisualEditor.json" Weight="-70" />
+  </ItemGroup>
+</Project>
