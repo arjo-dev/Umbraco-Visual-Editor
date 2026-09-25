@@ -92,8 +92,16 @@ public sealed class RenderSessionController(
             ? (model.Variants ?? []).Select(v => new RenderVariantName(v.Culture, v.Segment, v.Name))
             : [];
 
-        // Only this user may render the session (RenderSessionContentFinder).
-        var userKey = backOfficeSecurityAccessor.BackOfficeSecurity?.CurrentUser?.Key ?? Guid.Empty;
+        // Only this user may render the session: this browser gets a pass for it (RenderViewerCookie).
+        var userKey = backOfficeSecurityAccessor.BackOfficeSecurity?.CurrentUser?.Key
+                      ?? User.GetUmbracoIdentity()?.GetUserKey()
+                      ?? Guid.Empty;
+        if (userKey == Guid.Empty)
+        {
+            return Forbid();
+        }
+
+        await RenderViewerCookie.IssueAsync(HttpContext, sessions, userKey);
         RenderSession session = await sessions.CreateAsync(
             model.DocumentKey,
             model.Culture,

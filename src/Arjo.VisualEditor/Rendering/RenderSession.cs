@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.Extensions.Caching.Distributed;
 
@@ -60,5 +61,36 @@ public sealed class RenderSessionStore(IDistributedCache cache)
         return bytes is null ? null : JsonSerializer.Deserialize<RenderSession>(bytes, JsonOptions);
     }
 
+    /// <summary>
+    /// A pass for the browser a user creates sessions from (#34): a random secret for the user, which the render page
+    /// must be requested with. <paramref name="current"/> is kept (and its lifetime extended) if it's still this user's.
+    /// </summary>
+    public async Task<string> IssueViewerPassAsync(Guid userKey, string? current, CancellationToken cancellationToken = default)
+    {
+        var pass = current is not null && await GetViewerAsync(current, cancellationToken) == userKey
+            ? current
+            : Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
+        await cache.SetAsync(
+            ViewerKey(pass),
+            userKey.ToByteArray(),
+            new DistributedCacheEntryOptions { SlidingExpiration = Lifetime },
+            cancellationToken);
+        return pass;
+    }
+
+    /// <summary>The user a viewer pass was issued to; null when it's unknown or expired.</summary>
+    public async Task<Guid?> GetViewerAsync(string? pass, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrEmpty(pass) || pass.Length > 128)
+        {
+            return null;
+        }
+
+        var bytes = await cache.GetAsync(ViewerKey(pass), cancellationToken);
+        return bytes is { Length: 16 } ? new Guid(bytes) : null;
+    }
+
     private static string Key(Guid token) => $"Arjo.VisualEditor.RenderSession.{token:N}";
+
+    private static string ViewerKey(string pass) => $"Arjo.VisualEditor.Viewer.{pass}";
 }

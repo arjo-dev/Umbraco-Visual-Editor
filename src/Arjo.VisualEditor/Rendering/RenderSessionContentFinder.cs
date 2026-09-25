@@ -1,9 +1,7 @@
 using Arjo.VisualEditor.Markers;
-using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
 using Umbraco.Cms.Core.Models.PublishedContent;
 using Umbraco.Cms.Core.Routing;
-using Umbraco.Extensions;
 
 namespace Arjo.VisualEditor.Rendering;
 
@@ -24,7 +22,7 @@ public sealed class RenderSessionContentFinder(
         if (!path.StartsWith(PathPrefix, StringComparison.OrdinalIgnoreCase)
             || !Guid.TryParse(path[PathPrefix.Length..].Trim('/'), out Guid token)
             || await sessions.GetAsync(token) is not { } session
-            || !await IsSessionUserAsync(session))
+            || !await RenderViewerCookie.IsForUserAsync(httpContextAccessor.HttpContext, sessions, session.UserKey))
         {
             return false;
         }
@@ -48,21 +46,5 @@ public sealed class RenderSessionContentFinder(
 
         request.SetPublishedContent(content);
         return true;
-    }
-
-    /// <summary>
-    /// Only the backoffice user who created a session may render it (#34): the URL alone isn't enough, so it's no use
-    /// to anyone it leaks to (a site's analytics, a shared screenshot). The frame is on the site's own origin, so it
-    /// has the backoffice cookie, as Umbraco's preview does.
-    /// </summary>
-    private async Task<bool> IsSessionUserAsync(RenderSession session)
-    {
-        if (session.UserKey == Guid.Empty)
-        {
-            return false;
-        }
-
-        AuthenticateResult result = await httpContextAccessor.HttpContext.AuthenticateBackOfficeAsync();
-        return result.Principal?.GetUmbracoIdentity()?.GetUserKey() == session.UserKey;
     }
 }
