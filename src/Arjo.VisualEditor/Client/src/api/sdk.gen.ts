@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { GetPingData, GetPingErrors, GetPingResponses, PostRenderSessionData, PostRenderSessionErrors, PostRenderSessionResponses } from './types.gen';
+import type { GetConfigurationData, GetConfigurationErrors, GetConfigurationResponses, GetPingData, GetPingErrors, GetPingResponses, PostRenderSessionData, PostRenderSessionErrors, PostRenderSessionResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -17,6 +17,12 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
      */
     meta?: keyof ClientMeta extends never ? Record<string, unknown> : ClientMeta;
 };
+
+export const getConfiguration = <ThrowOnError extends boolean = false>(options?: Options<GetConfigurationData, ThrowOnError>): RequestResult<GetConfigurationResponses, GetConfigurationErrors, ThrowOnError> => (options?.client ?? client).get<GetConfigurationResponses, GetConfigurationErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/umbraco/arjovisualeditor/api/v1/configuration',
+    ...options
+});
 
 export const getPing = <ThrowOnError extends boolean = false>(options?: Options<GetPingData, ThrowOnError>): RequestResult<GetPingResponses, GetPingErrors, ThrowOnError> => (options?.client ?? client).get<GetPingResponses, GetPingErrors, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],
