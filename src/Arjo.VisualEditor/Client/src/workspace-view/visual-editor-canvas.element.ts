@@ -20,6 +20,7 @@ const RENDER_PATH_PREFIX = '/__visual-editor/render/';
  *   render page is loaded again. The in-page runtime stops ordinary link clicks and form submits.
  * - A load without the edit-mode marker manifest means the template failed (an error page): shown as a warning
  *   with the page still visible for debugging.
+ * - Until the first page has loaded, Umbraco's loader is shown in the middle of the canvas (#71).
  *
  * @fires frame-changed - a new iframe element is in place (detail: the iframe); bind the protocol channel to it.
  * @fires page-loaded - a render page finished loading (detail: whether it rendered normally, i.e. has markers).
@@ -106,15 +107,23 @@ export class ArjoVisualEditorCanvasElement extends UmbLitElement {
 		this.dispatchEvent(new CustomEvent<boolean>('page-loaded', { detail: !this._renderError }));
 	}
 
+	/** Shown over the canvas until the first page has loaded (#71). */
+	#renderSplash() {
+		return html`<div class="splash" role="status" aria-label="Loading the page">
+			<uui-loader></uui-loader>
+		</div>`;
+	}
+
 	override render() {
-		if (!this.url) return html`<uui-loader-bar></uui-loader-bar>`;
+		// Waiting for the render session: nothing to show yet.
+		if (!this.url) return this.#renderSplash();
 
 		const width = this.deviceSize?.width ?? null;
 		const height = this.deviceSize?.height ?? null;
 		const sized = width !== null && height !== null;
 		const scaled = sized && this._scale < 1;
 		return html`
-			${!this._loaded ? html`<uui-loader-bar class="first-load"></uui-loader-bar>` : nothing}
+			${!this._loaded ? this.#renderSplash() : nothing}
 			${
 				this._renderError
 					? html`<div class="warning" role="alert">
@@ -157,14 +166,15 @@ export class ArjoVisualEditorCanvasElement extends UmbLitElement {
 			background: var(--uui-color-background);
 		}
 
-		uui-loader-bar {
-			width: 100%;
-			flex: none;
-		}
-
-		.first-load {
+		/* Covers the canvas (and the frame loading underneath it), the loader in the middle. */
+		.splash {
 			position: absolute;
-			top: 0;
+			inset: 0;
+			z-index: 1;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			background: var(--uui-color-background);
 		}
 
 		.warning {
