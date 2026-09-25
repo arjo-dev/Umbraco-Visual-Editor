@@ -1,5 +1,5 @@
 import { expect } from '@open-wc/testing';
-import { parseCanvasMessage, parseHostMessage, sameTarget, type TargetRef } from './messages.js';
+import { historyAction, parseCanvasMessage, parseHostMessage, sameTarget, type TargetRef } from './messages.js';
 
 const title: TargetRef = { kind: 'Property', ownerKey: 'doc-1', ownerIsBlock: false, alias: 'title', culture: 'en-US' };
 const block: TargetRef = { kind: 'Block', ownerKey: 'block-1', ownerIsBlock: true, alias: null, culture: null };
@@ -22,6 +22,8 @@ describe('parseCanvasMessage', () => {
 		{ type: 'blockMove', blockKey: 'block-1', to: { ...position, areaKey: 'area-1', index: 2 } },
 		{ type: 'blockInsertRequest', at: position },
 		{ type: 'scroll', x: 0, y: 120.5 },
+		{ type: 'history', action: 'undo' },
+		{ type: 'history', action: 'redo' },
 	];
 
 	for (const message of valid) {
@@ -38,6 +40,7 @@ describe('parseCanvasMessage', () => {
 		['an unknown type', { type: 'navigate', url: '/' }],
 		['a host message', { type: 'setReadonly', readonly: true }],
 		['a prototype key as type', { type: 'toString' }],
+		['history with another action', { type: 'history', action: 'save' }],
 		['ready without targets', { type: 'ready', documentKey: 'doc-1', culture: null }],
 		[
 			'ready with a malformed target',
@@ -133,4 +136,31 @@ describe('sameTarget', () => {
 	it('matches null with null', () => expect(sameTarget(null, null)).to.equal(true));
 	it('differs by culture', () => expect(sameTarget(title, { ...title, culture: 'da-DK' })).to.equal(false));
 	it('differs from null', () => expect(sameTarget(title, null)).to.equal(false));
+});
+
+describe('historyAction', () => {
+	const keys = (key: string, mods: Partial<Record<'ctrlKey' | 'metaKey' | 'altKey' | 'shiftKey', boolean>> = {}) => ({
+		key,
+		ctrlKey: false,
+		metaKey: false,
+		altKey: false,
+		shiftKey: false,
+		...mods,
+	});
+
+	it('reads Ctrl+Z and ⌘Z as undo', () => {
+		expect(historyAction(keys('z', { ctrlKey: true }))).to.equal('undo');
+		expect(historyAction(keys('z', { metaKey: true }))).to.equal('undo');
+	});
+
+	it('reads Ctrl+Shift+Z and Ctrl+Y as redo', () => {
+		expect(historyAction(keys('Z', { ctrlKey: true, shiftKey: true }))).to.equal('redo');
+		expect(historyAction(keys('y', { ctrlKey: true }))).to.equal('redo');
+	});
+
+	it('ignores other keys', () => {
+		expect(historyAction(keys('z'))).to.equal(null);
+		expect(historyAction(keys('z', { ctrlKey: true, altKey: true }))).to.equal(null);
+		expect(historyAction(keys('s', { ctrlKey: true }))).to.equal(null);
+	});
 });

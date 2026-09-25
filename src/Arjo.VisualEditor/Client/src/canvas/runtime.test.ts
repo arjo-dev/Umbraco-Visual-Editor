@@ -186,6 +186,20 @@ describe('canvas runtime', () => {
 		expect(msg?.type === 'select' && msg.target).to.equal(null);
 	});
 
+	it('asks the host to undo and redo (#33)', () => {
+		const win = doc.defaultView as typeof window;
+		const press = (init: KeyboardEventInit) =>
+			doc.dispatchEvent(new win.KeyboardEvent('keydown', { ...init, cancelable: true }));
+		press({ key: 'z', ctrlKey: true });
+		press({ key: 'z', ctrlKey: true, shiftKey: true });
+		press({ key: 'y', metaKey: true });
+		expect(sent.filter((m) => m.type === 'history').map((m) => m.type === 'history' && m.action)).to.deep.equal([
+			'undo',
+			'redo',
+			'redo',
+		]);
+	});
+
 	it('ignores clicks outside any target', () => {
 		click(doc, 'plain');
 		expect(lastSelect()).to.equal(undefined);

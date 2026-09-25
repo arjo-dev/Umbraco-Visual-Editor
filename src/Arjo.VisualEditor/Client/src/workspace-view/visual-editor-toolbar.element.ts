@@ -2,6 +2,8 @@ import { css, customElement, html, keyed, nothing, property } from '@umbraco-cms
 import { UmbLitElement } from '@umbraco-cms/backoffice/lit-element';
 import { deviceFor, sizeFor, sizeLabel, VISUAL_EDITOR_DEVICES, type VisualEditorDeviceAlias } from './devices.js';
 
+const SHORTCUT = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl';
+
 /**
  * Visual editor top bar. The document name, culture switcher and Save / Save & Publish stay in Umbraco's own
  * workspace header and footer (ADR 0003); this bar holds the visual editor's own controls. Presentational: it
@@ -11,6 +13,8 @@ import { deviceFor, sizeFor, sizeLabel, VISUAL_EDITOR_DEVICES, type VisualEditor
  * @fires size-change - detail: { device, sizeId } - the size chosen for that device.
  * @fires toggle-tree - the content tree toggle was pressed.
  * @fires toggle-panel - the side panel toggle was pressed.
+ * @fires undo - Undo was pressed.
+ * @fires redo - Redo was pressed.
  */
 @customElement('arjo-visual-editor-toolbar')
 export class ArjoVisualEditorToolbarElement extends UmbLitElement {
@@ -27,6 +31,9 @@ export class ArjoVisualEditorToolbarElement extends UmbLitElement {
 	@property({ type: Boolean }) readonly = false;
 	/** Zoom the canvas applies so the device width fits (1 = not scaled). */
 	@property({ type: Number }) scale = 1;
+	/** There are changes to undo / redo (#33). */
+	@property({ type: Boolean }) canUndo = false;
+	@property({ type: Boolean }) canRedo = false;
 
 	#chooseDevice(alias: VisualEditorDeviceAlias) {
 		this.dispatchEvent(new CustomEvent<VisualEditorDeviceAlias>('device-change', { detail: alias }));
@@ -73,11 +80,24 @@ export class ArjoVisualEditorToolbarElement extends UmbLitElement {
 			</div>
 
 			<div class="group" role="group" aria-label="History">
-				<!-- Undo/redo arrive with #33. -->
-				<uui-button compact look="secondary" label="Undo" title="Undo (coming soon)" disabled>
+				<uui-button
+					compact
+					look="secondary"
+					label="Undo"
+					title="Undo (${SHORTCUT}+Z)"
+					?disabled=${!this.canUndo || this.readonly}
+					@click=${() => this.dispatchEvent(new CustomEvent('undo'))}
+				>
 					<uui-icon name="icon-undo"></uui-icon>
 				</uui-button>
-				<uui-button compact look="secondary" label="Redo" title="Redo (coming soon)" disabled>
+				<uui-button
+					compact
+					look="secondary"
+					label="Redo"
+					title="Redo (${SHORTCUT}+Shift+Z)"
+					?disabled=${!this.canRedo || this.readonly}
+					@click=${() => this.dispatchEvent(new CustomEvent('redo'))}
+				>
 					<uui-icon name="icon-redo"></uui-icon>
 				</uui-button>
 			</div>
