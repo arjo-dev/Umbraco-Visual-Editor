@@ -71,7 +71,9 @@ export type CanvasMessage =
 	| { type: 'blockInsertRequest'; at: BlockPosition }
 	/** Ctrl+Z / Ctrl+Shift+Z (or Ctrl+Y) on the page, outside text being edited (#33). */
 	| { type: 'history'; action: HistoryAction }
-	| { type: 'scroll'; x: number; y: number };
+	| { type: 'scroll'; x: number; y: number }
+	/** Enter on the selection, which can't be edited on the page: the host takes focus to its editor (#35). */
+	| { type: 'openEditor'; target: TargetRef };
 
 // ---- host -> canvas ----
 
@@ -89,7 +91,9 @@ export type HostMessage =
 	/** Go ahead with an `inlineEditStart`. Not sent when it can't be edited in place (the side panel is used instead). */
 	| { type: 'beginInlineEdit'; target: TargetRef; maxLength: number | null; multiline: boolean }
 	/** Emulated viewport width in CSS pixels; null for the full width. */
-	| { type: 'setDevice'; width: number | null };
+	| { type: 'setDevice'; width: number | null }
+	/** The canvas's words in the backoffice user's language (#35); keys it doesn't know are ignored. */
+	| { type: 'setStrings'; strings: Record<string, string> };
 
 export type CanvasMessageType = CanvasMessage['type'];
 export type HostMessageType = HostMessage['type'];
@@ -149,6 +153,7 @@ const canvasValidators: Record<CanvasMessageType, (m: Obj) => boolean> = {
 	blockInsertRequest: (m) => isBlockPosition(m.at),
 	history: (m) => m.action === 'undo' || m.action === 'redo',
 	scroll: (m) => isNum(m.x) && isNum(m.y),
+	openEditor: (m) => isTargetRef(m.target),
 };
 
 const hostValidators: Record<HostMessageType, (m: Obj) => boolean> = {
@@ -164,6 +169,7 @@ const hostValidators: Record<HostMessageType, (m: Obj) => boolean> = {
 		(m.maxLength === null || (isIndex(m.maxLength) && m.maxLength > 0)) &&
 		typeof m.multiline === 'boolean',
 	setDevice: (m) => m.width === null || (isNum(m.width) && m.width > 0),
+	setStrings: (m) => isObj(m.strings) && Object.values(m.strings).every(isStr),
 };
 
 function parse<T>(validators: Record<string, (m: Obj) => boolean>, data: unknown): T | null {

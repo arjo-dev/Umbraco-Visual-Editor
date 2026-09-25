@@ -1,7 +1,13 @@
 import { manifests as entrypoints } from './entrypoints/manifest.js';
 import { manifests as workspaceView } from './workspace-view/manifest.js';
 import { manifests as visualMode } from './visual-mode/manifest.js';
+import { manifests as localization } from './localization/manifest.js';
 
 // Job of the bundle is to collate all the manifests from different parts of the extension and load other manifests
 // We load this bundle from umbraco-package.json
-export const manifests: Array<UmbExtensionManifest> = [...entrypoints, ...visualMode, ...workspaceView];
+export const manifests: Array<UmbExtensionManifest> = [
+	...entrypoints,
+	...localization,
+	...visualMode,
+	...workspaceView,
+];

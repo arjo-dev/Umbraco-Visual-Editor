@@ -1,4 +1,5 @@
 import { expect } from '@open-wc/testing';
+import { format } from './strings.js';
 import { historyAction, parseCanvasMessage, parseHostMessage, sameTarget, type TargetRef } from './messages.js';
 
 const title: TargetRef = { kind: 'Property', ownerKey: 'doc-1', ownerIsBlock: false, alias: 'title', culture: 'en-US' };
@@ -24,6 +25,7 @@ describe('parseCanvasMessage', () => {
 		{ type: 'scroll', x: 0, y: 120.5 },
 		{ type: 'history', action: 'undo' },
 		{ type: 'history', action: 'redo' },
+		{ type: 'openEditor', target: title },
 	];
 
 	for (const message of valid) {
@@ -80,6 +82,7 @@ describe('parseHostMessage', () => {
 		{ type: 'beginInlineEdit', target: title, maxLength: null, multiline: true },
 		{ type: 'setDevice', width: 375 },
 		{ type: 'setDevice', width: null },
+		{ type: 'setStrings', strings: { delete: 'Slet' } },
 	];
 
 	for (const message of valid) {
@@ -92,6 +95,7 @@ describe('parseHostMessage', () => {
 		['an unknown type', { type: 'eval', code: 'alert(1)' }],
 		['a canvas message', { type: 'select', target: null }],
 		['render without a url', { type: 'render' }],
+		['setStrings with a non-string', { type: 'setStrings', strings: { delete: 1 } }],
 		[
 			'beginInlineEdit with a zero maxLength',
 			{ type: 'beginInlineEdit', target: title, maxLength: 0, multiline: false },
@@ -162,5 +166,13 @@ describe('historyAction', () => {
 		expect(historyAction(keys('z'))).to.equal(null);
 		expect(historyAction(keys('z', { ctrlKey: true, altKey: true }))).to.equal(null);
 		expect(historyAction(keys('s', { ctrlKey: true }))).to.equal(null);
+	});
+});
+
+describe('format', () => {
+	it('fills in numbered arguments and leaves missing ones', () => {
+		expect(format('The {0} area allows at most {1} blocks, {2}', 'left', 3)).to.equal(
+			'The left area allows at most 3 blocks, {2}',
+		);
 	});
 });

@@ -189,8 +189,8 @@ export class ArjoVisualEditorRichTextEditorElement extends UmbLitElement {
 	override render() {
 		if (!this._editor) return nothing;
 		return html`
-			<div class="toolbar" role="toolbar" aria-label="Formatting">
-				${this.shared ? html`<p class="shared">Shared across languages</p>` : nothing}
+			<div class="toolbar" role="toolbar" aria-label=${this.localize.term('arjoVisualEditor_formatting')}>
+				${this.shared ? html`<p class="shared">${this.localize.term('arjoVisualEditor_sharedAcrossLanguages')}</p>` : nothing}
 				${
 					this._toolbar.flat(2).length
 						? html`<umb-tiptap-toolbar

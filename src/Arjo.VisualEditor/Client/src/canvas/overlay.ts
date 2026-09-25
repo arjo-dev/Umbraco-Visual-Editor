@@ -3,7 +3,7 @@
  * layer (popover), with a shadow root: site CSS can't restyle it, our CSS can't leak into the site, and no site
  * z-index can cover it. Boxes follow their elements through scrolling, resizing and DOM changes.
  */
-import type { BlockAction } from '../protocol/index.js';
+import { DEFAULT_CANVAS_STRINGS, format, type BlockAction, type CanvasStrings } from '../protocol/index.js';
 import { targetLabel, type CanvasTarget } from './targets.js';
 
 /** A button of the block toolbar shown on a selected block (#25). */
@@ -34,6 +34,8 @@ export interface OverlayOptions {
 	insertable?: (target: CanvasTarget) => boolean;
 	/** A "+" button was pressed: add a block before or after `target`. */
 	onInsert?: (target: CanvasTarget, where: 'before' | 'after') => void;
+	/** The words to use (#35); English by default. */
+	strings?: () => CanvasStrings;
 }
 
 /**
@@ -89,7 +91,7 @@ export class CanvasOverlay {
 				'overflow:visible;pointer-events:none;z-index:2147483647;display:block;',
 		);
 		this.#root = this.host.attachShadow({ mode: 'open' });
-		this.#root.innerHTML = `<style>${STYLES}</style><div class="layer" part="layer"></div>`;
+		this.#root.innerHTML = `<style>${STYLES}</style><div class="layer" part="layer"></div><div class="live" role="status" aria-live="polite"></div>`;
 		doc.body.append(this.host);
 		if ('showPopover' in this.host) {
 			this.host.setAttribute('popover', 'manual');
@@ -153,6 +155,22 @@ export class CanvasOverlay {
 	/** Something is being edited in place with a toolbar above it (#57): the selection's label would sit under it. */
 	setEditing(editing: boolean) {
 		this.#root.querySelector('.layer')!.classList.toggle('editing', editing);
+	}
+
+	/** Tells screen readers what happened (the selection changed, #35), without showing anything. */
+	announce(text: string) {
+		const live = this.#root.querySelector('.live')!;
+		// Cleared first, so the same text twice is announced twice.
+		live.textContent = '';
+		requestAnimationFrame(() => (live.textContent = text));
+	}
+
+	get #strings() {
+		return this.#options.strings?.() ?? DEFAULT_CANVAS_STRINGS;
+	}
+
+	#label(target: CanvasTarget) {
+		return targetLabel(target.ref, this.#strings.block);
 	}
 
 	setSelection(target: CanvasTarget | null, ancestors: CanvasTarget[] = []) {
@@ -254,7 +272,7 @@ export class CanvasOverlay {
 		const button = this.#doc.createElement('button');
 		button.type = 'button';
 		button.className = `add ${where}`;
-		button.title = where === 'before' ? 'Add a block before this one' : 'Add a block after this one';
+		button.title = where === 'before' ? this.#strings.addBefore : this.#strings.addAfter;
 		button.setAttribute('aria-label', button.title);
 		button.textContent = '+';
 		button.addEventListener('pointerdown', (event) => event.stopPropagation());
@@ -307,7 +325,7 @@ export class CanvasOverlay {
 		const handle = this.#doc.createElement('button');
 		handle.type = 'button';
 		handle.className = 'resize';
-		handle.title = `Drag to change the width of ${targetLabel(target.ref)}`;
+		handle.title = format(this.#strings.dragToResize, this.#label(target));
 		handle.setAttribute('aria-label', handle.title);
 		handle.addEventListener('pointerdown', (event) => {
 			if (event.button !== 0) return;
@@ -327,7 +345,7 @@ export class CanvasOverlay {
 		const grip = this.#doc.createElement('button');
 		grip.type = 'button';
 		grip.className = `grip${inside ? ' inside' : ''}`;
-		grip.title = `Drag to move ${targetLabel(target.ref)}`;
+		grip.title = format(this.#strings.dragToMove, this.#label(target));
 		grip.setAttribute('aria-label', grip.title);
 		grip.innerHTML = GRIP_ICON;
 		grip.addEventListener('pointerdown', (event) => {
@@ -348,7 +366,7 @@ export class CanvasOverlay {
 		const bar = this.#doc.createElement('div');
 		bar.className = `tools${inside ? ' inside' : ''}`;
 		bar.setAttribute('role', 'toolbar');
-		bar.setAttribute('aria-label', `${targetLabel(target.ref)} actions`);
+		bar.setAttribute('aria-label', format(this.#strings.actions, this.#label(target)));
 		for (const tool of tools) {
 			const button = this.#doc.createElement('button');
 			button.type = 'button';
@@ -397,8 +415,8 @@ export class CanvasOverlay {
 				const crumb = this.#doc.createElement('button');
 				crumb.type = 'button';
 				crumb.className = 'crumb';
-				crumb.textContent = targetLabel(ancestor.ref);
-				crumb.title = `Select ${targetLabel(ancestor.ref)}`;
+				crumb.textContent = this.#label(ancestor);
+				crumb.title = format(this.#strings.selectParent, this.#label(ancestor));
 				crumb.addEventListener('click', (event) => {
 					event.preventDefault();
 					event.stopPropagation();
@@ -415,8 +433,8 @@ export class CanvasOverlay {
 		const name = this.#doc.createElement('span');
 		name.textContent =
 			kind === 'hover' && target.ref.ownerLabel
-				? `${targetLabel(target.ref)} · ${target.ref.ownerLabel}`
-				: targetLabel(target.ref);
+				? `${this.#label(target)} · ${target.ref.ownerLabel}`
+				: this.#label(target);
 		label.append(name);
 		const note = kind === 'selected' ? this.#options.note?.(target) : null;
 		if (note) {
@@ -467,6 +485,8 @@ const GRIP_ICON =
 const STYLES = `
 	:host { all: initial; }
 	.layer { position: fixed; inset: 0; pointer-events: none; font: 12px/1.3 system-ui, -apple-system, 'Segoe UI', sans-serif; }
+	/* Read by screen readers only. */
+	.live { position: fixed; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 	.box { position: fixed; box-sizing: border-box; border-radius: 2px; }
 	.box.hover.property { outline: 1px dashed ${PROPERTY_COLOR}; outline-offset: 2px; }
 	.box.hover.block { outline: 1px dashed ${BLOCK_COLOR}; outline-offset: 3px; }

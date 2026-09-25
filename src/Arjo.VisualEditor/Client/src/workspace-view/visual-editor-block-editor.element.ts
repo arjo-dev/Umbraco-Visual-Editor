@@ -95,7 +95,7 @@ export class ArjoVisualEditorBlockEditorElement extends UmbLitElement {
 		entry: BlockData | null | undefined,
 		type: UmbDocumentTypeDetailModel | undefined,
 	) {
-		if (!entry) return html`<p class="hint">This block has no settings.</p>`;
+		if (!entry) return html`<p class="hint">${this.localize.term('arjoVisualEditor_noSettings')}</p>`;
 		if (!type) return html`<uui-loader-bar></uui-loader-bar>`;
 
 		const byAlias = new Map(type.properties.map((p) => [p.alias, p]));
@@ -105,7 +105,7 @@ export class ArjoVisualEditorBlockEditorElement extends UmbLitElement {
 				?.value,
 		}));
 		const tabs = pageSettings(type.containers, type.properties, new Set());
-		if (!tabs.length) return html`<p class="hint">This block has no properties to edit.</p>`;
+		if (!tabs.length) return html`<p class="hint">${this.localize.term('arjoVisualEditor_noProperties')}</p>`;
 
 		return html`
 			<umb-property-dataset .value=${dataset} @change=${(e: Event) => this.#onChange(e, data, entry, type)}>
@@ -138,16 +138,20 @@ export class ArjoVisualEditorBlockEditorElement extends UmbLitElement {
 
 	override render() {
 		if (this._block === undefined) return nothing;
-		if (this._block === null) return html`<p class="hint">This block isn't in the document any more.</p>`;
+		if (this._block === null) return html`<p class="hint">${this.localize.term('arjoVisualEditor_blockGone')}</p>`;
 		const hasSettings = !!this._block.settings;
 		const tab = hasSettings ? this._tab : 'content';
 		return html`
 			${
 				hasSettings
 					? html`<uui-tab-group>
-							<uui-tab label="Content" ?active=${tab === 'content'} @click=${() => (this._tab = 'content')}></uui-tab>
 							<uui-tab
-								label="Settings"
+								label=${this.localize.term('arjoVisualEditor_content')}
+								?active=${tab === 'content'}
+								@click=${() => (this._tab = 'content')}
+							></uui-tab>
+							<uui-tab
+								label=${this.localize.term('arjoVisualEditor_settings')}
 								?active=${tab === 'settings'}
 								@click=${() => (this._tab = 'settings')}
 							></uui-tab>

@@ -41,6 +41,13 @@ export class ArjoVisualEditorSidePanelElement extends UmbLitElement {
 	@state() private _view: 'selection' | 'settings' = 'selection';
 
 	/** Switches to Page settings, e.g. to show an error on a property that isn't on the page. */
+	/** Takes keyboard focus to the selection's editor (#35): Enter on the page, for something edited here. */
+	async focusSelection() {
+		this._view = 'selection';
+		await this.updateComplete;
+		this.shadowRoot?.querySelector<HTMLElement>('.selection')?.focus();
+	}
+
 	showPageSettings() {
 		this._view = 'settings';
 	}
@@ -53,7 +60,8 @@ export class ArjoVisualEditorSidePanelElement extends UmbLitElement {
 	#errorLabel(error: VisualEditorError) {
 		if (!error.target) return this.localize.term('general_name');
 		const onPage = this.targetOnPage(error.target);
-		const name = onPage?.label ?? error.propertyName ?? error.target.alias ?? 'Block';
+		const name =
+			onPage?.label ?? error.propertyName ?? error.target.alias ?? this.localize.term('arjoVisualEditor_block');
 		const owner = onPage?.ownerLabel;
 		return owner ? `${name} (${owner})` : name;
 	}
@@ -64,7 +72,11 @@ export class ArjoVisualEditorSidePanelElement extends UmbLitElement {
 			<uui-box class="errors">
 				<div slot="headline" class="errors-headline">
 					<uui-icon name="icon-alert"></uui-icon>
-					${this.errors.length === 1 ? '1 thing needs attention' : `${this.errors.length} things need attention`}
+					${
+						this.errors.length === 1
+							? this.localize.term('arjoVisualEditor_oneThingNeedsAttention')
+							: this.localize.term('arjoVisualEditor_thingsNeedAttention', this.errors.length)
+					}
 				</div>
 				<ul>
 					${this.errors.map(
@@ -94,14 +106,20 @@ export class ArjoVisualEditorSidePanelElement extends UmbLitElement {
 
 	#describe(target: TargetRef) {
 		const culture = target.culture ? ` · ${target.culture}` : '';
-		if (target.kind === 'Block') return { heading: target.label ?? 'Block', detail: `Block${culture}` };
-		const owner = target.ownerIsBlock ? `In ${target.ownerLabel ?? 'a block'}` : 'Page';
+		const block = this.localize.term('arjoVisualEditor_block');
+		if (target.kind === 'Block') return { heading: target.label ?? block, detail: `${block}${culture}` };
+		const owner = target.ownerIsBlock
+			? this.localize.term(
+					'arjoVisualEditor_inBlock',
+					target.ownerLabel ?? this.localize.term('arjoVisualEditor_aBlock'),
+				)
+			: this.localize.term('arjoVisualEditor_page');
 		return { heading: target.label ?? target.alias ?? '', detail: `${owner}${culture}` };
 	}
 
 	#renderSelection() {
 		const target = this.selected;
-		if (!target) return html`<p class="hint">Click something on the page to select it.</p>`;
+		if (!target) return html`<p class="hint">${this.localize.term('arjoVisualEditor_selectHint')}</p>`;
 
 		if (this.richText && sameTarget(this.richText.target, target)) {
 			// Not the property editor: a second editor on the same value would fight the one on the page.
@@ -109,10 +127,7 @@ export class ArjoVisualEditorSidePanelElement extends UmbLitElement {
 			return html`
 				<p class="heading">${heading}</p>
 				<p class="detail">${detail}</p>
-				<p class="hint">
-					Editing on the page, with the toolbar above the text. Esc cancels; click elsewhere on the page when you're
-					done.
-				</p>
+				<p class="hint">${this.localize.term('arjoVisualEditor_richTextHint')}</p>
 			`;
 		}
 
@@ -128,14 +143,18 @@ export class ArjoVisualEditorSidePanelElement extends UmbLitElement {
 		const block =
 			target.kind === 'Block' ? target : this.targets.find((t) => t.kind === 'Block' && t.ownerKey === target.ownerKey);
 		return html`
-			<p class="heading">${target.kind === 'Block' ? heading : (block?.label ?? target.ownerLabel ?? 'Block')}</p>
-			<p class="detail">${target.kind === 'Block' ? detail : `Block · selected: ${heading}`}</p>
+			<p class="heading">
+				${target.kind === 'Block' ? heading : (block?.label ?? target.ownerLabel ?? this.localize.term('arjoVisualEditor_block'))}
+			</p>
+			<p class="detail">
+				${target.kind === 'Block' ? detail : this.localize.term('arjoVisualEditor_blockSelected', heading)}
+			</p>
 			<arjo-visual-editor-block-editor
 				.blockKey=${target.ownerKey}
 				.culture=${this.culture}
 				.tab=${this.blockTab}
 			></arjo-visual-editor-block-editor>
-			${this.contentHref ? html`<a class="standard" href=${this.contentHref}>Show in standard editor</a>` : nothing}
+			${this.contentHref ? html`<a class="standard" href=${this.contentHref}>${this.localize.term('arjoVisualEditor_showInStandardEditor')}</a>` : nothing}
 		`;
 	}
 
@@ -144,12 +163,12 @@ export class ArjoVisualEditorSidePanelElement extends UmbLitElement {
 			${this.#renderErrors()}
 			<uui-tab-group>
 				<uui-tab
-					label="Selection"
+					label=${this.localize.term('arjoVisualEditor_selection')}
 					?active=${this._view === 'selection'}
 					@click=${() => (this._view = 'selection')}
 				></uui-tab>
 				<uui-tab
-					label="Page settings"
+					label=${this.localize.term('arjoVisualEditor_pageSettings')}
 					?active=${this._view === 'settings'}
 					@click=${() => (this._view = 'settings')}
 				></uui-tab>
@@ -159,11 +178,13 @@ export class ArjoVisualEditorSidePanelElement extends UmbLitElement {
 					? html`<arjo-visual-editor-page-settings
 							.visibleAliases=${this.visibleAliases}
 						></arjo-visual-editor-page-settings>`
-					: html`<uui-box headline="Selection">${this.#renderSelection()}</uui-box>`
+					: html`<uui-box class="selection" tabindex="-1" headline=${this.localize.term('arjoVisualEditor_selection')}
+							>${this.#renderSelection()}</uui-box
+						>`
 			}
 			${
 				this.targetCount !== undefined
-					? html`<p class="status">${this.targetCount} editable areas on this page</p>`
+					? html`<p class="status">${this.localize.term('arjoVisualEditor_editableAreas', this.targetCount)}</p>`
 					: nothing
 			}
 		`;
