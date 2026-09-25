@@ -10,10 +10,12 @@ import { viewInPath } from '../visual-mode/routes.js';
 import {
 	createHostChannel,
 	createNonce,
+	historyAction,
 	sameTarget,
 	withNonce,
 	type BlockAction,
 	type BlockPosition,
+	type HistoryAction,
 	type CanvasMessage,
 	type HostChannel,
 	type TargetRef,
@@ -23,6 +25,8 @@ import { ArjoInlineEditController, type RichTextSession } from './inline-edit.co
 import { clampPanelWidth, PANEL_DEFAULT_WIDTH } from './panel-width.js';
 import { ArjoValidationController, type VisualEditorError } from './validation.controller.js';
 import { ArjoBlockEditController } from './block-edit.controller.js';
+import { ArjoHistoryController } from './history.controller.js';
+import { locateBlock } from './property-values.js';
 import './visual-editor-block-picker.element.js';
 import '../rich-text/visual-editor-rich-text-editor.element.js';
 import type { ArjoVisualEditorSidePanelElement } from './visual-editor-side-panel.element.js';
@@ -82,6 +86,8 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 	 * no access to its language. The workspace's read-only guard decides, as it does for the Content tab.
 	 */
 	@state() private _readonly = false;
+	@state() private _canUndo = false;
+	@state() private _canRedo = false;
 
 	#documentKey?: string;
 	#culture: string | null = null;
@@ -101,6 +107,11 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 	#inline = new ArjoInlineEditController(this, (message) => this.#channel?.send(message));
 	/** Block toolbar actions: move, duplicate, delete (#25). */
 	#blocks = new ArjoBlockEditController(this);
+	/** Undo / redo of the changes made here (#33). */
+	#history = new ArjoHistoryController(this, ({ canUndo, canRedo }) => {
+		this._canUndo = canUndo;
+		this._canRedo = canRedo;
+	});
 	/** Validation messages, placed on the page (#23). */
 	#validation = new ArjoValidationController(this, (errors) => this.#onErrors(errors));
 	/** The frame shows a normal render with the canvas runtime, so newer renders can be patched in (#18). */
@@ -158,12 +169,14 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 		super.connectedCallback();
 		this.#visualMode?.setActive(true);
 		this.#documentBase = viewInPath(location.pathname)?.base;
+		window.addEventListener('keydown', this.#onWindowKeyDown);
 	}
 
 	override disconnectedCallback() {
 		// Leaving the view (another tab, another document, another section) restores the normal backoffice.
 		// Before super: that tears down this element's context consumers and controllers.
 		this.#visualMode?.setActive(false);
+		window.removeEventListener('keydown', this.#onWindowKeyDown);
 		this.#endRichText(false);
 		clearTimeout(this.#timer);
 		this.#channel?.close();
@@ -182,6 +195,7 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 			onConnect: () => {
 				// A re-render is a fresh page: give it the current state again.
 				this.#inline.reset();
+				this.#history.endGroup();
 				this._richText = undefined;
 				this.#channel?.send({ type: 'setSelection', target: this._selected });
 				this.#channel?.send({ type: 'setDevice', width: this.#deviceWidth });
@@ -221,6 +235,8 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 				break;
 			case 'inlineEditStart':
 				void this.#inline.start(message.target, message.text, this.#culture, this.#segment).then((started) => {
+					// The whole edit is one step to undo.
+					if (started) this.#history.beginGroup();
 					// Not plain text shown as stored (or not editable): the side panel is the way to edit it.
 					if (!started && !this._panelOpen) this.#setPanelOpen(true);
 				});
@@ -238,6 +254,7 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 					break;
 				}
 				this.#inline.end(message.target, message.cancelled);
+				this.#history.endGroup();
 				// Renders wait while text is edited in place; catch up now.
 				this.#scheduleRender();
 				break;
@@ -252,6 +269,9 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 			case 'blockResize':
 				// A grid block's column span dragged on the canvas (#27); the host snaps it to the allowed spans.
 				void this.#blocks.resize(message.blockKey, message.columnSpan, this.#culture);
+				break;
+			case 'history':
+				void this.#onHistory(message.action);
 				break;
 			case 'blockAction':
 				void this.#onBlockAction(message.blockKey, message.action);
@@ -329,6 +349,7 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 		}
 		this._selected = target;
 		this._richText = { ...session, mount };
+		this.#history.beginGroup();
 		this.#channel?.send({ type: 'richTextEditing', target, active: true });
 	}
 
@@ -338,9 +359,47 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 		if (!session) return;
 		this._richText = undefined;
 		this.#inline.end(session.target, cancelled);
+		this.#history.endGroup();
 		this.#channel?.send({ type: 'richTextEditing', target: session.target, active: false });
 		// Render the stored markup through the template again (links, media, the markers).
 		this.#scheduleRender();
+	}
+
+	/**
+	 * Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y in the Visual editor (#33), except in a field or text being edited: they have their
+	 * own undo. Keys pressed on the page come from the canvas as `history` messages instead.
+	 */
+	#onWindowKeyDown = (event: KeyboardEvent) => {
+		const action = historyAction(event);
+		if (!action || event.defaultPrevented) return;
+		const path = event.composedPath();
+		if (!path.includes(this) && path[0] !== document.body) return;
+		const target = path[0];
+		if (
+			target instanceof HTMLInputElement ||
+			target instanceof HTMLTextAreaElement ||
+			target instanceof HTMLSelectElement ||
+			(target instanceof HTMLElement && target.isContentEditable)
+		) {
+			return;
+		}
+		event.preventDefault();
+		void this.#onHistory(action);
+	};
+
+	/** Undoes or redoes the last change; rich text being edited is finished first, so its edit is a step too. */
+	async #onHistory(action: HistoryAction) {
+		if (this._readonly) return;
+		this.#endRichText(false);
+		// Text being edited in place on the page has its own undo.
+		if (this.#inline.editing) return;
+		await (action === 'undo' ? this.#history.undo() : this.#history.redo());
+		// A block that isn't there any more (an insert undone) can't stay selected.
+		const selected = this._selected;
+		if (selected?.ownerIsBlock && !locateBlock(this.#workspace?.getValues() ?? [], selected.ownerKey, this.#culture)) {
+			this._selected = null;
+			this.#channel?.send({ type: 'setSelection', target: null });
+		}
 	}
 
 	/** Follows whether the variant being edited is read-only, and tells the canvas. */
@@ -571,6 +630,10 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 				.rendering=${this._status === 'rendering'}
 				.scale=${this._scale}
 				?readonly=${this._readonly}
+				.canUndo=${this._canUndo}
+				.canRedo=${this._canRedo}
+				@undo=${() => this.#onHistory('undo')}
+				@redo=${() => this.#onHistory('redo')}
 				@device-change=${this.#onDeviceChange}
 				@size-change=${this.#onSizeChange}
 				@toggle-tree=${() => this.#visualMode?.setShowTree(!this._treeVisible)}

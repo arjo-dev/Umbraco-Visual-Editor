@@ -65,6 +65,7 @@ Block positions use `{ ownerKey, propertyAlias, areaKey | null, index }`.
 | `richTextEditStart` | `target`, `mountId: string` | Double-click (or Enter on the selection) on rich text. The canvas has marked the element to mount the editor on with `data-uve-rte="{mountId}"` (#57, ADR 0004) |
 | `blockMove` | `blockKey`, `to: BlockPosition` | A block is dropped in a new position (#26/#27) |
 | `blockInsertRequest` | `at: BlockPosition` | An insertion point "+" is clicked (#28) |
+| `history` | `action: 'undo' \| 'redo'` | Ctrl+Z / Ctrl+Shift+Z or Ctrl+Y (⌘ on a Mac) on the page, outside text being edited, which has its own undo (#33) |
 | `scroll` | `x`, `y` | The canvas scrolls (so the host can restore it after a re-render) |
 
 ### Host → canvas

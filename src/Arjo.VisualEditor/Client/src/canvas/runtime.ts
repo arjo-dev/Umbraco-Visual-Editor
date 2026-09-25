@@ -18,6 +18,7 @@
  */
 import {
 	connectToHost,
+	historyAction,
 	readNonce,
 	type BlockPosition,
 	type CanvasChannel,
@@ -477,6 +478,13 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 		event.stopPropagation();
 	};
 	const onKeyDown = (event: KeyboardEvent) => {
+		// Undo / redo (#33); text being edited has its own.
+		const history = historyAction(event);
+		if (history && !editing()) {
+			event.preventDefault();
+			if (!readonly) channel?.send({ type: 'history', action: history });
+			return;
+		}
 		if (!selected || editing()) return;
 		if (event.key === 'Escape') {
 			select(index.ancestorsOf(selected)[0] ?? null);

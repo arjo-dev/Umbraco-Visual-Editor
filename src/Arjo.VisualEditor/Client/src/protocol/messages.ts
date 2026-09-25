@@ -44,6 +44,8 @@ export interface BlockPosition {
 export type BlockAction = 'moveUp' | 'moveDown' | 'duplicate' | 'copy' | 'delete' | 'settings';
 const BLOCK_ACTIONS: readonly string[] = ['moveUp', 'moveDown', 'duplicate', 'copy', 'delete', 'settings'];
 
+export type HistoryAction = 'undo' | 'redo';
+
 export type CanvasMessage =
 	| { type: 'ready'; documentKey: string; culture: string | null; targets: TargetRef[] }
 	/** Outcome of a `render` message: patched in (`ok`), or it couldn't be and the host should reload the frame. */
@@ -67,6 +69,8 @@ export type CanvasMessage =
 	/** A Block Grid block's column span was dragged to `columnSpan` (#27); the host snaps it to the allowed spans. */
 	| { type: 'blockResize'; blockKey: string; columnSpan: number }
 	| { type: 'blockInsertRequest'; at: BlockPosition }
+	/** Ctrl+Z / Ctrl+Shift+Z (or Ctrl+Y) on the page, outside text being edited (#33). */
+	| { type: 'history'; action: HistoryAction }
 	| { type: 'scroll'; x: number; y: number };
 
 // ---- host -> canvas ----
@@ -143,6 +147,7 @@ const canvasValidators: Record<CanvasMessageType, (m: Obj) => boolean> = {
 	blockMove: (m) => isStr(m.blockKey) && isBlockPosition(m.to),
 	blockResize: (m) => isStr(m.blockKey) && isIndex(m.columnSpan) && m.columnSpan > 0,
 	blockInsertRequest: (m) => isBlockPosition(m.at),
+	history: (m) => m.action === 'undo' || m.action === 'redo',
 	scroll: (m) => isNum(m.x) && isNum(m.y),
 };
 
@@ -176,3 +181,14 @@ export const parseHostMessage = (data: unknown) => parse<HostMessage>(hostValida
 export const sameTarget = (a: TargetRef | null, b: TargetRef | null) =>
 	a === b ||
 	(!!a && !!b && a.kind === b.kind && a.ownerKey === b.ownerKey && a.alias === b.alias && a.culture === b.culture);
+
+/** The undo / redo shortcut a key press is, if any (#33): Ctrl+Z, Ctrl+Shift+Z and Ctrl+Y, or ⌘ on a Mac. */
+export function historyAction(
+	event: Pick<KeyboardEvent, 'key' | 'ctrlKey' | 'metaKey' | 'altKey' | 'shiftKey'>,
+): HistoryAction | null {
+	if (!(event.ctrlKey || event.metaKey) || event.altKey) return null;
+	const key = event.key.toLowerCase();
+	if (key === 'z') return event.shiftKey ? 'redo' : 'undo';
+	if (key === 'y' && !event.shiftKey) return 'redo';
+	return null;
+}
