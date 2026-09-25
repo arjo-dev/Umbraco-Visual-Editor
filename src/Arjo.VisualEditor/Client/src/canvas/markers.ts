@@ -119,14 +119,29 @@ export function resolveMarkers(manifest: MarkerManifest, root: Document = docume
 		const start = starts.get(key);
 		if (!start || start.parentNode !== node.parentNode) continue;
 		starts.delete(key);
-		const elements: Element[] = [];
+		let elements: Element[] = [];
 		// nodeType, not instanceof: the document may belong to another window (e.g. a frame driven from its host).
 		for (let n = start.nextSibling; n && n !== node; n = n.nextSibling)
 			if (n.nodeType === Node.ELEMENT_NODE) elements.push(n as Element);
+		if (type === 'b' && !elements.length) elements = [standInFor(node)];
 		add(Number(id), type === 'b' ? blockRoot(elements) : elements, 'comment');
 	}
 
 	return targets;
+}
+
+/**
+ * A block whose partial rendered nothing (e.g. a Block List item just added, whose partial returns early without
+ * content): an empty element in its place, so it can be selected and gets a placeholder. Block Grid items always
+ * have their layout item.
+ */
+function standInFor(end: Comment): Element {
+	const el = end.ownerDocument.createElement('div');
+	el.setAttribute('data-uve-empty-block', '');
+	el.style.display = 'block';
+	el.style.minWidth = '8rem';
+	end.parentNode!.insertBefore(el, end);
+	return el;
 }
 
 /** Block Grid's default items partial puts each block in a layout item; that cell is the block's real box. */
