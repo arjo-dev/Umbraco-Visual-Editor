@@ -78,13 +78,28 @@ public sealed class RenderSessionController(
                 title: "The visual editor isn't enabled for this document type.");
         }
 
+        // Unsaved values are only rendered for users who could save them (#34). Anyone else sees the document as
+        // saved: they can't change it (the Visual editor is read-only for them, #31), and values they made up could
+        // otherwise show them content they may not see, e.g. a picker pointing outside their start nodes.
+        AuthorizationResult mayUpdate = await authorizationService.AuthorizeResourceAsync(
+            User,
+            ContentPermissionResource.WithKeys(ActionUpdate.ActionLetter, model.DocumentKey),
+            AuthorizationPolicies.ContentPermissionByResource);
+        IEnumerable<RenderValue> values = mayUpdate.Succeeded
+            ? model.Values.Select(v => new RenderValue(v.Alias, v.Culture, v.Segment, v.Value))
+            : [];
+        IEnumerable<RenderVariantName> variants = mayUpdate.Succeeded
+            ? (model.Variants ?? []).Select(v => new RenderVariantName(v.Culture, v.Segment, v.Name))
+            : [];
+
+        // Only this user may render the session (RenderSessionContentFinder).
         var userKey = backOfficeSecurityAccessor.BackOfficeSecurity?.CurrentUser?.Key ?? Guid.Empty;
         RenderSession session = await sessions.CreateAsync(
             model.DocumentKey,
             model.Culture,
             model.Segment,
-            model.Values.Select(v => new RenderValue(v.Alias, v.Culture, v.Segment, v.Value)),
-            (model.Variants ?? []).Select(v => new RenderVariantName(v.Culture, v.Segment, v.Name)),
+            values,
+            variants,
             userKey,
             HttpContext.RequestAborted);
 

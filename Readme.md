@@ -24,3 +24,7 @@ The editor is offered on every document type that has a template. To narrow that
 | `ExcludedDocumentTypes` | `[]` | Document type aliases never to offer it for. |
 
 Aliases are case-insensitive. The site fails to start if an alias is blank or appears in both lists. The Visual tab is hidden where the editor isn't offered, and the render endpoint refuses those documents with a 403.
+
+## Security
+
+How render sessions, the canvas frame and its messaging are protected, and the risks that remain, are in [docs/security.md](docs/security.md).
