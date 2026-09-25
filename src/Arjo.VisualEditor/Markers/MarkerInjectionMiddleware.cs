@@ -106,6 +106,10 @@ internal sealed class MarkerInjectionMiddleware(RequestDelegate next)
 
         context.Response.Headers.CacheControl = "no-store";
         context.Response.Headers["X-Robots-Tag"] = "noindex";
+        // The URL holds the session token: don't pass it on to the page's images, fonts and links (#34).
+        context.Response.Headers["Referrer-Policy"] = "no-referrer";
+        // Only the backoffice (same origin) may frame it. Added to any policy the site sends; policies combine.
+        context.Response.Headers.Append("Content-Security-Policy", "frame-ancestors 'self'");
 
         EditModeRequest? editMode = EditModeRequest.Get(context);
         var isHtml = context.Response.ContentType?.StartsWith("text/html", StringComparison.OrdinalIgnoreCase) == true;

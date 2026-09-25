@@ -4,8 +4,22 @@
  */
 import { Idiomorph } from 'idiomorph';
 
+/** Path prefix of render-session URLs (RenderSessionContentFinder.PathPrefix). */
+const RENDER_PATH_PREFIX = '/__visual-editor/render/';
+
+/** Only render-session pages of this site are fetched and patched in (#34), whoever asks. */
+export function isRenderUrl(url: string, base: string = location.href): boolean {
+	try {
+		const parsed = new URL(url, base);
+		return parsed.origin === new URL(base).origin && parsed.pathname.startsWith(RENDER_PATH_PREFIX);
+	} catch {
+		return false;
+	}
+}
+
 /** Fetches a render-session page and parses it. Null when it didn't render normally (no marker manifest). */
 export async function fetchRender(url: string, signal?: AbortSignal): Promise<Document | null> {
+	if (!isRenderUrl(url)) return null;
 	const response = await fetch(url, { credentials: 'same-origin', headers: { Accept: 'text/html' }, signal });
 	if (!response.ok || !response.headers.get('content-type')?.includes('text/html')) return null;
 	const next = new DOMParser().parseFromString(await response.text(), 'text/html');

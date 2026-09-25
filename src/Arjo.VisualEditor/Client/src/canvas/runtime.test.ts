@@ -285,19 +285,19 @@ describe('canvas runtime', () => {
 
 		it('patches the new render into the page instead of replacing it', async () => {
 			const outer = doc.getElementById('outer');
-			responses['/r/2'] = [pageHtml({ title: 'Hello again' })];
+			responses['/__visual-editor/render/2'] = [pageHtml({ title: 'Hello again' })];
 
-			expect(await runtime.render('/r/2')).to.equal(true);
+			expect(await runtime.render('/__visual-editor/render/2')).to.equal(true);
 
 			expect(doc.getElementById('title')!.textContent).to.equal('Hello again');
 			expect(doc.getElementById('outer')).to.equal(outer); // the same element, updated in place
-			expect(rendered()).to.deep.equal([{ type: 'rendered', url: '/r/2', ok: true }]);
+			expect(rendered()).to.deep.equal([{ type: 'rendered', url: '/__visual-editor/render/2', ok: true }]);
 			expect(sent.filter((m) => m.type === 'ready')).to.have.length(2);
 		});
 
 		it('re-resolves markers: new text is selectable and has no marker characters left', async () => {
-			responses['/r/2'] = [pageHtml({ caption: 'New caption' })];
-			await runtime.render('/r/2');
+			responses['/__visual-editor/render/2'] = [pageHtml({ caption: 'New caption' })];
+			await runtime.render('/__visual-editor/render/2');
 
 			expect(doc.getElementById('caption')!.textContent).to.equal('New caption');
 			click(doc, 'caption');
@@ -310,9 +310,9 @@ describe('canvas runtime', () => {
 			sent = [];
 			doc.getElementById('field')!.focus({ preventScroll: true });
 			doc.defaultView!.scrollTo(0, 300);
-			responses['/r/2'] = [pageHtml({ caption: 'Changed' })];
+			responses['/__visual-editor/render/2'] = [pageHtml({ caption: 'Changed' })];
 
-			await runtime.render('/r/2');
+			await runtime.render('/__visual-editor/render/2');
 
 			expect(selectionLabel(runtime).name).to.equal('Caption');
 			expect(runtime.overlay.host.isConnected).to.equal(true);
@@ -324,42 +324,42 @@ describe('canvas runtime', () => {
 
 		it('clears the selection when the selected block is gone', async () => {
 			click(doc, 'inner');
-			responses['/r/2'] = [pageHtml().replace(/<!--uve:b:3-->[\s\S]*<!--\/uve:b:3-->/, '')];
+			responses['/__visual-editor/render/2'] = [pageHtml().replace(/<!--uve:b:3-->[\s\S]*<!--\/uve:b:3-->/, '')];
 
-			await runtime.render('/r/2');
+			await runtime.render('/__visual-editor/render/2');
 
 			expect(doc.getElementById('inner')).to.equal(null);
 			expect(runtime.overlay.host.shadowRoot!.querySelector('.box.selected')).to.equal(null);
 		});
 
 		it("answers not ok, leaving the page as it is, when the render didn't produce markers", async () => {
-			responses['/r/2'] = ['<!doctype html><body><h1>Error</h1></body>'];
+			responses['/__visual-editor/render/2'] = ['<!doctype html><body><h1>Error</h1></body>'];
 
-			expect(await runtime.render('/r/2')).to.equal(false);
-			expect(await runtime.render('/r/missing')).to.equal(false);
+			expect(await runtime.render('/__visual-editor/render/2')).to.equal(false);
+			expect(await runtime.render('/__visual-editor/render/missing')).to.equal(false);
 
 			expect(doc.getElementById('title')!.textContent).to.equal('Hello');
 			expect(rendered()).to.deep.equal([
-				{ type: 'rendered', url: '/r/2', ok: false },
-				{ type: 'rendered', url: '/r/missing', ok: false },
+				{ type: 'rendered', url: '/__visual-editor/render/2', ok: false },
+				{ type: 'rendered', url: '/__visual-editor/render/missing', ok: false },
 			]);
 		});
 
 		it('drops a render that a newer one overtook', async () => {
-			responses['/r/slow'] = [pageHtml({ title: 'Stale' }), 50];
-			responses['/r/fast'] = [pageHtml({ title: 'Latest' })];
+			responses['/__visual-editor/render/slow'] = [pageHtml({ title: 'Stale' }), 50];
+			responses['/__visual-editor/render/fast'] = [pageHtml({ title: 'Latest' })];
 
-			const slow = runtime.render('/r/slow');
-			const fast = runtime.render('/r/fast');
+			const slow = runtime.render('/__visual-editor/render/slow');
+			const fast = runtime.render('/__visual-editor/render/fast');
 
 			expect(await Promise.all([slow, fast])).to.deep.equal([false, true]);
 			expect(doc.getElementById('title')!.textContent).to.equal('Latest');
-			expect(rendered()).to.deep.equal([{ type: 'rendered', url: '/r/fast', ok: true }]);
+			expect(rendered()).to.deep.equal([{ type: 'rendered', url: '/__visual-editor/render/fast', ok: true }]);
 		});
 
 		it('handles the render message from the host', async () => {
-			responses['/r/2'] = [pageHtml({ title: 'Via message' })];
-			handleHostMessage(runtime, { type: 'render', url: '/r/2' });
+			responses['/__visual-editor/render/2'] = [pageHtml({ title: 'Via message' })];
+			handleHostMessage(runtime, { type: 'render', url: '/__visual-editor/render/2' });
 			await new Promise((resolve) => setTimeout(resolve, 20));
 			expect(doc.getElementById('title')!.textContent).to.equal('Via message');
 		});
@@ -459,13 +459,13 @@ describe('canvas runtime', () => {
 			try {
 				begin();
 				type('Typing');
-				expect(await runtime.render('/r/2')).to.equal(false);
+				expect(await runtime.render('/__visual-editor/render/2')).to.equal(false);
 				expect(title().textContent).to.equal('Typing');
 
 				title().blur();
 				await wait(20);
 				expect(title().textContent).to.equal('From server');
-				expect(ofType('rendered')).to.deep.equal([{ type: 'rendered', url: '/r/2', ok: true }]);
+				expect(ofType('rendered')).to.deep.equal([{ type: 'rendered', url: '/__visual-editor/render/2', ok: true }]);
 			} finally {
 				window.fetch = realFetch;
 			}
@@ -521,7 +521,7 @@ describe('canvas runtime', () => {
 					type: 'setErrors',
 					errors: [{ target: ref('caption', 'inner'), message: 'Required' }],
 				});
-				await runtime.render('/r/2');
+				await runtime.render('/__visual-editor/render/2');
 				expect(errorBoxes()).to.have.length(1);
 			} finally {
 				window.fetch = realFetch;
@@ -583,18 +583,18 @@ describe('canvas runtime', () => {
 		it('selects a block the host picked once a re-render brings it', async () => {
 			const realFetch = window.fetch;
 			const pages: Record<string, string> = {
-				'/r/without': pageHtml().replace(/<!--uve:b:3-->[\s\S]*<!--\/uve:b:3-->/, ''),
-				'/r/with': pageHtml(),
+				'/__visual-editor/render/without': pageHtml().replace(/<!--uve:b:3-->[\s\S]*<!--\/uve:b:3-->/, ''),
+				'/__visual-editor/render/with': pageHtml(),
 			};
 			window.fetch = (async (input: RequestInfo | URL) =>
 				new Response(pages[String(input)], { headers: { 'content-type': 'text/html' } })) as typeof fetch;
 			try {
-				await runtime.render('/r/without');
+				await runtime.render('/__visual-editor/render/without');
 				const inner = { kind: 'Block' as const, ownerKey: 'inner', ownerIsBlock: true, alias: null, culture: null };
 				handleHostMessage(runtime, { type: 'setSelection', target: inner });
 				expect(selectionLabel(runtime).name).to.equal(null); // not on the page yet
 
-				await runtime.render('/r/with');
+				await runtime.render('/__visual-editor/render/with');
 				expect(selectionLabel(runtime).name).to.equal('Image Row');
 			} finally {
 				window.fetch = realFetch;

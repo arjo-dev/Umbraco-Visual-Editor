@@ -4,6 +4,7 @@ using Umbraco.Cms.Core.Models.Editors;
 using Umbraco.Cms.Core.Models.PublishedContent;
 using Umbraco.Cms.Core.PropertyEditors;
 using Umbraco.Cms.Core.PublishedCache;
+using Umbraco.Cms.Core.Services;
 
 namespace Arjo.VisualEditor.Rendering;
 
@@ -16,6 +17,7 @@ public sealed class OverlayContentBuilder(
     PropertyEditorCollection propertyEditors,
     IPublishedModelFactory modelFactory,
     IVariationContextAccessor variationContextAccessor,
+    IContentTypeService contentTypeService,
     ILogger<OverlayContentBuilder> logger)
 {
     public async Task<IPublishedContent?> BuildAsync(RenderSession session)
@@ -25,6 +27,13 @@ public sealed class OverlayContentBuilder(
         {
             return null;
         }
+
+        // Property type keys by alias, which some editors need to convert a value.
+        IReadOnlyDictionary<string, Guid> propertyTypeKeys =
+            contentTypeService.Get(draft.ContentType.Key)?.CompositionPropertyTypes
+                .GroupBy(p => p.Alias, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.First().Key, StringComparer.OrdinalIgnoreCase)
+            ?? new Dictionary<string, Guid>();
 
         var overrides = new List<IPublishedProperty>();
         foreach (IGrouping<string, RenderValue> group in session.Values.GroupBy(v => v.Alias, StringComparer.OrdinalIgnoreCase))
@@ -38,8 +47,21 @@ public sealed class OverlayContentBuilder(
             var sources = new Dictionary<(string, string), object?>();
             foreach (RenderValue value in group)
             {
-                sources[(value.Culture ?? string.Empty, value.Segment ?? string.Empty)] =
-                    ToStoredValue(propertyType, value, session.DocumentKey);
+                // A value that can't be converted shows as saved rather than failing the whole page.
+                try
+                {
+                    sources[(value.Culture ?? string.Empty, value.Segment ?? string.Empty)] =
+                        ToStoredValue(propertyType, value, session.DocumentKey, propertyTypeKeys);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Couldn't convert the unsaved value of {Alias}; rendering its saved value", value.Alias);
+                }
+            }
+
+            if (sources.Count == 0)
+            {
+                continue;
             }
 
             overrides.Add(new OverlayPublishedProperty(
@@ -57,10 +79,16 @@ public sealed class OverlayContentBuilder(
     }
 
     /// <summary>
-    /// Converts an editor-format value to the stored format, exactly as saving would, via the property editor's
+    /// Converts an editor-format value to the stored format, as saving would, via the property editor's
     /// <see cref="IDataValueEditor.FromEditor"/>. The published value converters then take it from there.
+    /// Without side effects (#34): uploads not saved yet are left out (<see cref="PendingUploads"/>), and there is no
+    /// current value, which editors would otherwise tidy up (an upload field deletes a replaced file).
     /// </summary>
-    private object? ToStoredValue(IPublishedPropertyType propertyType, RenderValue value, Guid documentKey)
+    private object? ToStoredValue(
+        IPublishedPropertyType propertyType,
+        RenderValue value,
+        Guid documentKey,
+        IReadOnlyDictionary<string, Guid> propertyTypeKeys)
     {
         if (!propertyEditors.TryGet(propertyType.EditorAlias, out IDataEditor? editor))
         {
@@ -70,7 +98,12 @@ public sealed class OverlayContentBuilder(
 
         var configuration = propertyType.DataType.ConfigurationObject;
         IDataValueEditor valueEditor = editor.GetValueEditor(configuration);
-        var data = new ContentPropertyData(value.Value, configuration) { ContentKey = documentKey };
+        var data = new ContentPropertyData(PendingUploads.Remove(value.Value), configuration)
+        {
+            ContentKey = documentKey,
+            // The Image Cropper refuses values without it.
+            PropertyTypeKey = propertyTypeKeys.GetValueOrDefault(propertyType.Alias),
+        };
         return valueEditor.FromEditor(data, currentValue: null);
     }
 }

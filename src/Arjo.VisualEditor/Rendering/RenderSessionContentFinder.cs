@@ -21,7 +21,8 @@ public sealed class RenderSessionContentFinder(
         var path = request.AbsolutePathDecoded;
         if (!path.StartsWith(PathPrefix, StringComparison.OrdinalIgnoreCase)
             || !Guid.TryParse(path[PathPrefix.Length..].Trim('/'), out Guid token)
-            || await sessions.GetAsync(token) is not { } session)
+            || await sessions.GetAsync(token) is not { } session
+            || !await RenderViewerCookie.IsForUserAsync(httpContextAccessor.HttpContext, sessions, session.UserKey))
         {
             return false;
         }

@@ -48,4 +48,31 @@ public class RenderSessionStoreTests
 
         Assert.NotEqual(a.Token, b.Token);
     }
+
+    [Fact]
+    public async Task ViewerPass_IdentifiesTheUserItWasIssuedTo()
+    {
+        var user = Guid.NewGuid();
+        var pass = await _store.IssueViewerPassAsync(user, current: null, TestContext.Current.CancellationToken);
+
+        Assert.Equal(user, await _store.GetViewerAsync(pass, TestContext.Current.CancellationToken));
+        Assert.Null(await _store.GetViewerAsync("not-a-pass", TestContext.Current.CancellationToken));
+        Assert.Null(await _store.GetViewerAsync(null, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task ViewerPass_IsKeptForTheSameUser_ButNotTakenOverByAnother()
+    {
+        var first = Guid.NewGuid();
+        var pass = await _store.IssueViewerPassAsync(first, current: null, TestContext.Current.CancellationToken);
+
+        Assert.Equal(pass, await _store.IssueViewerPassAsync(first, pass, TestContext.Current.CancellationToken));
+
+        // Another user signing in on the same browser gets a pass of their own; the first user's still means them.
+        var second = Guid.NewGuid();
+        var other = await _store.IssueViewerPassAsync(second, pass, TestContext.Current.CancellationToken);
+        Assert.NotEqual(pass, other);
+        Assert.Equal(second, await _store.GetViewerAsync(other, TestContext.Current.CancellationToken));
+        Assert.Equal(first, await _store.GetViewerAsync(pass, TestContext.Current.CancellationToken));
+    }
 }
