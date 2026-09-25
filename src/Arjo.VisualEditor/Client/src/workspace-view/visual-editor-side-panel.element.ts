@@ -97,7 +97,11 @@ export class ArjoVisualEditorSidePanelElement extends UmbLitElement {
 	}
 
 	protected override willUpdate(changed: PropertyValues<this>) {
-		if (changed.has('selected') && this.selected) this._view = 'selection';
+		// Something else was selected on the page: show it. Not when the same selection comes back with fresh labels
+		// after a re-render, e.g. while editing under Page settings.
+		if (!changed.has('selected') || !this.selected) return;
+		const previous = changed.get('selected') as TargetRef | null | undefined;
+		if (!sameTarget(previous ?? null, this.selected)) this._view = 'selection';
 	}
 	/** Editable areas the canvas found, or undefined before it has connected. */
 	@property({ attribute: false }) targetCount?: number;
