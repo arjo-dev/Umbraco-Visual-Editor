@@ -28,6 +28,7 @@ public sealed class RenderSessionStore(IDistributedCache cache)
 {
     private static readonly TimeSpan Lifetime = TimeSpan.FromMinutes(10);
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly JsonElement NullValue = JsonDocument.Parse("null").RootElement.Clone();
 
     public async Task<RenderSession> CreateAsync(
         Guid documentKey,
@@ -43,7 +44,8 @@ public sealed class RenderSessionStore(IDistributedCache cache)
             documentKey,
             culture,
             segment,
-            values.ToList(),
+            // A value the editor cleared (a picker emptied) arrives missing: store it as null, which JSON can hold.
+            values.Select(v => v.Value.ValueKind == JsonValueKind.Undefined ? v with { Value = NullValue } : v).ToList(),
             variants.ToList(),
             userKey);
 
