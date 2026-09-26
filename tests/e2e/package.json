@@ -1,0 +1,18 @@
+{
+	"name": "arjo-visual-editor-e2e",
+	"private": true,
+	"type": "module",
+	"description": "End-to-end tests for the Visual editor, in a real backoffice against the Test Site (#37).",
+	"scripts": {
+		"test": "playwright test",
+		"test:ui": "playwright test --ui",
+		"site": "node scripts/start-site.ts",
+		"typecheck": "tsc -p ."
+	},
+	"devDependencies": {
+		"@playwright/test": "^1.56.0",
+		"@umbraco-cms/acceptance-test-helpers": "~18.2.0",
+		"@types/node": "^24.0.0",
+		"typescript": "^5.9.0"
+	}
+}
