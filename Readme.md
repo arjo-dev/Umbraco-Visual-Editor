@@ -1,8 +1,29 @@
 # Umbraco Visual Editor
 
-This project creates a new interface to the Umbraco editor to give the editor a new experience to edit content. It draws in the front end of the website and adds a drag and drop style editing experience; giving full visual fidelity of how the output content will appear. There is a toggle in the page editor to switch it on and will allow the user to switch back to "normal" umbraco editing. It won't display the content tree or any other area of the system; it's sole focus is a nicer editing experience for content.
+The **Visual editor** gives Umbraco editors a way to edit content on the page itself. It adds a **Visual editor** tab to documents that shows the site's real front end, including changes that aren't saved yet. Editors can:
+- edit text and rich text in place;
+- select, move, add, duplicate, copy and delete blocks;
+- edit everything else with Umbraco's own property editors, in a side panel beside the page.
 
-It reuses the property editors from the CMS for complex types so it can be applied to any existing document model setup.
+The standard editor (the **Content** tab) is one click away, and saving and publishing work as they always do.
+
+It reuses the CMS's property editors and reads the site's templates as they are, so it works with an existing document model without changes. It's published as the NuGet package **Arjo.VisualEditor**.
+
+## Install
+
+Install the package version that matches your Umbraco version's major:
+
+| Umbraco | Arjo.VisualEditor |
+|---|---|
+| 18.x | 18.x |
+| 17.x | 17.x |
+
+```bash
+dotnet add package Arjo.VisualEditor
+```
+
+Run the site and open a document that has a template: it gets a **Visual editor** tab next to **Content**. Nothing else is needed.
+
 ## Configuration
 
 The editor is offered on every document type that has a template. To narrow that, add a `VisualEditor` section to `appsettings.json`. It's described in the site's `appsettings-schema.json`, so you get IntelliSense.
@@ -25,10 +46,32 @@ The editor is offered on every document type that has a template. To narrow that
 
 Aliases are case-insensitive. The site fails to start if an alias is blank or appears in both lists. The Visual tab is hidden where the editor isn't offered, and the render endpoint refuses those documents with a 403.
 
+## Templates, helpers and limitations
+
+The Visual editor recognises content however templates write it: models (ModelsBuilder or compiled), `Value()`, partials, block views, view components and cached partials. Some markup can't be recognised as a block on its own, such as a partial that only gets the block's element. For that there's `Html.VisualEditorBlock`:
+
+```cshtml
+@using Arjo.VisualEditor
+
+@foreach (var block in Model.Cards)
+{
+    using (Html.VisualEditorBlock(block))
+    {
+        @await Html.PartialAsync("Card", block.Content)
+    }
+}
+```
+
+What works on its own, where the helper is needed, and the limitations are in [docs/compatibility.md](docs/compatibility.md). One example of a limitation: text the template changes before showing it can only be edited in the side panel.
+
 ## Security
 
 How render sessions, the canvas frame and its messaging are protected, and the risks that remain, are in [docs/security.md](docs/security.md).
 
-## Compatibility
+## Developing and releasing
 
-The Visual editor supports **Umbraco 18 and 17**. Which template conventions it copes with on its own, the `Html.VisualEditorBlock` helper for the ones it can't, and its limitations are in [docs/compatibility.md](docs/compatibility.md).
+- [docs/development.md](docs/development.md): the Test Site, the client build, tests and CI.
+- [docs/releasing.md](docs/releasing.md): how a tag releases both package lines.
+- [CHANGELOG.md](CHANGELOG.md): what's changed.
+
+MIT licensed ([LICENSE](LICENSE)).

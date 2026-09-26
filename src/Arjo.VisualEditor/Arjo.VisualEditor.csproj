@@ -14,13 +14,35 @@
     <DefineConstants>$(DefineConstants);UMBRACO_17</DefineConstants>
   </PropertyGroup>
 
+  <!--
+    Package (#39). One package line per Umbraco major, from the same code: 18.x built as is, 17.x with
+    -p:UmbracoVersion=17.x. The release workflow sets Version (18.1.0 / 17.1.0 for tag v1.0; see docs/releasing.md).
+  -->
   <PropertyGroup>
     <PackageId>Arjo.VisualEditor</PackageId>
     <Product>Arjo.VisualEditor</Product>
     <Title>Arjo Visual Editor</Title>
-    <Description>A visual, drag-and-drop editing experience for Umbraco content that renders the real front end.</Description>
-    <PackageTags>umbraco;umbraco-marketplace;visual-editor</PackageTags>
+    <Description>Edit Umbraco content on the page itself: the Visual editor renders your real front end, with unsaved changes, and lets editors change text in place, move, add and edit blocks, and use Umbraco's own property editors beside the page.</Description>
+    <Authors>Richard Ockerby</Authors>
+    <Company>Arjo</Company>
+    <Copyright>Copyright © 2026 Richard Ockerby</Copyright>
+    <PackageTags>umbraco;umbraco-marketplace;umbraco-cms;visual-editor;page-editor;inline-editing;block-list;block-grid;backoffice</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>icon.png</PackageIcon>
+    <PackageProjectUrl>https://github.com/arjo-dev/Umbraco-Visual-Editor</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/arjo-dev/Umbraco-Visual-Editor</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReleaseNotes>See https://github.com/arjo-dev/Umbraco-Visual-Editor/blob/main/CHANGELOG.md</PackageReleaseNotes>
+    <!-- A local build that isn't a release. -->
+    <Version Condition="'$(Version)' == ''">0.0.0-dev</Version>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.nuget.md" Pack="true" PackagePath="README.md" />
+    <None Include="icon.png" Pack="true" PackagePath="" />
+    <None Include="..\..\LICENSE" Pack="true" PackagePath="" />
+  </ItemGroup>
 
   <ItemGroup>
     <InternalsVisibleTo Include="Arjo.VisualEditor.Tests" />
@@ -54,9 +76,14 @@
     <!-- However make the Umbraco-package.json included for dotnet pack or nuget package and visible to the solution -->
     <None Include="Client\public\umbraco-package.json" Pack="false" />
 
-    <!-- The VisualEditor settings' JSON schema (#32), registered with the site's appsettings schema by the props. -->
+    <!--
+      The VisualEditor settings' JSON schema (#32), registered with the site's appsettings schema by the .targets (#39: not
+      a .props, as the Razor SDK packs its own buildTransitive/Arjo.VisualEditor.props for static web assets, and a
+      package can only have one).
+    -->
+    <Content Remove="appsettings-schema.Arjo.VisualEditor.json" />
     <None Include="appsettings-schema.Arjo.VisualEditor.json" Pack="true" PackagePath="" />
-    <None Include="buildTransitive\Arjo.VisualEditor.props" Pack="true" PackagePath="buildTransitive" />
+    <None Include="buildTransitive\Arjo.VisualEditor.targets" Pack="true" PackagePath="buildTransitive" />
   </ItemGroup>
 
   <!--
@@ -83,6 +110,19 @@
   <Target Name="BuildClient" Condition="'$(SkipClientBuild)' != 'true'" DependsOnTargets="RestoreClient" BeforeTargets="AssignTargetPaths" Inputs="@(ClientBuildInputs)" Outputs="$(ClientBuildStamp)">
     <Exec Command="npm run build" WorkingDirectory="$(ClientDir)" />
     <Touch Files="$(ClientBuildStamp)" AlwaysCreate="true" />
+  </Target>
+
+  <!--
+    The package version in the built umbraco-package.json (#39), which the backoffice shows under Packages. The source
+    (Client/public) keeps 0.0.0. Runs whether or not the client was built by this build (CI builds it separately).
+  -->
+  <Target Name="StampPackageVersion" AfterTargets="BuildClient" BeforeTargets="AssignTargetPaths" Condition="Exists('$(ClientOutputDir)umbraco-package.json')">
+    <PropertyGroup>
+      <_ArjoManifest>$(ClientOutputDir)umbraco-package.json</_ArjoManifest>
+      <_ArjoManifestText>$([System.IO.File]::ReadAllText('$(_ArjoManifest)'))</_ArjoManifestText>
+      <_ArjoManifestStamped>$([System.Text.RegularExpressions.Regex]::Replace('$(_ArjoManifestText)', '"version":\s*"[^"]*"', '"version": "$(Version)"'))</_ArjoManifestStamped>
+    </PropertyGroup>
+    <WriteLinesToFile File="$(_ArjoManifest)" Lines="$([MSBuild]::Escape('$(_ArjoManifestStamped.TrimEnd())'))" Overwrite="true" WriteOnlyWhenDifferent="true" />
   </Target>
 
   <!-- Files created during the build weren't there when wwwroot was globbed at evaluation time, so add them now. -->

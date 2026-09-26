@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Arjo Visual Editor package icon (#39): a page, one of its blocks selected, and the pointer editing it. -->
+  <rect width="512" height="512" rx="104" fill="#1b264f"/>
+  <!-- The page -->
+  <rect x="104" y="88" width="304" height="336" rx="22" fill="#ffffff"/>
+  <rect x="136" y="124" width="176" height="22" rx="11" fill="#1b264f"/>
+  <rect x="136" y="164" width="240" height="12" rx="6" fill="#c9cde0"/>
+  <rect x="136" y="186" width="200" height="12" rx="6" fill="#c9cde0"/>
+  <!-- A selected block: the editor's orange outline, with its toolbar tab -->
+  <rect x="128" y="222" width="256" height="112" rx="10" fill="#fff4e6" stroke="#f79c37" stroke-width="8"/>
+  <rect x="128" y="206" width="72" height="24" rx="6" fill="#f79c37"/>
+  <rect x="152" y="252" width="120" height="14" rx="7" fill="#1b264f"/>
+  <rect x="152" y="280" width="200" height="12" rx="6" fill="#c9cde0"/>
+  <rect x="136" y="364" width="160" height="12" rx="6" fill="#c9cde0"/>
+  <!-- The pointer -->
+  <path d="M318 286 L318 418 L350 386 L374 438 L398 427 L374 376 L420 376 Z" fill="#3544b1" stroke="#ffffff" stroke-width="12" stroke-linejoin="round"/>
+</svg>

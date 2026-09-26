@@ -34,11 +34,19 @@
     <CopyRazorGenerateFilesToPublishDirectory>true</CopyRazorGenerateFilesToPublishDirectory>
   </PropertyGroup>
 
-  <ItemGroup>
+  <!--
+    The package under test: the project, or (with -p:ArjoVisualEditorPackageVersion=x, and the folder holding it in
+    RestoreAdditionalProjectSources) the packed NuGet package, installed as a site would (#39). The release workflow
+    tests the packages it's about to publish this way.
+  -->
+  <ItemGroup Condition="'$(ArjoVisualEditorPackageVersion)' == ''">
     <ProjectReference Include="..\src\Arjo.VisualEditor\Arjo.VisualEditor.csproj" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(ArjoVisualEditorPackageVersion)' != ''">
+    <PackageReference Include="Arjo.VisualEditor" VersionOverride="$(ArjoVisualEditorPackageVersion)" />
   </ItemGroup>
 
   <!-- As the NuGet package does it (buildTransitive): the VisualEditor settings in the appsettings schema. -->
-  <Import Project="..\src\Arjo.VisualEditor\buildTransitive\Arjo.VisualEditor.props" />
+  <Import Project="..\src\Arjo.VisualEditor\buildTransitive\Arjo.VisualEditor.targets" Condition="'$(ArjoVisualEditorPackageVersion)' == ''" />
 
 </Project>
