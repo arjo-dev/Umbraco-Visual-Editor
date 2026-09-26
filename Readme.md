@@ -28,3 +28,7 @@ Aliases are case-insensitive. The site fails to start if an alias is blank or ap
 ## Security
 
 How render sessions, the canvas frame and its messaging are protected, and the risks that remain, are in [docs/security.md](docs/security.md).
+
+## Compatibility
+
+The Visual editor supports **Umbraco 18 and 17**. Which template conventions it copes with on its own, the `Html.VisualEditorBlock` helper for the ones it can't, and its limitations are in [docs/compatibility.md](docs/compatibility.md).

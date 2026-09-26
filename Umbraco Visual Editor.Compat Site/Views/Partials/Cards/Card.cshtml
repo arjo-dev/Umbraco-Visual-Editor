@@ -1,0 +1,8 @@
+@inherits UmbracoViewPage<BlockListItem>
+@{
+    var card = (CompatCard)Model.Content;
+}
+<article class="card">
+    <h3>@card.Heading</h3>
+    <p>@card.Text</p>
+</article>

@@ -5,8 +5,10 @@
 	"description": "End-to-end tests for the Visual editor, in a real backoffice against the Test Site (#37).",
 	"scripts": {
 		"test": "playwright test",
+		"test:compat": "node scripts/with-site.ts compat playwright test",
 		"test:ui": "playwright test --ui",
 		"site": "node scripts/start-site.ts",
+		"site:compat": "node scripts/with-site.ts compat node scripts/start-site.ts",
 		"typecheck": "tsc -p ."
 	},
 	"devDependencies": {

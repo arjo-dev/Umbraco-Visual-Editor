@@ -88,7 +88,7 @@ uSync writes each item you save in the backoffice to `uSync/v18`. Commit those f
    - the dev API user can get a token;
    - the Management API lists the `Arjo.VisualEditor` manifest;
    - the first boot left the working tree unchanged.
-4. Runs the end-to-end tests ([`tests/e2e`](../tests/e2e/README.md)) against that site, signed in as its throwaway admin, then checks the working tree is still unchanged.
+4. Runs the end-to-end tests ([`tests/e2e`](../tests/e2e/README.md)) against that site, signed in as its throwaway admin. Then it runs them against a throwaway copy of the **Compat Site** (plain Umbraco with other template conventions, see [compatibility.md](compatibility.md)), and checks the working tree is still unchanged.
 
 If the smoke test fails, the site log is uploaded as the `test-site-log` artifact. If the E2E tests fail, the Playwright report and traces are uploaded as `e2e-report`.
 

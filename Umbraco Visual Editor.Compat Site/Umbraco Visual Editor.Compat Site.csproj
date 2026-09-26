@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <!--
+    A second site for compatibility checks (#38): plain Umbraco (no Clean, no uSync), compiled models written by hand
+    (ModelsBuilder "Nothing", Development runtime mode) and templates using other conventions: hand-rolled block loops,
+    a view component, CachedPartialAsync and output caching. Its content is created in code on first boot
+    (Composers/CompatContentComposer.cs). See docs/compatibility.md.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Umbraco_Visual_Editor.Compat_Site</RootNamespace>
+    <CompressionEnabled>false</CompressionEnabled>
+    <UserSecretsId>952dc099-6826-40d9-abc6-c9c7c3766f9c</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Umbraco.Cms" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <UmbracoUseAppLocalIcu Condition="'$(UmbracoUseAppLocalIcu)' == '' and ($(RuntimeIdentifier.StartsWith('linux')) or $(RuntimeIdentifier.StartsWith('win')) or ('$(RuntimeIdentifier)' == '' and !$([MSBuild]::IsOSPlatform('osx'))))">true</UmbracoUseAppLocalIcu>
+    <UmbracoUseAppLocalIcu Condition="'$(UmbracoUseAppLocalIcu)' == ''">false</UmbracoUseAppLocalIcu>
+    <UmbracoAppLocalIcuVersion Condition="'$(UmbracoAppLocalIcuVersion)' == ''">72.1.0.3</UmbracoAppLocalIcuVersion>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(UmbracoUseAppLocalIcu)' == 'true'">
+    <PackageReference Include="Microsoft.ICU.ICU4C.Runtime" />
+    <RuntimeHostConfigurationOption Include="System.Globalization.AppLocalIcu" Value="$(UmbracoAppLocalIcuVersion)" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <!-- Razor files are needed for the backoffice to work correctly -->
+    <CopyRazorGenerateFilesToPublishDirectory>true</CopyRazorGenerateFilesToPublishDirectory>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\src\Arjo.VisualEditor\Arjo.VisualEditor.csproj" />
+  </ItemGroup>
+
+  <!-- As the NuGet package does it (buildTransitive): the VisualEditor settings in the appsettings schema. -->
+  <Import Project="..\src\Arjo.VisualEditor\buildTransitive\Arjo.VisualEditor.props" />
+
+</Project>

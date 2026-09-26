@@ -5,22 +5,28 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-/** The Test Site project. */
-export const SITE_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../../Umbraco Visual Editor.Test Site');
+const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+
+/** The sites the tests run against: the Test Site, and the Compat Site with other conventions (#38). */
+export const SITES = {
+	test: { dir: join(REPO, 'Umbraco Visual Editor.Test Site'), uSync: true, port: '44610' },
+	compat: { dir: join(REPO, 'Umbraco Visual Editor.Compat Site'), uSync: false, port: '44620' },
+} as const;
+export type SiteName = keyof typeof SITES;
 
 /**
- * A throwaway Test Site (#37): a fresh install, with a database, temp, log and media folders of its own in `runDir`,
- * signed in to with a password made up for it. Its content is the committed uSync files (HEAD), as in CI: not uSync
- * edits in the working tree, which it never writes either (export-on-save is off). It never touches the development
- * database, and runs beside a Test Site you already have running (its own MainDom and temp). Release, so it's a
- * separate build from the one a dev site runs, without appsettings.Local.json.
+ * A throwaway copy of a site (#37): a fresh install, with a database, temp, log and media folders of its own in
+ * `runDir`, signed in to with a password made up for it. The Test Site's content is the committed uSync files (HEAD),
+ * as in CI: not uSync edits in the working tree, which it never writes either (export-on-save is off). The Compat Site
+ * creates its own. It never touches a development database, and runs beside a site you already have running (its own
+ * MainDom and temp). Release, so it's a separate build from the one a dev site runs, without appsettings.Local.json.
  */
-export function throwawaySite(url: string, login: string, password: string, runDir: string) {
+export function throwawaySite(site: SiteName, url: string, login: string, password: string, runDir: string) {
 	mkdirSync(join(runDir, 'temp'), { recursive: true });
-	const uSync = exportCommittedUSync(runDir);
+	const uSync = SITES[site].uSync ? exportCommittedUSync(runDir) : null;
 	return {
 		command: 'dotnet run -c Release --no-launch-profile',
-		cwd: SITE_DIR,
+		cwd: SITES[site].dir,
 		env: {
 			ASPNETCORE_ENVIRONMENT: 'Development',
 			ASPNETCORE_URLS: url,
@@ -34,24 +40,28 @@ export function throwawaySite(url: string, login: string, password: string, runD
 			TMP: join(runDir, 'temp'),
 			Umbraco__CMS__Logging__Directory: join(runDir, 'logs'),
 			Umbraco__CMS__Global__UmbracoMediaPhysicalRootPath: join(runDir, 'media'),
-			Umbraco__CMS__Global__MainDomKeyDiscriminator: 'arjo-visual-editor-e2e',
-			uSync__Settings__ExportOnSave: 'None',
-			uSync__Settings__RootFolder: uSync,
-			uSync__Settings__Folders__0: uSync,
+			Umbraco__CMS__Global__MainDomKeyDiscriminator: `arjo-visual-editor-e2e-${site}`,
+			...(uSync
+				? {
+						uSync__Settings__ExportOnSave: 'None',
+						uSync__Settings__RootFolder: uSync,
+						uSync__Settings__Folders__0: uSync,
+					}
+				: {}),
 		} as Record<string, string>,
 	};
 }
 
 /**
- * Copies the committed uSync folder into `runDir`, through an index of its own: the repository's index and working
- * tree are left alone. Returns the folder to import (uSync/v18).
+ * Copies the Test Site's committed uSync folder into `runDir`, through an index of its own: the repository's index and
+ * working tree are left alone. Returns the folder to import (uSync/v18).
  */
 function exportCommittedUSync(runDir: string) {
 	const target = join(runDir, 'uSync');
 	mkdirSync(target, { recursive: true });
 	const env = { ...process.env, GIT_INDEX_FILE: join(runDir, 'uSync.index') };
 	const git = (...args: string[]) => {
-		const result = spawnSync('git', args, { cwd: SITE_DIR, env, encoding: 'utf8' });
+		const result = spawnSync('git', args, { cwd: SITES.test.dir, env, encoding: 'utf8' });
 		if (result.status !== 0) throw new Error(`git ${args.join(' ')} failed: ${result.stderr}`);
 	};
 	git('read-tree', 'HEAD:./uSync');
@@ -60,7 +70,6 @@ function exportCommittedUSync(runDir: string) {
 	return join(target, 'v18') + '/';
 }
 
-export const DEFAULT_PORT = '44610';
 export const DEFAULT_LOGIN = 'admin@example.com';
 export const newPassword = () => `E2e-${randomBytes(18).toString('base64url')}`;
 const RUNS_DIR = join(tmpdir(), 'arjo-visual-editor-e2e');

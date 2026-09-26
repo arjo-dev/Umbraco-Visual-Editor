@@ -10,21 +10,27 @@ export const PLAYGROUND = {
 	path: '/playground/',
 };
 
-const documentUrl = (view: string) =>
-	`/umbraco/section/content/workspace/document/edit/${PLAYGROUND.key}/${PLAYGROUND.culture}/view/${view}`;
+/** A document to open: its key, and the culture to edit (`invariant` for a document that doesn't vary). */
+export interface DocumentRef {
+	key: string;
+	culture: string;
+}
+
+const documentUrl = (doc: DocumentRef, view: string) =>
+	`/umbraco/section/content/workspace/document/edit/${doc.key}/${doc.culture}/view/${view}`;
 
 /** The rendered page inside the Visual editor. */
 export const canvas = (page: Page): FrameLocator => page.frameLocator('iframe[title="Page preview"]');
 
-/** Opens the Playground's Content tab (the standard editor). */
-export async function openStandardEditor(page: Page) {
-	await page.goto(documentUrl('content'));
+/** Opens a document's Content tab (the standard editor): the Playground unless said otherwise. */
+export async function openStandardEditor(page: Page, doc: DocumentRef = PLAYGROUND) {
+	await page.goto(documentUrl(doc, 'content'));
 	await expect(page.locator('umb-document-workspace-editor')).toBeVisible();
 }
 
-/** Opens the Playground in the Visual editor and waits for the page to be ready to edit. */
-export async function openVisualEditor(page: Page) {
-	await page.goto(documentUrl('visual-editor'));
+/** Opens a document (the Playground unless said otherwise) in the Visual editor, ready to edit. */
+export async function openVisualEditor(page: Page, doc: DocumentRef = PLAYGROUND) {
+	await page.goto(documentUrl(doc, 'visual-editor'));
 	await waitForCanvas(page);
 }
 

@@ -6,6 +6,14 @@
     <StaticWebAssetBasePath>/</StaticWebAssetBasePath>
   </PropertyGroup>
 
+  <!--
+    Umbraco 17 support (#38): build with -p:UmbracoVersion=17.x. The few API differences are behind UMBRACO_17 (see
+    UmbracoCompatibility.cs); a build is for one major version, as the two aren't binary compatible.
+  -->
+  <PropertyGroup Condition="$(UmbracoVersion.StartsWith('17.'))">
+    <DefineConstants>$(DefineConstants);UMBRACO_17</DefineConstants>
+  </PropertyGroup>
+
   <PropertyGroup>
     <PackageId>Arjo.VisualEditor</PackageId>
     <Product>Arjo.VisualEditor</Product>
@@ -35,7 +43,7 @@
       Microsoft.OpenApi versions can conflict at runtime, causing custom OpenAPI documents registered
       by the extension to fail to appear.
     -->
-    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Condition="!$(UmbracoVersion.StartsWith('17.'))" />
   </ItemGroup>
 
   <ItemGroup>

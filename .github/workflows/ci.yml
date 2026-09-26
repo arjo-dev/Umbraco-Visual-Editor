@@ -205,6 +205,15 @@ jobs:
           npm run typecheck
           npm test
 
+      # A second site with other conventions (#38): plain Umbraco, compiled models, hand-rolled block loops, a view
+      # component, a cached partial and output caching. The tests start a throwaway copy of it themselves.
+      - name: E2E tests (Compat Site)
+        working-directory: ${{ env.E2E_DIR }}
+        env:
+          # The client is built above; don't build it again for the Compat Site's `dotnet run`.
+          SkipClientBuild: 'true'
+        run: npm run test:compat
+
       - name: Working tree unchanged by E2E
         run: |
           if [ -n "$(git status --porcelain)" ]; then
@@ -229,4 +238,71 @@ jobs:
         with:
           name: test-site-log
           path: ${{ runner.temp }}/site.log
+          if-no-files-found: ignore
+
+  # Umbraco 17 (#38): the package builds for either major (UMBRACO_17 in the code; see docs/compatibility.md). The Test
+  # Site is 18-only (Clean, uSync), so on 17 the Compat Site is what's run end to end.
+  umbraco-17:
+    name: Umbraco 17
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      UmbracoVersion: 17.7.0
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            ${{ env.CLIENT_DIR }}/package-lock.json
+            ${{ env.E2E_DIR }}/package-lock.json
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: nuget-17-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Packages.props') }}
+          restore-keys: nuget-17-${{ runner.os }}-
+
+      - name: Build client
+        working-directory: ${{ env.CLIENT_DIR }}
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+
+      # UmbracoVersion (above) is read by MSBuild as a property: everything below builds against Umbraco 17.
+      - name: Build and test the package for Umbraco 17
+        run: |
+          dotnet build src/Arjo.VisualEditor/Arjo.VisualEditor.csproj -c Release -p:SkipClientBuild=true
+          dotnet test --project tests/Arjo.VisualEditor.Tests/Arjo.VisualEditor.Tests.csproj -c Release -p:SkipClientBuild=true
+
+      - name: Create HTTPS dev certificate
+        run: dotnet dev-certs https
+
+      - name: Install E2E dependencies
+        working-directory: ${{ env.E2E_DIR }}
+        run: |
+          npm ci --no-audit --no-fund
+          npx playwright install --with-deps chromium
+
+      - name: E2E tests (Compat Site on Umbraco 17)
+        working-directory: ${{ env.E2E_DIR }}
+        env:
+          SkipClientBuild: 'true'
+        run: npm run test:compat
+
+      - name: Upload E2E report
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-report-umbraco-17
+          path: |
+            ${{ env.E2E_DIR }}/playwright-report
+            ${{ env.E2E_DIR }}/test-results
           if-no-files-found: ignore

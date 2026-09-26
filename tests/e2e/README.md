@@ -11,6 +11,8 @@ These use Playwright to run the Visual editor in a real backoffice, against the 
 - switching back to the standard editor with the changes intact;
 - saving and publishing.
 
+`specs/compat/compat.spec.ts` runs against the **Compat Site** (#38): plain Umbraco with compiled models, hand-rolled block loops, a view component, a cached partial and output caching. See [docs/compatibility.md](../../docs/compatibility.md). Run it with `npm run test:compat`, and keep one running with `npm run site:compat`.
+
 ## Running them
 
 ```bash
