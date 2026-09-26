@@ -4,6 +4,8 @@ on:
   pull_request:
   push:
     branches: [main]
+  # The release workflow runs all of CI before it packs (release.yml).
+  workflow_call:
 
 permissions:
   contents: read
@@ -15,7 +17,7 @@ concurrency:
 env:
   DOTNET_NOLOGO: true
   DOTNET_CLI_TELEMETRY_OPTOUT: true
-  CLIENT_DIR: src/Arjo.VisualEditor/Client
+  CLIENT_DIR: src/UmbracoVisualEditor/Client
   E2E_DIR: tests/e2e
   SITE_DIR: Umbraco Visual Editor.Test Site
   SITE_URL: https://localhost:5001
@@ -176,9 +178,9 @@ jobs:
           echo "✓ dev API user authenticated"
 
           curl -sfk -H "Authorization: Bearer $token" "$SITE_URL/umbraco/management/api/v1/manifest/manifest/private" \
-            | jq -e '.[] | select(.name == "Arjo.VisualEditor")' > /dev/null \
-            || { echo "::error::Arjo.VisualEditor manifest not registered"; exit 1; }
-          echo "✓ Arjo.VisualEditor manifest registered"
+            | jq -e '.[] | select(.name == "UmbracoVisualEditor")' > /dev/null \
+            || { echo "::error::UmbracoVisualEditor manifest not registered"; exit 1; }
+          echo "✓ UmbracoVisualEditor manifest registered"
 
       - name: Working tree unchanged by first boot
         run: |
@@ -247,6 +249,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
+      # Keep in step with UMBRACO_17_VERSION in release.yml.
       UmbracoVersion: 17.7.0
 
     steps:
@@ -279,8 +282,8 @@ jobs:
       # UmbracoVersion (above) is read by MSBuild as a property: everything below builds against Umbraco 17.
       - name: Build and test the package for Umbraco 17
         run: |
-          dotnet build src/Arjo.VisualEditor/Arjo.VisualEditor.csproj -c Release -p:SkipClientBuild=true
-          dotnet test --project tests/Arjo.VisualEditor.Tests/Arjo.VisualEditor.Tests.csproj -c Release -p:SkipClientBuild=true
+          dotnet build src/UmbracoVisualEditor/UmbracoVisualEditor.csproj -c Release -p:SkipClientBuild=true
+          dotnet test --project tests/UmbracoVisualEditor.Tests/UmbracoVisualEditor.Tests.csproj -c Release -p:SkipClientBuild=true
 
       - name: Create HTTPS dev certificate
         run: dotnet dev-certs https

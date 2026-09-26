@@ -14,7 +14,7 @@ The Visual editor supports **Umbraco 18** (the default) and **Umbraco 17**.
 A build is for one major version: the two aren't binary compatible where the package touches them. To build for 17, set the Umbraco version for MSBuild:
 
 ```bash
-dotnet build src/Arjo.VisualEditor -p:UmbracoVersion=17.7.0
+dotnet build src/UmbracoVisualEditor -p:UmbracoVersion=17.7.0
 ```
 
 An `UmbracoVersion` environment variable does the same. `Directory.Packages.props` uses it for every Umbraco package, and a `17.x` version defines `UMBRACO_17`.
@@ -57,7 +57,7 @@ In the Visual editor, and only there, the page is rendered with markers (ADR 000
 A block the page can't tell is a block needs marking by hand. That's markup written inline in a loop, or a partial that only gets the block's element:
 
 ```cshtml
-@using Arjo.VisualEditor
+@using UmbracoVisualEditor
 
 @foreach (var block in Model.Cards)
 {

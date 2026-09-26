@@ -1,0 +1,174 @@
+name: Release
+
+# Pushing a tag vY.Z (or vY.Z-suffix, a prerelease) releases both package lines (#39; docs/releasing.md):
+#   UmbracoVisualEditor 18.Y.Z (Umbraco 18) and 17.Y.Z (Umbraco 17), from the same commit.
+# Runs all of CI, packs both, installs each package into the Compat Site and runs its end-to-end tests against it,
+# then creates a GitHub Release with the packages, and pushes them to nuget.org if a NUGET_API_KEY secret is set.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  CLIENT_DIR: src/UmbracoVisualEditor/Client
+  E2E_DIR: tests/e2e
+  # The Umbraco 17 the 17.x package is built against. Keep in step with the Umbraco 17 job in ci.yml.
+  UMBRACO_17_VERSION: 17.7.0
+
+jobs:
+  version:
+    name: Versions from the tag
+    runs-on: ubuntu-latest
+    outputs:
+      v18: ${{ steps.parse.outputs.v18 }}
+      v17: ${{ steps.parse.outputs.v17 }}
+      prerelease: ${{ steps.parse.outputs.prerelease }}
+    steps:
+      - id: parse
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          if [[ ! "$tag" =~ ^v([0-9]+)\.([0-9]+)(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Release tags look like v1.0 or v1.0-beta.1 (got $tag); see docs/releasing.md"
+            exit 1
+          fi
+          rest="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}${BASH_REMATCH[3]}"
+          echo "v18=18.$rest" >> "$GITHUB_OUTPUT"
+          echo "v17=17.$rest" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$([ -n "${BASH_REMATCH[3]}" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "Releasing UmbracoVisualEditor 18.$rest and 17.$rest"
+
+  ci:
+    name: CI
+    uses: ./.github/workflows/ci.yml
+
+  pack:
+    name: Pack and test the packages
+    needs: [version, ci]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      V18: ${{ needs.version.outputs.v18 }}
+      V17: ${{ needs.version.outputs.v17 }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            ${{ env.CLIENT_DIR }}/package-lock.json
+            ${{ env.E2E_DIR }}/package-lock.json
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Build client
+        working-directory: ${{ env.CLIENT_DIR }}
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+
+      # One after the other: each build stamps its version into the shared client output (umbraco-package.json).
+      - name: Pack for Umbraco 18
+        run: dotnet pack src/UmbracoVisualEditor/UmbracoVisualEditor.csproj -c Release -p:SkipClientBuild=true -p:Version="$V18" -o artifacts
+
+      - name: Pack for Umbraco 17
+        run: dotnet pack src/UmbracoVisualEditor/UmbracoVisualEditor.csproj -c Release -p:SkipClientBuild=true -p:UmbracoVersion="$UMBRACO_17_VERSION" -p:Version="$V17" -o artifacts
+
+      - name: Check the packages' Umbraco dependencies
+        run: |
+          set -euo pipefail
+          check() {
+            nuspec="$(unzip -p "artifacts/UmbracoVisualEditor.$1.nupkg" UmbracoVisualEditor.nuspec)"
+            grep -q "id=\"Umbraco.Cms.Web.Common\" version=\"\[$2, $3)\"" <<< "$nuspec" \
+              || { echo "::error::UmbracoVisualEditor $1 doesn't depend on Umbraco [$2, $3)"; grep -o '<dependency [^>]*>' <<< "$nuspec"; exit 1; }
+            echo "✓ UmbracoVisualEditor $1 depends on Umbraco [$2, $3)"
+          }
+          check "$V18" "$(sed -n 's:.*<UmbracoVersion[^>]*>\(.*\)</UmbracoVersion>.*:\1:p' Directory.Packages.props)" 19.0.0
+          check "$V17" "$UMBRACO_17_VERSION" 18.0.0
+
+      # Each package installed into the Compat Site as a site would (a PackageReference, from the packed file), and its
+      # end-to-end tests run against it: what's published is what was tested.
+      - name: Create HTTPS dev certificate
+        run: dotnet dev-certs https
+
+      - name: Install E2E dependencies
+        working-directory: ${{ env.E2E_DIR }}
+        run: |
+          npm ci --no-audit --no-fund
+          npx playwright install --with-deps chromium
+
+      - name: Test the Umbraco 18 package
+        working-directory: ${{ env.E2E_DIR }}
+        env:
+          VisualEditorPackageVersion: ${{ env.V18 }}
+          RestoreAdditionalProjectSources: ${{ github.workspace }}/artifacts
+        run: npm run test:compat
+
+      - name: Test the Umbraco 17 package
+        working-directory: ${{ env.E2E_DIR }}
+        env:
+          UmbracoVersion: ${{ env.UMBRACO_17_VERSION }}
+          VisualEditorPackageVersion: ${{ env.V17 }}
+          RestoreAdditionalProjectSources: ${{ github.workspace }}/artifacts
+        run: npm run test:compat
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: packages
+          path: artifacts/*.nupkg
+          if-no-files-found: error
+
+      - name: Upload E2E report
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-report-release
+          path: |
+            ${{ env.E2E_DIR }}/playwright-report
+            ${{ env.E2E_DIR }}/test-results
+          if-no-files-found: ignore
+
+  publish:
+    name: Publish
+    needs: [version, pack]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: packages
+          path: artifacts
+
+      - name: GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" artifacts/*.nupkg \
+            --title "UmbracoVisualEditor ${{ needs.version.outputs.v18 }} / ${{ needs.version.outputs.v17 }}" \
+            --notes "UmbracoVisualEditor **${{ needs.version.outputs.v18 }}** for Umbraco 18 and **${{ needs.version.outputs.v17 }}** for Umbraco 17. See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/CHANGELOG.md)." \
+            $([ "${{ needs.version.outputs.prerelease }}" = true ] && echo --prerelease)
+
+      - uses: actions/setup-dotnet@v6
+        if: env.NUGET_API_KEY != ''
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Push to nuget.org
+        if: env.NUGET_API_KEY != ''
+        run: dotnet nuget push "artifacts/*.nupkg" --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
+
+      - name: Not pushed to nuget.org
+        if: env.NUGET_API_KEY == ''
+        run: echo "::notice::No NUGET_API_KEY secret, so the packages are only attached to the GitHub Release (docs/releasing.md)."

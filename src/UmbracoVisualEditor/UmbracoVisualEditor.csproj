@@ -1,0 +1,137 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <StaticWebAssetBasePath>/</StaticWebAssetBasePath>
+  </PropertyGroup>
+
+  <!--
+    Umbraco 17 support (#38): build with -p:UmbracoVersion=17.x. The few API differences are behind UMBRACO_17 (see
+    UmbracoCompatibility.cs); a build is for one major version, as the two aren't binary compatible.
+  -->
+  <PropertyGroup Condition="$(UmbracoVersion.StartsWith('17.'))">
+    <DefineConstants>$(DefineConstants);UMBRACO_17</DefineConstants>
+  </PropertyGroup>
+
+  <!--
+    Package (#39). One package line per Umbraco major, from the same code: 18.x built as is, 17.x with
+    -p:UmbracoVersion=17.x. The release workflow sets Version (18.1.0 / 17.1.0 for tag v1.0; see docs/releasing.md).
+  -->
+  <PropertyGroup>
+    <PackageId>UmbracoVisualEditor</PackageId>
+    <Product>UmbracoVisualEditor</Product>
+    <Title>Umbraco Visual Editor</Title>
+    <Description>Edit Umbraco content on the page itself: the Visual editor renders your real front end, with unsaved changes, and lets editors change text in place, move, add and edit blocks, and use Umbraco's own property editors beside the page.</Description>
+    <Authors>Richard Ockerby</Authors>
+    <Company>Arjo</Company>
+    <Copyright>Copyright © 2026 Richard Ockerby</Copyright>
+    <PackageTags>umbraco;umbraco-marketplace;umbraco-cms;visual-editor;page-editor;inline-editing;block-list;block-grid;backoffice</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>icon.png</PackageIcon>
+    <PackageProjectUrl>https://github.com/arjo-dev/Umbraco-Visual-Editor</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/arjo-dev/Umbraco-Visual-Editor</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReleaseNotes>See https://github.com/arjo-dev/Umbraco-Visual-Editor/blob/main/CHANGELOG.md</PackageReleaseNotes>
+    <!-- A local build that isn't a release. -->
+    <Version Condition="'$(Version)' == ''">0.0.0-dev</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.nuget.md" Pack="true" PackagePath="README.md" />
+    <None Include="icon.png" Pack="true" PackagePath="" />
+    <None Include="..\..\LICENSE" Pack="true" PackagePath="" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="UmbracoVisualEditor.Tests" />
+  </ItemGroup>
+
+  <!-- Central package management - no versions -->
+  <ItemGroup>
+    <PackageReference Include="Umbraco.Cms.Api.Common" />
+    <PackageReference Include="Umbraco.Cms.Api.Management" />
+    <PackageReference Include="Umbraco.Cms.Web.Common" />
+    <PackageReference Include="Umbraco.Cms.Web.Website" />
+
+    <!--
+      Microsoft.AspNetCore.OpenApi is available transitively from the Umbraco packages above, but we
+      take a direct dependency here because extension code directly uses types from this package
+      (IOpenApiDocumentTransformer, IOpenApiOperationTransformer, etc.) and from Microsoft.OpenApi
+      (OpenApiInfo). Without a direct reference, this project's Microsoft.AspNetCore.OpenApi version
+      is determined solely by NuGet's transitive resolution, which can resolve to a different version
+      than the host site project (e.g. a newer patch). When that happens, the different
+      Microsoft.OpenApi versions can conflict at runtime, causing custom OpenAPI documents registered
+      by the extension to fail to appear.
+    -->
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Condition="!$(UmbracoVersion.StartsWith('17.'))" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Don't include the client folder as part of packaging nuget build -->
+    <Content Remove="Client\**" />
+    <None Remove="Client\node_modules\**" />
+
+    <!-- However make the Umbraco-package.json included for dotnet pack or nuget package and visible to the solution -->
+    <None Include="Client\public\umbraco-package.json" Pack="false" />
+
+    <!--
+      The VisualEditor settings' JSON schema (#32), registered with the site's appsettings schema by the .targets (#39: not
+      a .props, as the Razor SDK packs its own buildTransitive/UmbracoVisualEditor.props for static web assets, and a
+      package can only have one).
+    -->
+    <Content Remove="appsettings-schema.UmbracoVisualEditor.json" />
+    <None Include="appsettings-schema.UmbracoVisualEditor.json" Pack="true" PackagePath="" />
+    <None Include="buildTransitive\UmbracoVisualEditor.targets" Pack="true" PackagePath="buildTransitive" />
+  </ItemGroup>
+
+  <!--
+    Client build: `dotnet build` restores npm packages and runs `npm run build` (tsc + vite) when client
+    sources change, emitting into wwwroot/App_Plugins/ArjoVisualEditor. Pass -p:SkipClientBuild=true to skip
+    (e.g. when running `npm run watch` yourself).
+  -->
+  <PropertyGroup>
+    <SkipClientBuild Condition="'$(SkipClientBuild)' == ''">false</SkipClientBuild>
+    <ClientDir>$(MSBuildProjectDirectory)\Client\</ClientDir>
+    <ClientOutputDir>wwwroot\App_Plugins\ArjoVisualEditor\</ClientOutputDir>
+    <ClientBuildStamp>$(BaseIntermediateOutputPath)client-build.stamp</ClientBuildStamp>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ClientRestoreInputs Include="Client\package.json;Client\package-lock.json" />
+    <ClientBuildInputs Include="Client\src\**\*;Client\public\**\*;Client\package.json;Client\package-lock.json;Client\tsconfig.json;Client\vite.config.ts" />
+  </ItemGroup>
+
+  <Target Name="RestoreClient" Condition="'$(SkipClientBuild)' != 'true'" Inputs="@(ClientRestoreInputs)" Outputs="$(ClientDir)node_modules\.package-lock.json">
+    <Exec Command="npm ci --no-audit --no-fund" WorkingDirectory="$(ClientDir)" />
+  </Target>
+
+  <Target Name="BuildClient" Condition="'$(SkipClientBuild)' != 'true'" DependsOnTargets="RestoreClient" BeforeTargets="AssignTargetPaths" Inputs="@(ClientBuildInputs)" Outputs="$(ClientBuildStamp)">
+    <Exec Command="npm run build" WorkingDirectory="$(ClientDir)" />
+    <Touch Files="$(ClientBuildStamp)" AlwaysCreate="true" />
+  </Target>
+
+  <!--
+    The package version in the built umbraco-package.json (#39), which the backoffice shows under Packages. The source
+    (Client/public) keeps 0.0.0. Runs whether or not the client was built by this build (CI builds it separately).
+  -->
+  <Target Name="StampPackageVersion" AfterTargets="BuildClient" BeforeTargets="AssignTargetPaths" Condition="Exists('$(ClientOutputDir)umbraco-package.json')">
+    <PropertyGroup>
+      <_ArjoManifest>$(ClientOutputDir)umbraco-package.json</_ArjoManifest>
+      <_ArjoManifestText>$([System.IO.File]::ReadAllText('$(_ArjoManifest)'))</_ArjoManifestText>
+      <_ArjoManifestStamped>$([System.Text.RegularExpressions.Regex]::Replace('$(_ArjoManifestText)', '"version":\s*"[^"]*"', '"version": "$(Version)"'))</_ArjoManifestStamped>
+    </PropertyGroup>
+    <WriteLinesToFile File="$(_ArjoManifest)" Lines="$([MSBuild]::Escape('$(_ArjoManifestStamped.TrimEnd())'))" Overwrite="true" WriteOnlyWhenDifferent="true" />
+  </Target>
+
+  <!-- Files created during the build weren't there when wwwroot was globbed at evaluation time, so add them now. -->
+  <Target Name="IncludeClientOutput" AfterTargets="BuildClient" BeforeTargets="AssignTargetPaths">
+    <ItemGroup>
+      <_ClientOutputFiles Include="$(ClientOutputDir)**\*" />
+      <Content Remove="@(_ClientOutputFiles)" />
+      <Content Include="@(_ClientOutputFiles)" />
+    </ItemGroup>
+  </Target>
+
+</Project>

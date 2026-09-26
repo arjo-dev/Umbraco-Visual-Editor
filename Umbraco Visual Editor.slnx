@@ -1,9 +1,9 @@
 <Solution>
   <Folder Name="/src/">
-    <Project Path="src/Arjo.VisualEditor/Arjo.VisualEditor.csproj" />
+    <Project Path="src/UmbracoVisualEditor/UmbracoVisualEditor.csproj" />
   </Folder>
   <Folder Name="/tests/">
-    <Project Path="tests/Arjo.VisualEditor.Tests/Arjo.VisualEditor.Tests.csproj" />
+    <Project Path="tests/UmbracoVisualEditor.Tests/UmbracoVisualEditor.Tests.csproj" />
   </Folder>
   <Project Path="Umbraco Visual Editor.Compat Site/Umbraco Visual Editor.Compat Site.csproj" />
   <Project Path="Umbraco Visual Editor.Test Site/Umbraco Visual Editor.Test Site.csproj" />

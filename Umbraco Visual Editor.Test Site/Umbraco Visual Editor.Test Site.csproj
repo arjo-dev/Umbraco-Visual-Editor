@@ -49,7 +49,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\src\Arjo.VisualEditor\Arjo.VisualEditor.csproj" />
+    <ProjectReference Include="..\src\UmbracoVisualEditor\UmbracoVisualEditor.csproj" />
   </ItemGroup>
 
   <PropertyGroup>
@@ -59,6 +59,6 @@
   </PropertyGroup>
 
   <!-- As the NuGet package does it (buildTransitive): the VisualEditor settings in the appsettings schema. -->
-  <Import Project="..\src\Arjo.VisualEditor\buildTransitive\Arjo.VisualEditor.props" />
+  <Import Project="..\src\UmbracoVisualEditor\buildTransitive\UmbracoVisualEditor.targets" />
 
 </Project>

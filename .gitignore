@@ -9,7 +9,7 @@
 node_modules/
 
 # Client build output (produced by `dotnet build` / `npm run build`)
-src/Arjo.VisualEditor/wwwroot/App_Plugins/ArjoVisualEditor/
+src/UmbracoVisualEditor/wwwroot/App_Plugins/ArjoVisualEditor/
 
 # MCP server credentials (template: .env.mcp.example)
 .env.mcp
