@@ -1,0 +1,14 @@
+{
+	"id": "UmbracoVisualEditor",
+	"name": "UmbracoVisualEditor",
+	"version": "0.0.0",
+	"allowTelemetry": true,
+	"extensions": [
+		{
+			"name": "Umbraco Visual Editor Bundle",
+			"alias": "UmbracoVisualEditor.Bundle",
+			"type": "bundle",
+			"js": "/App_Plugins/ArjoVisualEditor/arjo-visual-editor.js"
+		}
+	]
+}

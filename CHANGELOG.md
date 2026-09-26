@@ -1,6 +1,6 @@
 # Changelog
 
-This lists the changes to Arjo.VisualEditor. There are two package lines, released together from the same code: **18.x** for Umbraco 18 and **17.x** for Umbraco 17. A release tagged `vY.Z` publishes `18.Y.Z` and `17.Y.Z` (see [docs/releasing.md](docs/releasing.md)).
+This lists the changes to UmbracoVisualEditor. There are two package lines, released together from the same code: **18.x** for Umbraco 18 and **17.x** for Umbraco 17. A release tagged `vY.Z` publishes `18.Y.Z` and `17.Y.Z` (see [docs/releasing.md](docs/releasing.md)).
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 

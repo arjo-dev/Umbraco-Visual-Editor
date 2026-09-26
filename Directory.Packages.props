@@ -22,13 +22,13 @@
     <UmbracoAppLocalIcuVersion Condition="'$(UmbracoAppLocalIcuVersion)' == ''">72.1.0.3</UmbracoAppLocalIcuVersion>
   </PropertyGroup>
 
-  <!-- Extension (src/Arjo.VisualEditor) -->
+  <!-- Extension (src/UmbracoVisualEditor) -->
   <ItemGroup>
     <PackageVersion Include="Umbraco.Cms.Api.Common" Version="$(UmbracoDependencyRange)" />
     <PackageVersion Include="Umbraco.Cms.Api.Management" Version="$(UmbracoDependencyRange)" />
     <PackageVersion Include="Umbraco.Cms.Web.Common" Version="$(UmbracoDependencyRange)" />
     <PackageVersion Include="Umbraco.Cms.Web.Website" Version="$(UmbracoDependencyRange)" />
-    <!-- See the comment in Arjo.VisualEditor.csproj for why this is referenced directly. -->
+    <!-- See the comment in UmbracoVisualEditor.csproj for why this is referenced directly. -->
     <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.11" />
   </ItemGroup>
 

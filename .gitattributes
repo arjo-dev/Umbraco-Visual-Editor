@@ -1,4 +1,4 @@
 * text=auto
 
 # Prettier enforces LF; keep client sources LF on Windows checkouts (core.autocrlf=true) too.
-src/Arjo.VisualEditor/Client/** text eol=lf
+src/UmbracoVisualEditor/Client/** text eol=lf

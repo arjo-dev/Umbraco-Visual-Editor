@@ -38,10 +38,10 @@ The passwords and secrets above can also be supplied as environment variables, w
 
 ## Extension development
 
-`dotnet build` also builds the extension's client code in `src/Arjo.VisualEditor/Client`. For hot reload while editing TypeScript:
+`dotnet build` also builds the extension's client code in `src/UmbracoVisualEditor/Client`. For hot reload while editing TypeScript:
 
 ```bash
-cd src/Arjo.VisualEditor/Client
+cd src/UmbracoVisualEditor/Client
 npm run watch
 ```
 
@@ -86,7 +86,7 @@ uSync writes each item you save in the backoffice to `uSync/v18`. Commit those f
    - a render session, done before any page is visited, leaks no markers or unsaved values into live pages;
    - the home page and both playground variants render;
    - the dev API user can get a token;
-   - the Management API lists the `Arjo.VisualEditor` manifest;
+   - the Management API lists the `UmbracoVisualEditor` manifest;
    - the first boot left the working tree unchanged.
 4. Runs the end-to-end tests ([`tests/e2e`](../tests/e2e/README.md)) against that site, signed in as its throwaway admin. Then it runs them against a throwaway copy of the **Compat Site** (plain Umbraco with other template conventions, see [compatibility.md](compatibility.md)), and checks the working tree is still unchanged.
 

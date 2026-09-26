@@ -2,7 +2,7 @@
 
 This is how the backoffice (the **host**, which owns the iframe) talks to the rendered page inside it (the **canvas**).
 
-- **Code:** `src/Arjo.VisualEditor/Client/src/protocol/`. Both bundles import the same module.
+- **Code:** `src/UmbracoVisualEditor/Client/src/protocol/`. Both bundles import the same module.
 - **Tests:** `*.test.ts` next to the code. Run them with `npm test`.
 - **Version:** `PROTOCOL_VERSION = 1`. Bump it on any breaking change; each side refuses a version it doesn't know.
 

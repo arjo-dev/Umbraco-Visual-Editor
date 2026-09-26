@@ -2,7 +2,7 @@
 
 - **Status:** Accepted, implemented in #57
 - **Date:** 2026-09-24
-- **Issue:** #21 (spike). Prototype: `src/Arjo.VisualEditor/Client/src/spike/` (automated, runs with the client tests).
+- **Issue:** #21 (spike). Prototype: `src/UmbracoVisualEditor/Client/src/spike/` (automated, runs with the client tests).
 
 ## Context
 

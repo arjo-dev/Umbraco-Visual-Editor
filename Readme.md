@@ -7,19 +7,19 @@ The **Visual editor** gives Umbraco editors a way to edit content on the page it
 
 The standard editor (the **Content** tab) is one click away, and saving and publishing work as they always do.
 
-It reuses the CMS's property editors and reads the site's templates as they are, so it works with an existing document model without changes. It's published as the NuGet package **Arjo.VisualEditor**.
+It reuses the CMS's property editors and reads the site's templates as they are, so it works with an existing document model without changes. It's published as the NuGet package **UmbracoVisualEditor**.
 
 ## Install
 
 Install the package version that matches your Umbraco version's major:
 
-| Umbraco | Arjo.VisualEditor |
+| Umbraco | UmbracoVisualEditor |
 |---|---|
 | 18.x | 18.x |
 | 17.x | 17.x |
 
 ```bash
-dotnet add package Arjo.VisualEditor
+dotnet add package UmbracoVisualEditor
 ```
 
 Run the site and open a document that has a template: it gets a **Visual editor** tab next to **Content**. Nothing else is needed.
@@ -51,7 +51,7 @@ Aliases are case-insensitive. The site fails to start if an alias is blank or ap
 The Visual editor recognises content however templates write it: models (ModelsBuilder or compiled), `Value()`, partials, block views, view components and cached partials. Some markup can't be recognised as a block on its own, such as a partial that only gets the block's element. For that there's `Html.VisualEditorBlock`:
 
 ```cshtml
-@using Arjo.VisualEditor
+@using UmbracoVisualEditor
 
 @foreach (var block in Model.Cards)
 {

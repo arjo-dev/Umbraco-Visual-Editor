@@ -1,7 +1,7 @@
 name: Release
 
 # Pushing a tag vY.Z (or vY.Z-suffix, a prerelease) releases both package lines (#39; docs/releasing.md):
-#   Arjo.VisualEditor 18.Y.Z (Umbraco 18) and 17.Y.Z (Umbraco 17), from the same commit.
+#   UmbracoVisualEditor 18.Y.Z (Umbraco 18) and 17.Y.Z (Umbraco 17), from the same commit.
 # Runs all of CI, packs both, installs each package into the Compat Site and runs its end-to-end tests against it,
 # then creates a GitHub Release with the packages, and pushes them to nuget.org if a NUGET_API_KEY secret is set.
 on:
@@ -14,7 +14,7 @@ permissions:
 env:
   DOTNET_NOLOGO: true
   DOTNET_CLI_TELEMETRY_OPTOUT: true
-  CLIENT_DIR: src/Arjo.VisualEditor/Client
+  CLIENT_DIR: src/UmbracoVisualEditor/Client
   E2E_DIR: tests/e2e
   # The Umbraco 17 the 17.x package is built against. Keep in step with the Umbraco 17 job in ci.yml.
   UMBRACO_17_VERSION: 17.7.0
@@ -39,7 +39,7 @@ jobs:
           echo "v18=18.$rest" >> "$GITHUB_OUTPUT"
           echo "v17=17.$rest" >> "$GITHUB_OUTPUT"
           echo "prerelease=$([ -n "${BASH_REMATCH[3]}" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
-          echo "Releasing Arjo.VisualEditor 18.$rest and 17.$rest"
+          echo "Releasing UmbracoVisualEditor 18.$rest and 17.$rest"
 
   ci:
     name: CI
@@ -76,19 +76,19 @@ jobs:
 
       # One after the other: each build stamps its version into the shared client output (umbraco-package.json).
       - name: Pack for Umbraco 18
-        run: dotnet pack src/Arjo.VisualEditor/Arjo.VisualEditor.csproj -c Release -p:SkipClientBuild=true -p:Version="$V18" -o artifacts
+        run: dotnet pack src/UmbracoVisualEditor/UmbracoVisualEditor.csproj -c Release -p:SkipClientBuild=true -p:Version="$V18" -o artifacts
 
       - name: Pack for Umbraco 17
-        run: dotnet pack src/Arjo.VisualEditor/Arjo.VisualEditor.csproj -c Release -p:SkipClientBuild=true -p:UmbracoVersion="$UMBRACO_17_VERSION" -p:Version="$V17" -o artifacts
+        run: dotnet pack src/UmbracoVisualEditor/UmbracoVisualEditor.csproj -c Release -p:SkipClientBuild=true -p:UmbracoVersion="$UMBRACO_17_VERSION" -p:Version="$V17" -o artifacts
 
       - name: Check the packages' Umbraco dependencies
         run: |
           set -euo pipefail
           check() {
-            nuspec="$(unzip -p "artifacts/Arjo.VisualEditor.$1.nupkg" Arjo.VisualEditor.nuspec)"
+            nuspec="$(unzip -p "artifacts/UmbracoVisualEditor.$1.nupkg" UmbracoVisualEditor.nuspec)"
             grep -q "id=\"Umbraco.Cms.Web.Common\" version=\"\[$2, $3)\"" <<< "$nuspec" \
-              || { echo "::error::Arjo.VisualEditor $1 doesn't depend on Umbraco [$2, $3)"; grep -o '<dependency [^>]*>' <<< "$nuspec"; exit 1; }
-            echo "✓ Arjo.VisualEditor $1 depends on Umbraco [$2, $3)"
+              || { echo "::error::UmbracoVisualEditor $1 doesn't depend on Umbraco [$2, $3)"; grep -o '<dependency [^>]*>' <<< "$nuspec"; exit 1; }
+            echo "✓ UmbracoVisualEditor $1 depends on Umbraco [$2, $3)"
           }
           check "$V18" "$(sed -n 's:.*<UmbracoVersion[^>]*>\(.*\)</UmbracoVersion>.*:\1:p' Directory.Packages.props)" 19.0.0
           check "$V17" "$UMBRACO_17_VERSION" 18.0.0
@@ -107,7 +107,7 @@ jobs:
       - name: Test the Umbraco 18 package
         working-directory: ${{ env.E2E_DIR }}
         env:
-          ArjoVisualEditorPackageVersion: ${{ env.V18 }}
+          VisualEditorPackageVersion: ${{ env.V18 }}
           RestoreAdditionalProjectSources: ${{ github.workspace }}/artifacts
         run: npm run test:compat
 
@@ -115,7 +115,7 @@ jobs:
         working-directory: ${{ env.E2E_DIR }}
         env:
           UmbracoVersion: ${{ env.UMBRACO_17_VERSION }}
-          ArjoVisualEditorPackageVersion: ${{ env.V17 }}
+          VisualEditorPackageVersion: ${{ env.V17 }}
           RestoreAdditionalProjectSources: ${{ github.workspace }}/artifacts
         run: npm run test:compat
 
@@ -156,8 +156,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" artifacts/*.nupkg \
-            --title "Arjo.VisualEditor ${{ needs.version.outputs.v18 }} / ${{ needs.version.outputs.v17 }}" \
-            --notes "Arjo.VisualEditor **${{ needs.version.outputs.v18 }}** for Umbraco 18 and **${{ needs.version.outputs.v17 }}** for Umbraco 17. See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/CHANGELOG.md)." \
+            --title "UmbracoVisualEditor ${{ needs.version.outputs.v18 }} / ${{ needs.version.outputs.v17 }}" \
+            --notes "UmbracoVisualEditor **${{ needs.version.outputs.v18 }}** for Umbraco 18 and **${{ needs.version.outputs.v17 }}** for Umbraco 17. See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/CHANGELOG.md)." \
             $([ "${{ needs.version.outputs.prerelease }}" = true ] && echo --prerelease)
 
       - uses: actions/setup-dotnet@v6

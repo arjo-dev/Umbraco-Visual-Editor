@@ -4,7 +4,7 @@ A release publishes two NuGet packages from the same commit, one per Umbraco maj
 
 | Tag | Umbraco 18 package | Umbraco 17 package |
 |---|---|---|
-| `v1.0` | `Arjo.VisualEditor` **18.1.0** | `Arjo.VisualEditor` **17.1.0** |
+| `v1.0` | `UmbracoVisualEditor` **18.1.0** | `UmbracoVisualEditor` **17.1.0** |
 | `v1.2` | 18.1.2 | 17.1.2 |
 | `v1.3-beta.1` | 18.1.3-beta.1 (prerelease) | 17.1.3-beta.1 (prerelease) |
 
@@ -31,22 +31,22 @@ A tag that isn't `vY.Z` or `vY.Z-suffix` fails the release before anything is bu
 
 ## Setting up nuget.org
 
-Create an API key on nuget.org, scoped to push `Arjo.VisualEditor`, and add it as the repository secret `NUGET_API_KEY` (Settings → Secrets and variables → Actions). The first push creates the package on nuget.org.
+Create an API key on nuget.org, scoped to push `UmbracoVisualEditor`, and add it as the repository secret `NUGET_API_KEY` (Settings → Secrets and variables → Actions). The first push creates the package on nuget.org.
 
 The package has the `umbraco-marketplace` tag, so the Umbraco Marketplace picks it up from nuget.org. The Marketplace can show more (screenshots, a category, links) from an `umbraco-marketplace.json` at the root of a public repository. The repository is private for now, so there isn't one yet.
 
 ## Trying a package locally
 
 ```bash
-dotnet pack src/Arjo.VisualEditor -c Release -p:Version=18.0.0-local.1 -o artifacts
-dotnet pack src/Arjo.VisualEditor -c Release -p:Version=17.0.0-local.1 -p:UmbracoVersion=17.7.0 -o artifacts
+dotnet pack src/UmbracoVisualEditor -c Release -p:Version=18.0.0-local.1 -o artifacts
+dotnet pack src/UmbracoVisualEditor -c Release -p:Version=17.0.0-local.1 -p:UmbracoVersion=17.7.0 -o artifacts
 ```
 
-The Compat Site can use a packed package instead of the project: set `ArjoVisualEditorPackageVersion` and `RestoreAdditionalProjectSources` (both MSBuild properties, or environment variables):
+The Compat Site can use a packed package instead of the project: set `VisualEditorPackageVersion` and `RestoreAdditionalProjectSources` (both MSBuild properties, or environment variables):
 
 ```bash
 cd tests/e2e
-ArjoVisualEditorPackageVersion=18.0.0-local.1 RestoreAdditionalProjectSources="$PWD/../../artifacts" npm run test:compat
+VisualEditorPackageVersion=18.0.0-local.1 RestoreAdditionalProjectSources="$PWD/../../artifacts" npm run test:compat
 ```
 
 Use a new version each time: NuGet caches a package by its version.
