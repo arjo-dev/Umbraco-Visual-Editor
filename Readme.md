@@ -24,6 +24,8 @@ dotnet add package UmbracoVisualEditor
 
 Run the site and open a document that has a template: it gets a **Visual editor** tab next to **Content**. Nothing else is needed.
 
+Documents open on the **Content** tab, as usual. Anyone who wants them to open in the Visual editor can choose that in their profile: click your avatar, then under **Visual editor**, set **Open documents in**.
+
 ## Configuration
 
 The editor is offered on every document type that has a template. To narrow that, add a `VisualEditor` section to `appsettings.json`. It's described in the site's `appsettings-schema.json`, so you get IntelliSense.

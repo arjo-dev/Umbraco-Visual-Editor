@@ -17,7 +17,7 @@ env:
   CLIENT_DIR: src/UmbracoVisualEditor/Client
   E2E_DIR: tests/e2e
   # The Umbraco 17 the 17.x package is built against. Keep in step with the Umbraco 17 job in ci.yml.
-  UMBRACO_17_VERSION: 17.7.0
+  UMBRACO_17_VERSION: 17.0.0
 
 jobs:
   version:

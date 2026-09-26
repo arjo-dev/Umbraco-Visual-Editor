@@ -66,6 +66,13 @@ export default {
 		allOnPage: 'Every property of this page is on the page itself.',
 		notOnPageHint: "Properties that aren't shown on the page, or are empty.",
 		propertyGone: "This field isn't on the document type any more.",
+		// Profile (#48)
+		openDocumentsIn: 'Open documents in',
+		openInStandard: 'The standard editor',
+		openInVisual: "The Visual editor, where it's available",
+		openDocumentsInHint:
+			"Documents without a template, or of a type the Visual editor isn't used for, open in the standard editor. A link to a tab still opens that tab.",
+
 		formatting: 'Formatting',
 		sharedAcrossLanguages: 'Shared across languages',
 

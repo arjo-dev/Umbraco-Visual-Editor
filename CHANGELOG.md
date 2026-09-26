@@ -26,6 +26,7 @@ The first release.
 - **Validation messages** on the page and in the side panel.
 - **Permissions:** read-only mode for users who can't change a document, and for locked documents or ones in the recycle bin.
 - **Undo and redo** within a Visual editor session (Ctrl+Z / Ctrl+Shift+Z).
+- **Open documents in the Visual editor:** a setting in each user's profile (it's a choice, not remembered from the tabs they use). Links to a tab still open that tab.
 - **Preview sizes:** desktop, tablet and mobile, each with a choice of sizes.
 - **Keyboard navigation** on the page (Tab, the arrow keys, Enter and Escape), screen reader announcements, and backoffice localisation (English).
 - **Configuration:** a `VisualEditor` appsettings section (`Enabled`, `AllowedDocumentTypes`, `ExcludedDocumentTypes`), validated at startup and included in the appsettings JSON schema.
