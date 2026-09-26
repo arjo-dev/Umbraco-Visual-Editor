@@ -21,7 +21,11 @@ public sealed class OverlayPublishedContent : PublishedContentWrapped
         IEnumerable<IPublishedProperty> overrides,
         IReadOnlyList<RenderVariantName> names,
         IVariationContextAccessor variationContextAccessor)
+#if UMBRACO_17
+        : base(content, UmbracoCompatibility.PublishedValueFallback)
+#else
         : base(content)
+#endif
     {
         _overrides = overrides.ToDictionary(p => p.Alias, StringComparer.OrdinalIgnoreCase);
         _names = names;

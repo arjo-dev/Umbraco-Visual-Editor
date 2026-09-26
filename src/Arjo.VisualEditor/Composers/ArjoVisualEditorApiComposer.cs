@@ -1,5 +1,7 @@
+#if !UMBRACO_17
 using Umbraco.Cms.Api.Common.OpenApi;
 using Umbraco.Cms.Api.Management.OpenApi;
+#endif
 using Umbraco.Cms.Core.Composing;
 using Umbraco.Cms.Core.DependencyInjection;
 
@@ -7,7 +9,14 @@ namespace Arjo.VisualEditor.Composers;
 
 public class ArjoVisualEditorApiComposer : IComposer
 {
-    public void Compose(IUmbracoBuilder builder) =>
+    public void Compose(IUmbracoBuilder builder)
+#if UMBRACO_17
+    {
+        // Umbraco 17 documents its APIs with Swashbuckle; this OpenAPI document (only used to generate the client) is
+        // registered on 18. The endpoints themselves work on both.
+    }
+#else
+        =>
 
         // See https://docs.umbraco.com/umbraco-cms/tutorials/creating-a-backoffice-api (and its sub-pages) for
         // guidance on customizing this document.
@@ -29,4 +38,5 @@ public class ArjoVisualEditorApiComposer : IComposer
                         // };
                         return Task.CompletedTask;
                     })));
+#endif
 }

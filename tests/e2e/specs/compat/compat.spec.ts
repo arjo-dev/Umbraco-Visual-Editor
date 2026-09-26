@@ -75,6 +75,58 @@ test('moves a block whose partial only gets its element, marked with the helper'
 	await expect.poll(() => headings(list)).toEqual([before[1], before[0], ...before.slice(2)]);
 });
 
+// The flows below use the backoffice's own editors inside the Visual editor, which can change between Umbraco
+// versions; the Compat Site is the one that runs on Umbraco 17 too, so they're checked here as well.
+
+test('edits rich text in place, with the backoffice editor mounted on the page', async ({ page }) => {
+	await openVisualEditor(page, COMPAT_PAGE);
+	const body = canvas(page).locator('section.body');
+	const text = unique('Added on the page');
+
+	await body.locator('p').first().dblclick();
+	// The editor is mounted on the page, over the text (not inside the site's own markup).
+	const editor = canvas(page).locator('[contenteditable="true"]');
+	await expect(editor).toBeVisible();
+	await editor.press('Control+End');
+	await editor.pressSequentially(` ${text}`);
+	// Clicking elsewhere on the page finishes the edit; the page is rendered again from the stored markup.
+	await canvas(page).locator('h1').click();
+
+	await waitForRender(page);
+	await expect(body).toContainText(text);
+	await expect(editor).toHaveCount(0);
+});
+
+test('adds a block from the catalogue', async ({ page }) => {
+	await openVisualEditor(page, COMPAT_PAGE);
+	const cards = canvas(page).locator('.cards .card');
+	const count = await cards.count();
+
+	await selectBlock(page, cards.first());
+	await canvas(page).locator('uve-overlay').getByRole('button', { name: 'Add a block after this one' }).click();
+	await page.locator('umb-backoffice-modal-container').getByRole('button', { name: 'Compat Card' }).click();
+
+	await waitForRender(page);
+	await expect(cards).toHaveCount(count + 1);
+	await expect(sidePanel(page).locator('arjo-visual-editor-block-editor')).toBeVisible();
+});
+
+test('undoes and redoes an edit', async ({ page }) => {
+	await openVisualEditor(page, COMPAT_PAGE);
+	const title = canvas(page).locator('h1');
+	const before = await title.innerText();
+	const toolbar = page.locator('arjo-visual-editor-toolbar');
+
+	await editInPlace(page, title, unique('To be undone'));
+	await toolbar.getByRole('button', { name: 'Undo' }).click();
+	await waitForRender(page);
+	await expect(title).toHaveText(before);
+
+	await toolbar.getByRole('button', { name: 'Redo' }).click();
+	await waitForRender(page);
+	await expect(title).not.toHaveText(before);
+});
+
 test("doesn't output-cache render sessions", async ({ page }) => {
 	await openVisualEditor(page, COMPAT_PAGE);
 	const src = await page.locator('iframe[title="Page preview"]').getAttribute('src');

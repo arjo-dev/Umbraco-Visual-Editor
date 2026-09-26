@@ -5,7 +5,28 @@ The Visual editor reuses a site's own templates, so it has to find, in whatever 
 - **The Test Site** runs the Clean starter kit, with in-memory ModelsBuilder (InMemoryAuto) and uSync content.
 - **The Compat Site** (`Umbraco Visual Editor.Compat Site`) is plain Umbraco, with compiled models written by hand (ModelsBuilder mode `Nothing`). Its templates use other conventions: hand-rolled block loops, a view component, `CachedPartialAsync` and output caching. Its content is created in code on first boot.
 
-Both are covered by the end-to-end tests in CI (`tests/e2e`: `npm test` and `npm run test:compat`).
+Both are covered by the end-to-end tests in CI (`tests/e2e`: `npm test` and `npm run test:compat`). The Compat Site is also run on Umbraco 17 (see below).
+
+## Umbraco versions
+
+The Visual editor supports **Umbraco 18** (the default) and **Umbraco 17**.
+
+A build is for one major version: the two aren't binary compatible where the package touches them. To build for 17, set the Umbraco version for MSBuild:
+
+```bash
+dotnet build src/Arjo.VisualEditor -p:UmbracoVersion=17.7.0
+```
+
+An `UmbracoVersion` environment variable does the same. `Directory.Packages.props` uses it for every Umbraco package, and a `17.x` version defines `UMBRACO_17`.
+
+The differences are small:
+- **Published content wrappers.** Umbraco 17's `PublishedContentWrapped` and `PublishedElementWrapped` take an `IPublishedValueFallback` in their constructors (see `UmbracoCompatibility.cs`).
+- **Block elements.** Their `Properties` and `GetProperty` aren't virtual on 17, so the marking wrapper for block elements implements `IPublishedElement` again rather than overriding them.
+- **The OpenAPI document.** It's only used to generate the backoffice client during development, and is registered on 18 only. Umbraco 17 documents its APIs with Swashbuckle. The API itself works the same on both.
+
+The backoffice extension is one build for both: it's built against 18's backoffice and runs in 17's.
+
+**What's checked on 17:** CI's `Umbraco 17` job builds the package and runs the .NET tests against Umbraco 17. It then runs the Compat Site end to end on Umbraco 17. That covers marking, editing text and rich text in place, moving and adding blocks, undo and redo, and output caching. The Test Site is 18-only (its Clean and uSync versions are), so the rest of its flows are only checked on 18.
 
 ## How the editor finds things
 
