@@ -50,6 +50,23 @@ public class RenderSessionStoreTests
     }
 
     [Fact]
+    public async Task Create_StoresAClearedValueAsNull()
+    {
+        // A picker the editor emptied: its value is left out of the request, so it binds as an undefined element.
+        var created = await _store.CreateAsync(
+            Guid.NewGuid(),
+            null,
+            null,
+            [new RenderValue("heroImage", null, null, default)],
+            [],
+            Guid.NewGuid(),
+            TestContext.Current.CancellationToken);
+
+        var loaded = await _store.GetAsync(created.Token, TestContext.Current.CancellationToken);
+        Assert.Equal(JsonValueKind.Null, Assert.Single(loaded!.Values).Value.ValueKind);
+    }
+
+    [Fact]
     public async Task ViewerPass_IdentifiesTheUserItWasIssuedTo()
     {
         var user = Guid.NewGuid();

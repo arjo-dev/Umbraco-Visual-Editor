@@ -16,6 +16,7 @@ env:
   DOTNET_NOLOGO: true
   DOTNET_CLI_TELEMETRY_OPTOUT: true
   CLIENT_DIR: src/Arjo.VisualEditor/Client
+  E2E_DIR: tests/e2e
   SITE_DIR: Umbraco Visual Editor.Test Site
   SITE_URL: https://localhost:5001
 
@@ -32,7 +33,9 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: ${{ env.CLIENT_DIR }}/package-lock.json
+          cache-dependency-path: |
+            ${{ env.CLIENT_DIR }}/package-lock.json
+            ${{ env.E2E_DIR }}/package-lock.json
 
       - uses: actions/setup-dotnet@v6
         with:
@@ -91,6 +94,8 @@ jobs:
           echo "::add-mask::$ADMIN_PASSWORD"
           echo "::add-mask::$CLIENT_SECRET"
           echo "CLIENT_SECRET=$CLIENT_SECRET" >> "$GITHUB_ENV"
+          # The E2E tests sign in to the backoffice as the admin user.
+          echo "ADMIN_PASSWORD=$ADMIN_PASSWORD" >> "$GITHUB_ENV"
           # Hosting:Debug=false like production: Umbraco only uses its partial-view cache when not debugging,
           # and the render-session leak check below needs that cache active.
           ASPNETCORE_ENVIRONMENT=Development \
@@ -139,6 +144,8 @@ jobs:
           session="$(curl -sfk -b "$jar" "$SITE_URL$url")"
           grep -q 'LEAKCHECK' <<< "$session" || { echo "::error::Render session did not show the unsaved title"; exit 1; }
           grep -q 'uve:b:' <<< "$session" || { echo "::error::Render session has no block markers"; exit 1; }
+          # Rich text is marked with comments, text with invisible characters; both come from the model factory decorator.
+          grep -q 'uve:p:' <<< "$session" || { echo "::error::Render session has no property markers"; exit 1; }
           echo "✓ render session shows unsaved values with markers"
           for path in /playground/ / /about/; do
             live="$(curl -sfk "$SITE_URL$path")"
@@ -180,6 +187,41 @@ jobs:
             echo "::error::First boot modified tracked files (uSync export-on-save?)"
             exit 1
           fi
+
+      # ---- E2E: the Visual editor in a real backoffice (#37), against the site above ----
+      - name: Install E2E dependencies
+        working-directory: ${{ env.E2E_DIR }}
+        run: |
+          npm ci --no-audit --no-fund
+          npx playwright install --with-deps chromium
+
+      - name: E2E tests
+        working-directory: ${{ env.E2E_DIR }}
+        env:
+          URL: ${{ env.SITE_URL }}
+          UMBRACO_USER_LOGIN: admin@example.com
+          UMBRACO_USER_PASSWORD: ${{ env.ADMIN_PASSWORD }}
+        run: |
+          npm run typecheck
+          npm test
+
+      - name: Working tree unchanged by E2E
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            git status --short
+            echo "::error::The E2E tests modified tracked files (uSync export-on-save?)"
+            exit 1
+          fi
+
+      - name: Upload E2E report
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-report
+          path: |
+            ${{ env.E2E_DIR }}/playwright-report
+            ${{ env.E2E_DIR }}/test-results
+          if-no-files-found: ignore
 
       - name: Upload site log
         if: failure()
