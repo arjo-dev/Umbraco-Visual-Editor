@@ -53,25 +53,47 @@ export class ArjoVisualEditorToolbarElement extends UmbLitElement {
 		const selected = sizeFor(device, this.sizeId).id;
 		return keyed(
 			device,
-			html`<select aria-label="Preview size" title="Preview size" @change=${(e: Event) => this.#chooseSize(device, e)}>
+			html`<select
+				aria-label=${this.localize.term('arjoVisualEditor_previewSize')}
+				title=${this.localize.term('arjoVisualEditor_previewSize')}
+				@change=${(e: Event) => this.#chooseSize(device, e)}
+			>
 				${deviceFor(device).sizes.map(
-					(size) => html`<option value=${size.id} ?selected=${size.id === selected}>${sizeLabel(size)}</option>`,
+					(size) =>
+						html`<option value=${size.id} ?selected=${size.id === selected}>
+							${sizeLabel(size, size.term ? this.localize.term(size.term) : size.label)}
+						</option>`,
 				)}
 			</select>`,
 		);
 	}
 
+	get #treeLabel() {
+		return this.localize.term(
+			this.treeVisible ? 'arjoVisualEditor_hideContentTree' : 'arjoVisualEditor_showContentTree',
+		);
+	}
+
+	get #panelLabel() {
+		return this.localize.term(this.panelOpen ? 'arjoVisualEditor_hideSidePanel' : 'arjoVisualEditor_showSidePanel');
+	}
+
 	override render() {
 		return html`
 			<div class="group">
-				<uui-button look="secondary" compact label="Standard editor" href=${this.standardEditorHref ?? nothing}>
-					<uui-icon name="icon-arrow-left"></uui-icon> Standard editor
+				<uui-button
+					look="secondary"
+					compact
+					label=${this.localize.term('arjoVisualEditor_standardEditor')}
+					href=${this.standardEditorHref ?? nothing}
+				>
+					<uui-icon name="icon-arrow-left"></uui-icon> ${this.localize.term('arjoVisualEditor_standardEditor')}
 				</uui-button>
 				<uui-button
 					compact
 					look=${this.treeVisible ? 'primary' : 'secondary'}
-					label=${this.treeVisible ? 'Hide content tree' : 'Show content tree'}
-					title=${this.treeVisible ? 'Hide content tree' : 'Show content tree'}
+					label=${this.#treeLabel}
+					title=${this.#treeLabel}
 					aria-pressed=${this.treeVisible}
 					@click=${() => this.dispatchEvent(new CustomEvent('toggle-tree'))}
 				>
@@ -79,12 +101,12 @@ export class ArjoVisualEditorToolbarElement extends UmbLitElement {
 				</uui-button>
 			</div>
 
-			<div class="group" role="group" aria-label="History">
+			<div class="group" role="group" aria-label=${this.localize.term('arjoVisualEditor_history')}>
 				<uui-button
 					compact
 					look="secondary"
-					label="Undo"
-					title="Undo (${SHORTCUT}+Z)"
+					label=${this.localize.term('arjoVisualEditor_undo')}
+					title=${this.localize.term('arjoVisualEditor_undoShortcut', SHORTCUT)}
 					?disabled=${!this.canUndo || this.readonly}
 					@click=${() => this.dispatchEvent(new CustomEvent('undo'))}
 				>
@@ -93,8 +115,8 @@ export class ArjoVisualEditorToolbarElement extends UmbLitElement {
 				<uui-button
 					compact
 					look="secondary"
-					label="Redo"
-					title="Redo (${SHORTCUT}+Shift+Z)"
+					label=${this.localize.term('arjoVisualEditor_redo')}
+					title=${this.localize.term('arjoVisualEditor_redoShortcut', SHORTCUT)}
 					?disabled=${!this.canRedo || this.readonly}
 					@click=${() => this.dispatchEvent(new CustomEvent('redo'))}
 				>
@@ -103,7 +125,7 @@ export class ArjoVisualEditorToolbarElement extends UmbLitElement {
 			</div>
 
 			<div class="devices">
-				<uui-button-group role="radiogroup" aria-label="Device">
+				<uui-button-group role="radiogroup" aria-label=${this.localize.term('arjoVisualEditor_device')}>
 					${VISUAL_EDITOR_DEVICES.map(
 						(d) => html`
 							<uui-button
@@ -111,8 +133,8 @@ export class ArjoVisualEditorToolbarElement extends UmbLitElement {
 								role="radio"
 								aria-checked=${d.alias === this.device}
 								look=${d.alias === this.device ? 'primary' : 'secondary'}
-								label=${d.label}
-								title=${d.label}
+								label=${this.localize.term(d.term)}
+								title=${this.localize.term(d.term)}
 								@click=${() => this.#chooseDevice(d.alias)}
 							>
 								<uui-icon name=${d.icon}></uui-icon>
@@ -123,7 +145,7 @@ export class ArjoVisualEditorToolbarElement extends UmbLitElement {
 				${this.#renderSizes()}
 				${
 					this.scale < 1
-						? html`<span class="scale" title="The page is scaled down so the whole width fits"
+						? html`<span class="scale" title=${this.localize.term('arjoVisualEditor_scaledDown')}
 								>${Math.round(this.scale * 100)}%</span
 							>`
 						: nothing
@@ -133,16 +155,21 @@ export class ArjoVisualEditorToolbarElement extends UmbLitElement {
 			<div class="group end">
 				${
 					this.readonly
-						? html`<uui-tag look="secondary" title="You can look, but not change this page here">Read-only</uui-tag>`
+						? html`<uui-tag look="secondary" title=${this.localize.term('arjoVisualEditor_readOnlyDescription')}
+								>${this.localize.term('arjoVisualEditor_readOnly')}</uui-tag
+							>`
 						: nothing
 				}
 				<!-- Always laid out, only hidden, so showing it doesn't shift the toolbar. -->
-				<uui-loader-circle aria-label="Updating preview" ?hidden=${!this.rendering}></uui-loader-circle>
+				<uui-loader-circle
+					aria-label=${this.localize.term('arjoVisualEditor_updatingPreview')}
+					?hidden=${!this.rendering}
+				></uui-loader-circle>
 				<uui-button
 					compact
 					look=${this.panelOpen ? 'primary' : 'secondary'}
-					label=${this.panelOpen ? 'Hide side panel' : 'Show side panel'}
-					title=${this.panelOpen ? 'Hide side panel' : 'Show side panel'}
+					label=${this.#panelLabel}
+					title=${this.#panelLabel}
 					aria-pressed=${this.panelOpen}
 					@click=${() => this.dispatchEvent(new CustomEvent('toggle-panel'))}
 				>

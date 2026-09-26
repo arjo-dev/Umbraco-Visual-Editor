@@ -58,6 +58,12 @@ export const columnsIn = (config: GridConfig, area: GridAreaConfig | null) =>
 export const spansOf = (config: GridConfig, typeKey: string) =>
 	config.blocks.find((b) => b.contentElementTypeKey === typeKey)?.columnSpanOptions?.map((o) => o.columnSpan) ?? [];
 
+/** Text for the user, as a localisation key and its arguments (#35); the caller translates it. */
+export interface LocalizedMessage {
+	key: string;
+	args?: unknown[];
+}
+
 /**
  * Whether a block of `typeKey`, `span` columns wide, may go into the grid's root (`area` null) or an area that holds
  * `count` blocks already; and if so, the span it gets there (it may need to be narrower).
@@ -68,14 +74,14 @@ export function checkGridDrop(
 	span: number | null,
 	area: GridAreaConfig | null,
 	count: number,
-): { ok: true; columnSpan: number } | { ok: false; reason: string } {
+): { ok: true; columnSpan: number } | { ok: false; reason: LocalizedMessage } {
 	const block = config.blocks.find((b) => b.contentElementTypeKey === typeKey);
-	if (!block) return { ok: false, reason: 'This grid doesn’t allow this type of block.' };
+	if (!block) return { ok: false, reason: { key: 'arjoVisualEditor_gridDisallows' } };
 
 	if (!area) {
-		if (block.allowAtRoot === false) return { ok: false, reason: 'This type of block can only go in an area.' };
+		if (block.allowAtRoot === false) return { ok: false, reason: { key: 'arjoVisualEditor_areaOnly' } };
 		const max = config.validationLimit?.max;
-		if (max && count >= max) return { ok: false, reason: `The grid is full: it allows at most ${max} blocks.` };
+		if (max && count >= max) return { ok: false, reason: { key: 'arjoVisualEditor_gridFull', args: [max] } };
 	} else {
 		const allowances = area.specifiedAllowance ?? [];
 		const allowed = allowances.length
@@ -83,15 +89,15 @@ export function checkGridDrop(
 					(a) => (a.elementTypeKey && a.elementTypeKey === typeKey) || (a.groupKey && a.groupKey === block.groupKey),
 				)
 			: block.allowInAreas !== false;
-		if (!allowed) return { ok: false, reason: `The ${area.alias} area doesn’t allow this type of block.` };
+		if (!allowed) return { ok: false, reason: { key: 'arjoVisualEditor_areaDisallows', args: [area.alias] } };
 		if (area.maxAllowed && count >= area.maxAllowed) {
-			return { ok: false, reason: `The ${area.alias} area is full: it allows at most ${area.maxAllowed} blocks.` };
+			return { ok: false, reason: { key: 'arjoVisualEditor_areaFull', args: [area.alias, area.maxAllowed] } };
 		}
 	}
 
 	const columns = columnsIn(config, area);
 	const columnSpan = fitSpan(Math.min(span ?? columns, columns), columns, spansOf(config, typeKey));
-	if (columnSpan === null) return { ok: false, reason: 'This block is too wide to go there.' };
+	if (columnSpan === null) return { ok: false, reason: { key: 'arjoVisualEditor_tooWide' } };
 	return { ok: true, columnSpan };
 }
 

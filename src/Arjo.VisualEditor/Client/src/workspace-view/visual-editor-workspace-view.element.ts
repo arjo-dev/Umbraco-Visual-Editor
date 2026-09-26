@@ -9,6 +9,7 @@ import { ARJO_VISUAL_MODE_CONTEXT, type ArjoVisualModeContext } from '../visual-
 import { viewInPath } from '../visual-mode/routes.js';
 import {
 	createHostChannel,
+	CANVAS_STRING_KEYS,
 	createNonce,
 	historyAction,
 	sameTarget,
@@ -200,6 +201,7 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 				this.#channel?.send({ type: 'setSelection', target: this._selected });
 				this.#channel?.send({ type: 'setDevice', width: this.#deviceWidth });
 				this.#channel?.send({ type: 'setReadonly', readonly: this._readonly });
+				this.#channel?.send({ type: 'setStrings', strings: this.#canvasStrings() });
 				this.#sendErrors();
 			},
 			onInvalid: (data) => console.warn('[Arjo.VisualEditor] ignored invalid canvas message', data),
@@ -238,7 +240,7 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 					// The whole edit is one step to undo.
 					if (started) this.#history.beginGroup();
 					// Not plain text shown as stored (or not editable): the side panel is the way to edit it.
-					if (!started && !this._panelOpen) this.#setPanelOpen(true);
+					if (!started) void this.#openEditor(message.target);
 				});
 				break;
 			case 'richTextEditStart':
@@ -257,6 +259,9 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 				this.#history.endGroup();
 				// Renders wait while text is edited in place; catch up now.
 				this.#scheduleRender();
+				break;
+			case 'openEditor':
+				void this.#openEditor(message.target);
 				break;
 			case 'blockMove':
 				// A block dropped on the canvas (#26); the re-render shows it in its new place, still selected.
@@ -400,6 +405,40 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 			this._selected = null;
 			this.#channel?.send({ type: 'setSelection', target: null });
 		}
+	}
+
+	/** The canvas's words in the user's language (#35): its overlay can't reach the backoffice's localisation. */
+	#canvasStrings() {
+		return Object.fromEntries(
+			CANVAS_STRING_KEYS.map((key) => [key, this.localize.term(`arjoVisualEditorCanvas_${key}`)]),
+		);
+	}
+
+	/** Something on the page is edited in the side panel: open it, with keyboard focus on the editor (#35). */
+	async #openEditor(target: TargetRef) {
+		this._selected = this._targets.find((t) => sameTarget(t, target)) ?? target;
+		if (!this._panelOpen) this.#setPanelOpen(true);
+		await this.updateComplete;
+		await this.shadowRoot
+			?.querySelector<ArjoVisualEditorSidePanelElement>('arjo-visual-editor-side-panel')
+			?.focusSelection();
+	}
+
+	/** Escape in the side panel, outside a field, goes back to the page (#35). */
+	#onPanelKeyDown(event: KeyboardEvent) {
+		if (event.key !== 'Escape' || event.defaultPrevented) return;
+		const target = event.composedPath()[0];
+		if (
+			target instanceof HTMLInputElement ||
+			target instanceof HTMLTextAreaElement ||
+			target instanceof HTMLSelectElement ||
+			(target instanceof HTMLElement && target.isContentEditable)
+		) {
+			return;
+		}
+		event.preventDefault();
+		this.#frame?.focus();
+		this.#frame?.contentWindow?.focus();
 	}
 
 	/** Follows whether the variant being edited is read-only, and tells the canvas. */
@@ -560,8 +599,8 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 			this.#canPatch = false; // the canvas is replaced by the message
 			this._error =
 				response?.status === 404
-					? 'You must first save your page to use the visual editor.'
-					: `The page couldn't be rendered (${response?.status}).`;
+					? this.localize.term('arjoVisualEditor_saveFirst')
+					: this.localize.term('arjoVisualEditor_renderFailed', response?.status);
 			return;
 		}
 
@@ -603,7 +642,7 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 
 	#renderCanvas() {
 		if (this._isNew) {
-			return html`<uui-box class="message"><p>You must first save your page to use the visual editor.</p></uui-box>`;
+			return html`<uui-box class="message"><p>${this.localize.term('arjoVisualEditor_saveFirst')}</p></uui-box>`;
 		}
 		if (this._status === 'error') {
 			return html`<uui-box class="message"><p class="error">${this._error}</p></uui-box>`;
@@ -647,16 +686,17 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 									class="resizer"
 									role="separator"
 									aria-orientation="vertical"
-									aria-label="Resize side panel"
+									aria-label=${this.localize.term('arjoVisualEditor_resizeSidePanel')}
 									aria-valuenow=${this._panelWidth}
 									tabindex="0"
-									title="Drag to resize; double-click to reset"
+									title=${this.localize.term('arjoVisualEditor_resizeSidePanelHint')}
 									@pointerdown=${this.#onResizeStart}
 									@keydown=${this.#onResizeKey}
 									@dblclick=${() => this.#setPanelWidth(PANEL_DEFAULT_WIDTH)}
 								></div>
 								<arjo-visual-editor-side-panel
 									style="width: ${this._panelWidth}px"
+									@keydown=${this.#onPanelKeyDown}
 									.selected=${this._selected}
 									.targetCount=${this._targetCount}
 									.visibleAliases=${this._visibleAliases}

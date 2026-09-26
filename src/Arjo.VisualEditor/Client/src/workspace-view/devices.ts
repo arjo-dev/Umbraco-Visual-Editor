@@ -6,6 +6,8 @@
 export interface VisualEditorSize {
 	id: string;
 	label: string;
+	/** Localisation key for a generic name (#35); product names aren't translated. */
+	term?: string;
 	width: number | null;
 	height: number | null;
 }
@@ -13,6 +15,8 @@ export interface VisualEditorSize {
 export interface VisualEditorDevice {
 	alias: 'desktop' | 'tablet' | 'mobile';
 	label: string;
+	/** Localisation key for the name (#35). */
+	term: string;
 	icon: string;
 	/** The first size is the default for the category. */
 	sizes: ReadonlyArray<VisualEditorSize>;
@@ -22,24 +26,38 @@ export const VISUAL_EDITOR_DEVICES: ReadonlyArray<VisualEditorDevice> = [
 	{
 		alias: 'desktop',
 		label: 'Desktop',
+		term: 'arjoVisualEditor_deviceDesktop',
 		icon: 'icon-desktop',
 		sizes: [
-			{ id: 'fill', label: 'Fill available space', width: null, height: null },
-			{ id: 'desktop-1920', label: 'Standard desktop', width: 1920, height: 1080 },
+			{ id: 'fill', label: 'Fill available space', term: 'arjoVisualEditor_sizeFill', width: null, height: null },
+			{
+				id: 'desktop-1920',
+				label: 'Standard desktop',
+				term: 'arjoVisualEditor_sizeStandardDesktop',
+				width: 1920,
+				height: 1080,
+			},
 			{ id: 'macbook-pro-16', label: 'MacBook Pro 16"', width: 1728, height: 1117 },
 			{ id: 'macbook-pro-14', label: 'MacBook Pro 14"', width: 1512, height: 982 },
 			{ id: 'macbook-air-13', label: 'MacBook Air 13"', width: 1470, height: 956 },
 			{ id: 'macbook-air-15', label: 'MacBook Air 15"', width: 1440, height: 932 },
-			{ id: 'laptop-1366', label: 'Laptop', width: 1366, height: 768 },
-			{ id: 'laptop-1280', label: 'Small laptop', width: 1280, height: 800 },
+			{ id: 'laptop-1366', label: 'Laptop', term: 'arjoVisualEditor_sizeLaptop', width: 1366, height: 768 },
+			{ id: 'laptop-1280', label: 'Small laptop', term: 'arjoVisualEditor_sizeSmallLaptop', width: 1280, height: 800 },
 		],
 	},
 	{
 		alias: 'tablet',
 		label: 'Tablet',
+		term: 'arjoVisualEditor_deviceTablet',
 		icon: 'icon-ipad',
 		sizes: [
-			{ id: 'tablet-768', label: 'Generic tablet', width: 768, height: 1024 },
+			{
+				id: 'tablet-768',
+				label: 'Generic tablet',
+				term: 'arjoVisualEditor_sizeGenericTablet',
+				width: 768,
+				height: 1024,
+			},
 			{ id: 'ipad-pro-13', label: 'iPad Pro 13"', width: 1032, height: 1376 },
 			{ id: 'ipad-pro-11', label: 'iPad Pro 11"', width: 834, height: 1210 },
 			{ id: 'ipad-air-11', label: 'iPad Air 11"', width: 820, height: 1180 },
@@ -49,6 +67,7 @@ export const VISUAL_EDITOR_DEVICES: ReadonlyArray<VisualEditorDevice> = [
 	{
 		alias: 'mobile',
 		label: 'Mobile',
+		term: 'arjoVisualEditor_deviceMobile',
 		icon: 'icon-mobile',
 		sizes: [
 			{ id: 'iphone-16', label: 'iPhone 16', width: 393, height: 852 },
@@ -72,8 +91,8 @@ export const sizeFor = (alias: VisualEditorDeviceAlias, id: string | undefined) 
 };
 
 /** Option text: the name plus its dimensions, so the exact size is visible. */
-export const sizeLabel = (size: VisualEditorSize) =>
-	size.width && size.height ? `${size.label} (${size.width} × ${size.height})` : size.label;
+export const sizeLabel = (size: VisualEditorSize, name: string = size.label) =>
+	size.width && size.height ? `${name} (${size.width} × ${size.height})` : name;
 
 /** Zoom that fits a size into the available space (never enlarges). 1 for sizes that fill the space. */
 export function fitScale(

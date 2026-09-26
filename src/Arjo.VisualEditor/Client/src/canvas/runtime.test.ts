@@ -200,6 +200,96 @@ describe('canvas runtime', () => {
 		]);
 	});
 
+	describe('keyboard (#35)', () => {
+		const press = (key: string, init: KeyboardEventInit = {}, on: EventTarget = doc.body) => {
+			const win = doc.defaultView as typeof window;
+			const event = new win.KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...init });
+			on.dispatchEvent(event);
+			return event;
+		};
+		const selectedId = () => {
+			const msg = lastSelect();
+			return msg?.type === 'select' ? (msg.target?.alias ?? msg.target?.ownerKey ?? null) : undefined;
+		};
+
+		it('Tab goes through the page in reading order, and Shift+Tab back', () => {
+			const order: Array<string | null | undefined> = [];
+			for (let i = 0; i < 4; i++) {
+				expect(press('Tab').defaultPrevented).to.equal(true);
+				order.push(selectedId());
+			}
+			expect(order).to.deep.equal(['title', 'outer', 'inner', 'caption']);
+			press('Tab', { shiftKey: true });
+			expect(selectedId()).to.equal('inner');
+		});
+
+		it('lets Tab leave the page at the end', () => {
+			click(doc, 'caption');
+			expect(press('Tab').defaultPrevented).to.equal(false);
+			expect(selectedId()).to.equal('caption');
+		});
+
+		it('leaves Tab to the page until something is selected, unless the page itself has focus', () => {
+			expect(press('Tab', {}, doc.getElementById('plain')!).defaultPrevented).to.equal(false);
+			expect(lastSelect()).to.equal(undefined);
+		});
+
+		it('moves with the arrow keys once something is selected', () => {
+			expect(press('ArrowDown').defaultPrevented).to.equal(false);
+			click(doc, 'inner');
+			press('ArrowDown');
+			expect(selectedId()).to.equal('caption');
+			press('ArrowUp');
+			press('ArrowLeft');
+			expect(selectedId()).to.equal('outer');
+		});
+
+		it('leaves keys typed in the page’s own fields alone', () => {
+			click(doc, 'inner');
+			expect(press('ArrowDown', {}, doc.getElementById('field')!).defaultPrevented).to.equal(false);
+			expect(selectedId()).to.equal('inner');
+		});
+
+		it('Enter goes into a block, then edits text in place', () => {
+			click(doc, 'outer');
+			press('Enter');
+			expect(selectedId()).to.equal('inner');
+			press('Enter');
+			expect(selectedId()).to.equal('caption');
+			press('Enter');
+			expect(sent.some((m) => m.type === 'inlineEditStart')).to.equal(true);
+		});
+
+		it('Enter asks the host for the side panel when there is nothing to do on the page', () => {
+			handleHostMessage(runtime, { type: 'setReadonly', readonly: true });
+			click(doc, 'caption');
+			press('Enter');
+			expect(
+				sent.filter((m) => m.type === 'openEditor').map((m) => m.type === 'openEditor' && m.target.alias),
+			).to.deep.equal(['caption']);
+		});
+
+		it('announces the selection to screen readers', async () => {
+			click(doc, 'caption');
+			await nextFrame();
+			expect(runtime.overlay.host.shadowRoot!.querySelector('.live')?.textContent).to.equal('Caption selected');
+		});
+	});
+
+	it('uses the words the host sends (#35)', async () => {
+		handleHostMessage(runtime, {
+			type: 'setStrings',
+			strings: { selected: '{0} valgt', delete: 'Slet', unknown: 'x' },
+		});
+		click(doc, 'inner');
+		await nextFrame();
+		const root = runtime.overlay.host.shadowRoot!;
+		expect(root.querySelector('.live')?.textContent).to.equal('Image Row valgt');
+		expect([...root.querySelectorAll('[role="toolbar"] button')].map((b) => b.getAttribute('aria-label'))).to.include(
+			'Slet',
+		);
+	});
+
 	it('ignores clicks outside any target', () => {
 		click(doc, 'plain');
 		expect(lastSelect()).to.equal(undefined);

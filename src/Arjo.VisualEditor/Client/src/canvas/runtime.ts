@@ -18,10 +18,13 @@
  */
 import {
 	connectToHost,
+	DEFAULT_CANVAS_STRINGS,
+	format,
 	historyAction,
 	readNonce,
 	type BlockPosition,
 	type CanvasChannel,
+	type CanvasStrings,
 	type HostMessage,
 	type TargetRef,
 } from '../protocol/index.js';
@@ -33,7 +36,7 @@ import { CanvasOverlay, unionRect, type BlockTool } from './overlay.js';
 import { BLOCK_LIST, blockListsOf, dropSpotAt, type DropSpot } from './drag.js';
 import { BLOCK_GRID, containerOf, gridContainersOf, gridDropSpotAt, spanAt } from './grid.js';
 import { fetchRender, patchDocument } from './patch.js';
-import { TargetIndex, type CanvasTarget } from './targets.js';
+import { TargetIndex, targetLabel, type CanvasTarget } from './targets.js';
 
 export interface CanvasRuntime {
 	/** Rebuilt after every live re-render. */
@@ -55,6 +58,8 @@ export interface CanvasRuntime {
 	 */
 	setReadonly(readonly: boolean): void;
 	setHighlight(target: TargetRef | null): void;
+	/** The words to use, in the backoffice user's language (#35). */
+	setStrings(strings: Partial<CanvasStrings>): void;
 	/** Editing text in place (#20). */
 	readonly inline: InlineEditor;
 	/** Editing rich text in place (#57). */
@@ -75,6 +80,7 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 	let highlighted: TargetRef | null = null;
 	let errors: Array<{ target: TargetRef; message: string }> = [];
 	let readonly = false;
+	let strings: CanvasStrings = DEFAULT_CANVAS_STRINGS;
 	/** The render in flight; a newer `render` aborts it. */
 	let pending: AbortController | null = null;
 	/** A render that arrived while text was being edited in place; patched in once editing ends. */
@@ -82,10 +88,11 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 
 	const overlay = new CanvasOverlay(doc, {
 		onBreadcrumb: (target) => select(target),
+		strings: () => strings,
 		// A page property that doesn't vary, on a page shown in one of its languages: editing it changes them all (#30).
 		note: (target) =>
 			manifest?.culture && target.ref.kind === 'Property' && !target.ref.ownerIsBlock && target.ref.culture === null
-				? 'Shared across languages'
+				? strings.sharedAcrossLanguages
 				: null,
 		blockTools: (target) => blockTools(target),
 		onBlockTool: (target, action) => channel?.send({ type: 'blockAction', blockKey: target.ref.ownerKey, action }),
@@ -160,10 +167,10 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 				element.style.minHeight = `${EMPTY_BLOCK_HEIGHT}px`;
 		}
 		overlay.setPlaceholders([
-			...blank.map((target) => ({ element: target.elements[0], label: 'Edit the content in the side panel' })),
+			...blank.map((target) => ({ element: target.elements[0], label: strings.editInSidePanel })),
 			...empty.map((container) => ({
 				element: container.element,
-				label: 'Add block',
+				label: strings.addBlock,
 				onInsert: () =>
 					channel?.send({
 						type: 'blockInsertRequest',
@@ -335,8 +342,8 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 		// Read-only: nothing that changes the page; copying and looking at settings don't.
 		if (readonly) {
 			const tools: BlockTool[] = [];
-			if (block.editorAlias !== 'Umbraco.RichText') tools.push({ action: 'copy', label: 'Copy' });
-			if (block.settingsKey) tools.push({ action: 'settings', label: 'Settings' });
+			if (block.editorAlias !== 'Umbraco.RichText') tools.push({ action: 'copy', label: strings.copy });
+			if (block.settingsKey) tools.push({ action: 'settings', label: strings.settings });
 			return tools;
 		}
 		const tools: BlockTool[] = [];
@@ -356,15 +363,15 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 					.map((b) => b!.index),
 			);
 			tools.push(
-				{ action: 'moveUp', label: 'Move up', disabled: block.index === 0 },
-				{ action: 'moveDown', label: 'Move down', disabled: block.index >= last },
-				{ action: 'duplicate', label: 'Duplicate' },
+				{ action: 'moveUp', label: strings.moveUp, disabled: block.index === 0 },
+				{ action: 'moveDown', label: strings.moveDown, disabled: block.index >= last },
+				{ action: 'duplicate', label: strings.duplicate },
 			);
 		}
 		// Copy to the CMS clipboard (#29): blocks copied here can be pasted in the standard editor, and back.
-		if (block.editorAlias !== 'Umbraco.RichText') tools.push({ action: 'copy', label: 'Copy' });
-		if (block.settingsKey) tools.push({ action: 'settings', label: 'Settings' });
-		if (block.editorAlias !== 'Umbraco.RichText') tools.push({ action: 'delete', label: 'Delete' });
+		if (block.editorAlias !== 'Umbraco.RichText') tools.push({ action: 'copy', label: strings.copy });
+		if (block.settingsKey) tools.push({ action: 'settings', label: strings.settings });
+		if (block.editorAlias !== 'Umbraco.RichText') tools.push({ action: 'delete', label: strings.delete });
 		return tools;
 	}
 	/** Editing ended: patch in any render that waited for it. */
@@ -391,8 +398,14 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 	let awaited: TargetRef | null = null;
 
 	function select(target: CanvasTarget | null, notify = true) {
+		const changed = target !== selected;
 		selected = target;
 		awaited = null;
+		// Screen readers hear what's selected (#35).
+		if (changed)
+			overlay.announce(
+				target ? format(strings.selected, targetLabel(target.ref, strings.block)) : strings.nothingSelected,
+			);
 		overlay.setSelection(target, target ? index.ancestorsOf(target) : []);
 		if (notify) channel?.send({ type: 'select', target: target?.ref ?? null });
 	}
@@ -485,9 +498,16 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 			if (!readonly) channel?.send({ type: 'history', action: history });
 			return;
 		}
-		if (!selected || editing()) return;
+		if (editing()) return;
+		if (navigate(event)) return;
+		if (!selected) return;
 		if (event.key === 'Escape') {
 			select(index.ancestorsOf(selected)[0] ?? null);
+			return;
+		}
+		if (event.key === 'Enter' && !isPageField(event.target)) {
+			event.preventDefault();
+			enter(selected);
 			return;
 		}
 		if (readonly) return;
@@ -500,8 +520,71 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 			}
 			return;
 		}
-		if (event.key === 'Enter' && (requestInlineEdit(selected) || richText.request(selected))) event.preventDefault();
 	};
+
+	/** The page's parts in reading order, leaving out ones that take no space (e.g. a title only in <head>). */
+	function navigable(): CanvasTarget[] {
+		const shown = index.targets.filter((t) => t.elements.some((el) => el.getClientRects().length > 0));
+		return shown.sort((a, b) => {
+			const [x, y] = [a.elements[0], b.elements[0]];
+			// A block and a property on the same element: the block first, it's around the property.
+			if (x === y) return a.ref.kind === b.ref.kind ? 0 : a.ref.kind === 'Block' ? -1 : 1;
+			return x.compareDocumentPosition(y) & 4 /* Node.DOCUMENT_POSITION_FOLLOWING */ ? -1 : 1;
+		});
+	}
+
+	/** Keys typed in the page's own form fields are the page's. */
+	const isPageField = (target: EventTarget | null) =>
+		target instanceof (doc.defaultView ?? window).HTMLElement &&
+		(target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName));
+
+	/**
+	 * Keyboard navigation (#35): Tab / Shift+Tab, and once something is selected the arrow keys, go to the next or
+	 * previous part of the page in reading order. Tab starts from the top when the page itself has focus, and at either
+	 * end is left alone, so focus can leave the page. Returns whether it handled the key.
+	 */
+	function navigate(event: KeyboardEvent): boolean {
+		if (event.altKey || event.ctrlKey || event.metaKey || isPageField(event.target)) return false;
+		const tab = event.key === 'Tab';
+		const forward = tab ? !event.shiftKey : event.key === 'ArrowDown' || event.key === 'ArrowRight';
+		const backward = tab ? event.shiftKey : event.key === 'ArrowUp' || event.key === 'ArrowLeft';
+		if (!forward && !backward) return false;
+		if (!selected && (!tab || (event.target !== doc.body && event.target !== doc.documentElement))) return false;
+
+		const list = navigable();
+		const at = selected ? list.indexOf(selected) : -1;
+		const next = list[forward ? at + 1 : at < 0 ? list.length - 1 : at - 1];
+		if (!next) {
+			// The end of the page: Tab moves on (out of the page); arrows stay put.
+			if (!tab) event.preventDefault();
+			return !tab;
+		}
+		event.preventDefault();
+		selectAndShow(next);
+		return true;
+	}
+
+	function selectAndShow(target: CanvasTarget) {
+		select(target);
+		target.elements[0]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+	}
+
+	/**
+	 * Enter on the selection (#35): edits text in place; on a block, goes to the first thing inside it; otherwise (or
+	 * read-only) asks the host to take focus to its editor in the side panel.
+	 */
+	function enter(target: CanvasTarget) {
+		if (!readonly && (requestInlineEdit(target) || richText.request(target))) return;
+		if (target.ref.kind === 'Block') {
+			const list = navigable();
+			const inner = list[list.indexOf(target) + 1];
+			if (inner && index.ancestorsOf(inner).includes(target)) {
+				selectAndShow(inner);
+				return;
+			}
+		}
+		channel?.send({ type: 'openEditor', target: target.ref });
+	}
 
 	doc.addEventListener('pointerover', onPointerOver, true);
 	doc.documentElement.addEventListener('pointerleave', onPointerLeave);
@@ -613,6 +696,12 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 			highlighted = ref;
 			overlay.setHighlight(index.find(ref));
 		},
+		setStrings(next) {
+			const known = Object.fromEntries(Object.entries(next).filter(([key]) => key in DEFAULT_CANVAS_STRINGS));
+			strings = { ...DEFAULT_CANVAS_STRINGS, ...known };
+			refreshPlaceholders();
+			overlay.setSelection(selected, selected ? index.ancestorsOf(selected) : []);
+		},
 		render,
 		inline,
 		richText,
@@ -644,6 +733,9 @@ export function handleHostMessage(runtime: CanvasRuntime, message: HostMessage) 
 			break;
 		case 'setReadonly':
 			runtime.setReadonly(message.readonly);
+			break;
+		case 'setStrings':
+			runtime.setStrings(message.strings);
 			break;
 		case 'render':
 			void runtime.render(message.url);

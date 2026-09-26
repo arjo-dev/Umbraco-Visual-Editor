@@ -10,7 +10,7 @@ export const manifests: Array<UmbExtensionManifest> = [
 		// After Content (200), before Info (100): documents still open on Content.
 		weight: 150,
 		meta: {
-			label: 'Visual editor',
+			label: '#arjoVisualEditor_tabName',
 			pathname: VISUAL_EDITOR_VIEW_PATHNAME,
 			icon: 'icon-display',
 		},

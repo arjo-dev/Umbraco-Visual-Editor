@@ -1,4 +1,5 @@
 import { UmbControllerBase } from '@umbraco-cms/backoffice/class-api';
+import { UmbLocalizationController } from '@umbraco-cms/backoffice/localization-api';
 import type { UmbControllerHost } from '@umbraco-cms/backoffice/controller-api';
 import { UmbDataTypeDetailRepository } from '@umbraco-cms/backoffice/data-type';
 import { UmbDocumentTypeDetailRepository } from '@umbraco-cms/backoffice/document-type';
@@ -35,6 +36,7 @@ import {
 	spansOf,
 	type GridAreaConfig,
 	type GridConfig,
+	type LocalizedMessage,
 } from './grid-rules.js';
 import type { CatalogueBlockGroup, CatalogueBlockType } from './visual-editor-block-picker.element.js';
 import {
@@ -69,6 +71,7 @@ const asBlockValue = (value: unknown): BlockEditorValue =>
 
 export class ArjoBlockEditController extends UmbControllerBase {
 	#workspace?: typeof UMB_DOCUMENT_WORKSPACE_CONTEXT.TYPE;
+	#localize = new UmbLocalizationController(this);
 
 	constructor(host: UmbControllerHost) {
 		super(host);
@@ -98,10 +101,10 @@ export class ArjoBlockEditController extends UmbControllerBase {
 		if (action === 'delete') {
 			try {
 				await umbConfirmModal(this, {
-					headline: 'Delete block',
-					content: 'Delete this block, and any blocks inside it?',
+					headline: this.#localize.term('arjoVisualEditor_deleteBlock'),
+					content: this.#localize.term('arjoVisualEditor_deleteBlockConfirm'),
 					color: 'danger',
-					confirmLabel: 'Delete',
+					confirmLabel: this.#localize.term('arjoVisualEditor_delete'),
 				});
 			} catch {
 				return undefined; // cancelled
@@ -164,8 +167,7 @@ export class ArjoBlockEditController extends UmbControllerBase {
 
 		const refusal = await this.#refuseMove(source.content.contentTypeKey, to, target.value, activeCulture);
 		if (refusal) {
-			const notifications = await this.getContext(UMB_NOTIFICATION_CONTEXT);
-			notifications?.peek('warning', { data: { headline: 'The block can’t go there', message: refusal } });
+			await this.#warn({ key: 'arjoVisualEditor_cantGoThere' }, refusal);
 			return false;
 		}
 
@@ -219,17 +221,22 @@ export class ArjoBlockEditController extends UmbControllerBase {
 	}
 
 	/** Why a block of `contentTypeKey` can't go into the list at `to`, or null when it can. */
-	async #refuseMove(contentTypeKey: string, to: BlockPosition, list: unknown, activeCulture: string | null) {
+	async #refuseMove(
+		contentTypeKey: string,
+		to: BlockPosition,
+		list: unknown,
+		activeCulture: string | null,
+	): Promise<LocalizedMessage | null> {
 		const config = await this.#listConfiguration(to, activeCulture);
 		if (!config) return null;
 		const blocks = config.find((c) => c.alias === 'blocks')?.value as
 			Array<{ contentElementTypeKey?: string }> | undefined;
 		if (blocks?.length && !blocks.some((b) => b.contentElementTypeKey === contentTypeKey)) {
-			return 'That list doesn’t allow this type of block.';
+			return { key: 'arjoVisualEditor_listDisallows' };
 		}
 		const limit = config.find((c) => c.alias === 'validationLimit')?.value as { max?: number } | undefined;
 		const count = isBlockEditorValue(list) ? (list.layout['Umbraco.BlockList']?.length ?? 0) : 0;
-		if (limit?.max && count >= limit.max) return `That list is full: it allows at most ${limit.max} blocks.`;
+		if (limit?.max && count >= limit.max) return { key: 'arjoVisualEditor_listFull', args: [limit.max] };
 		return null;
 	}
 
@@ -260,9 +267,13 @@ export class ArjoBlockEditController extends UmbControllerBase {
 	}
 
 	/** Tells the user why something couldn't be done. */
-	async #warn(headline: string, message: string) {
+	async #warn(headline: LocalizedMessage, message: LocalizedMessage) {
 		const notifications = await this.getContext(UMB_NOTIFICATION_CONTEXT);
-		notifications?.peek('warning', { data: { headline, message } });
+		notifications?.peek('warning', { data: { headline: this.#text(headline), message: this.#text(message) } });
+	}
+
+	#text({ key, args = [] }: LocalizedMessage) {
+		return this.#localize.term(key, ...args);
 	}
 
 	/**
@@ -319,7 +330,7 @@ export class ArjoBlockEditController extends UmbControllerBase {
 			count,
 		);
 		if (!check.ok) {
-			await this.#warn('The block can’t go there', check.reason);
+			await this.#warn({ key: 'arjoVisualEditor_cantGoThere' }, check.reason);
 			return false;
 		}
 
@@ -425,11 +436,11 @@ export class ArjoBlockEditController extends UmbControllerBase {
 			: (list.layout['Umbraco.BlockList']?.length ?? 0);
 		const max = area ? area.maxAllowed : (get('validationLimit') as { max?: number | null } | undefined)?.max;
 		if (!allowed.length) {
-			await this.#warn('No blocks can go there', 'Its configuration doesn\u2019t allow any block types there.');
+			await this.#warn({ key: 'arjoVisualEditor_noBlocksCanGoThere' }, { key: 'arjoVisualEditor_noBlockTypesAllowed' });
 			return undefined;
 		}
 		if (max && count >= max) {
-			await this.#warn('There\u2019s no room', `It allows at most ${max} blocks.`);
+			await this.#warn({ key: 'arjoVisualEditor_noRoom' }, { key: 'arjoVisualEditor_allowsAtMost', args: [max] });
 			return undefined;
 		}
 
@@ -480,7 +491,7 @@ export class ArjoBlockEditController extends UmbControllerBase {
 		// Room for them all, spans that fit (grid), and exposed in the edited culture where their element type varies
 		// by culture (as the block editors do).
 		if (max && count + blocks.length > max) {
-			await this.#warn('There\u2019s no room', `It allows at most ${max} blocks.`);
+			await this.#warn({ key: 'arjoVisualEditor_noRoom' }, { key: 'arjoVisualEditor_allowsAtMost', args: [max] });
 			return undefined;
 		}
 		const variesByCulture = new Map<string, boolean>();
@@ -490,7 +501,7 @@ export class ArjoBlockEditController extends UmbControllerBase {
 				const typeKey = block.contentData.find((d) => d.key === block.item.contentKey)?.contentTypeKey as string;
 				const check = checkGridDrop(grid, typeKey, (block.item.columnSpan as number | undefined) ?? null, area, 0);
 				if (!check.ok) {
-					await this.#warn('The block can\u2019t go there', check.reason);
+					await this.#warn({ key: 'arjoVisualEditor_cantGoThere' }, check.reason);
 					return undefined;
 				}
 				block.item.columnSpan = check.columnSpan;
@@ -553,7 +564,7 @@ export class ArjoBlockEditController extends UmbControllerBase {
 				icon: type?.icon ?? 'icon-document',
 				values: toClipboardValues(copied, grid),
 			});
-			notifications?.peek('positive', { data: { message: 'Copied to the clipboard' } });
+			notifications?.peek('positive', { data: { message: this.#localize.term('arjoVisualEditor_copiedToClipboard') } });
 			return true;
 		} catch (error) {
 			notifications?.peek('danger', { data: { message: error instanceof Error ? error.message : String(error) } });

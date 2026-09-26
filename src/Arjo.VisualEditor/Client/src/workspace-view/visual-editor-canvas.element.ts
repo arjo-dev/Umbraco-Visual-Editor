@@ -109,7 +109,7 @@ export class ArjoVisualEditorCanvasElement extends UmbLitElement {
 
 	/** Shown over the canvas until the first page has loaded (#71). */
 	#renderSplash() {
-		return html`<div class="splash" role="status" aria-label="Loading the page">
+		return html`<div class="splash" role="status" aria-label=${this.localize.term('arjoVisualEditor_loadingPage')}>
 			<uui-loader></uui-loader>
 		</div>`;
 	}
@@ -128,8 +128,7 @@ export class ArjoVisualEditorCanvasElement extends UmbLitElement {
 				this._renderError
 					? html`<div class="warning" role="alert">
 							<uui-icon name="icon-alert"></uui-icon>
-							This page didn't render normally, so it can't be edited visually. The template may have thrown an error;
-							details are shown below.
+							${this.localize.term('arjoVisualEditor_renderError')}
 						</div>`
 					: nothing
 			}
@@ -139,7 +138,8 @@ export class ArjoVisualEditorCanvasElement extends UmbLitElement {
 			>
 				<iframe
 					src=${this.url}
-					title="Page preview"
+					title=${this.localize.term('arjoVisualEditor_pagePreview')}
+					aria-describedby="canvas-keys"
 					sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals"
 					style=${
 						sized
@@ -150,6 +150,8 @@ export class ArjoVisualEditorCanvasElement extends UmbLitElement {
 					@load=${this.#onLoad}
 				></iframe>
 			</div>
+			<!-- How to get around the page with the keyboard (#35), read with the frame's name. -->
+			<p id="canvas-keys" hidden>${this.localize.term('arjoVisualEditor_pagePreviewDescription')}</p>
 		`;
 	}
 

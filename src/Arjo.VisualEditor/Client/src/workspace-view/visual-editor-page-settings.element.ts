@@ -63,9 +63,9 @@ export class ArjoVisualEditorPageSettingsElement extends UmbLitElement {
 		const visible = new Set([...this.visibleAliases].filter((alias) => !this.#listed.has(alias)));
 		const tabs = pageSettings(this._containers, this._properties, visible);
 		for (const alias of tabs.flatMap((t) => t.groups.flatMap((g) => g.aliases))) this.#listed.add(alias);
-		if (!tabs.length) return html`<p class="hint">Every property of this page is on the page itself.</p>`;
+		if (!tabs.length) return html`<p class="hint">${this.localize.term('arjoVisualEditor_allOnPage')}</p>`;
 		return html`
-			<p class="hint">Properties that aren't shown on the page, or are empty.</p>
+			<p class="hint">${this.localize.term('arjoVisualEditor_notOnPageHint')}</p>
 			${repeat(
 				tabs,
 				(tab) => tab.name,

@@ -78,12 +78,12 @@ export class ArjoVisualEditorPropertyEditorElement extends UmbLitElement {
 	override render() {
 		if (!this.alias) return nothing;
 		if (this._exists === false) {
-			return html`<p class="hint">This field isn't on the document type any more.</p>`;
+			return html`<p class="hint">${this.localize.term('arjoVisualEditor_propertyGone')}</p>`;
 		}
 		const href = this.contentHref ? `${this.contentHref}${this._tabPath ? `/${this._tabPath}` : ''}` : undefined;
 		return html`
 			<umb-content-workspace-property .alias=${this.alias}></umb-content-workspace-property>
-			${href ? html`<a class="standard" href=${href}>Show in standard editor</a>` : nothing}
+			${href ? html`<a class="standard" href=${href}>${this.localize.term('arjoVisualEditor_showInStandardEditor')}</a>` : nothing}
 		`;
 	}
 

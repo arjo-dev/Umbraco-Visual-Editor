@@ -28,7 +28,7 @@ export function toTargetRef(marker: MarkerInfo): TargetRef {
 }
 
 /** What to call a target in labels: its display name, falling back to the alias, then "Block". */
-export const targetLabel = (ref: TargetRef) => ref.label ?? ref.alias ?? 'Block';
+export const targetLabel = (ref: TargetRef, block = 'Block') => ref.label ?? ref.alias ?? block;
 
 export class TargetIndex {
 	readonly targets: CanvasTarget[] = [];
