@@ -1,5 +1,6 @@
 using Arjo.VisualEditor.Configuration;
 using Arjo.VisualEditor.Rendering;
+using Microsoft.AspNetCore.OutputCaching;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Umbraco.Cms.Core.Composing;
@@ -25,5 +26,9 @@ public class RenderingComposer : IComposer
 
         // First, so render URLs never fall through to normal URL routing.
         builder.ContentFinders().Insert<RenderSessionContentFinder>();
+
+        // Render sessions are never output-cached (#38). PostConfigure, so it comes after the site's own base policies;
+        // it does nothing on a site without output caching.
+        builder.Services.PostConfigure<OutputCacheOptions>(options => options.AddBasePolicy(new RenderSessionOutputCachePolicy()));
     }
 }

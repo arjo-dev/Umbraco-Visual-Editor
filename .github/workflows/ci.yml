@@ -205,6 +205,15 @@ jobs:
           npm run typecheck
           npm test
 
+      # A second site with other conventions (#38): plain Umbraco, compiled models, hand-rolled block loops, a view
+      # component, a cached partial and output caching. The tests start a throwaway copy of it themselves.
+      - name: E2E tests (Compat Site)
+        working-directory: ${{ env.E2E_DIR }}
+        env:
+          # The client is built above; don't build it again for the Compat Site's `dotnet run`.
+          SkipClientBuild: 'true'
+        run: npm run test:compat
+
       - name: Working tree unchanged by E2E
         run: |
           if [ -n "$(git status --porcelain)" ]; then
