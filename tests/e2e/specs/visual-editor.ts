@@ -28,11 +28,15 @@ export async function openVisualEditor(page: Page) {
 	await waitForCanvas(page);
 }
 
-/** The page is in the frame, with its markers resolved (the overlay is up). */
+/**
+ * The page is in the frame and connected to the backoffice, so it can be edited. The overlay appears before the
+ * canvas has connected: a click then is lost, and the connection resets the selection. The side panel counts the
+ * page's editable areas once the canvas has connected and reported them.
+ */
 export async function waitForCanvas(page: Page) {
 	await expect(page.locator('arjo-visual-editor-workspace-view')).toBeVisible();
-	await expect(canvas(page).locator('h1')).not.toBeEmpty();
 	await expect(canvas(page).locator('uve-overlay')).toBeAttached();
+	await expect(sidePanel(page).getByText(/editable areas on this page/)).toBeVisible();
 }
 
 /** Waits for the latest edits to be rendered on the page (the toolbar's spinner has gone). */

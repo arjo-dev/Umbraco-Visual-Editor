@@ -24,11 +24,11 @@ npm test
 - is a fresh install, with its own database, temp, log and media folders in the OS temp directory;
 - gets a new admin password for each run;
 - never touches your development database;
-- never writes the uSync files (export-on-save is off);
+- imports the committed uSync files and never writes them (export-on-save is off);
 - is a Release build that doesn't read `appsettings.Local.json`;
 - runs happily beside a Test Site you already have running.
 
-Its content comes from the uSync files **in your working tree**. If you've changed those (for example while testing by hand), the pages will look different. The specs read what's on the page rather than expecting exact text, so that's fine.
+Its content is the **committed** uSync files (`HEAD`), the same content CI tests. Edits in your working tree (for example exports from testing by hand) aren't imported, and the throwaway site never writes the uSync files.
 
 **Writing tests:** a fresh install takes about a minute. To run the tests over and over against one site:
 
