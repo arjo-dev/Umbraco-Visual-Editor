@@ -144,6 +144,8 @@ jobs:
           session="$(curl -sfk -b "$jar" "$SITE_URL$url")"
           grep -q 'LEAKCHECK' <<< "$session" || { echo "::error::Render session did not show the unsaved title"; exit 1; }
           grep -q 'uve:b:' <<< "$session" || { echo "::error::Render session has no block markers"; exit 1; }
+          # Rich text is marked with comments, text with invisible characters; both come from the model factory decorator.
+          grep -q 'uve:p:' <<< "$session" || { echo "::error::Render session has no property markers"; exit 1; }
           echo "✓ render session shows unsaved values with markers"
           for path in /playground/ / /about/; do
             live="$(curl -sfk "$SITE_URL$path")"

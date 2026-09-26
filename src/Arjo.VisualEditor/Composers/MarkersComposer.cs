@@ -25,8 +25,25 @@ public class MarkersComposer : IComposer
                 PrePipeline = app => app.UseMiddleware<MarkerInjectionMiddleware>(),
             }));
 
-        DecorateModelFactory(builder.Services);
-        DecorateAppCaches(builder.Services);
+        // Not now: when the Umbraco builder is built, after every composer (see LateDecorations).
+        builder.WithCollectionBuilder<LateDecorations>();
+    }
+
+    /// <summary>
+    /// Wraps the site's <see cref="IPublishedModelFactory"/> for marking, and its <see cref="AppCaches"/>. Each has to
+    /// wrap the last one registered, but
+    /// other composers register theirs too (Umbraco's backoffice development mode registers InMemoryAuto's, a
+    /// community ModelsBuilder its own), in no set order relative to ours: when one ran after us it replaced the
+    /// decorator, and text and rich text lost their markers (seen on Linux CI, #37). Umbraco registers collection
+    /// builders in <c>IUmbracoBuilder.Build()</c>, after all composers, so this decorates whichever registration won.
+    /// </summary>
+    private sealed class LateDecorations : ICollectionBuilder
+    {
+        public void RegisterWith(IServiceCollection services)
+        {
+            DecorateModelFactory(services);
+            DecorateAppCaches(services);
+        }
     }
 
     // Render sessions must never read or fill the shared partial view cache (see EditModeRuntimeCache).
