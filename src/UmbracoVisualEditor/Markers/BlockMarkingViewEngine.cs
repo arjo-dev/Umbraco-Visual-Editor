@@ -49,23 +49,52 @@ internal sealed class BlockMarkingViewEngine(IViewEngine inner, IHttpContextAcce
 
         public string Path => inner.Path;
 
+        /// <summary>
+        /// The block a view renders, from its model: the block itself (<see cref="IBlockReference"/>), or its content
+        /// element, which many sites pass to a block's partial instead (<c>block.Content</c>, often a ModelsBuilder
+        /// model; #38). An element only counts when it's a block's content in the edited document (it has a placement
+        /// there): not its settings, another page's blocks or a document. A list's own view (its model the
+        /// <c>BlockListModel</c> or <c>BlockGridModel</c>) is none: its items are.
+        /// </summary>
+        private static (Guid ContentKey, Guid? ContentTypeKey)? BlockOf(object? model, EditModeRequest editMode)
+            => model switch
+            {
+                IBlockReference block when editMode.BlockKeys.Contains(block.ContentKey)
+                    => (block.ContentKey, BlockContentTypeKey(block)),
+                IPublishedElement element and not IPublishedContent when HasPlacement(editMode, element.Key)
+                    => (element.Key, element.ContentType.Key),
+                _ => null,
+            };
+
+        // Placements are read from the session's values; if that fails, the page still renders (unmarked there).
+        private static bool HasPlacement(EditModeRequest editMode, Guid key)
+        {
+            try
+            {
+                return editMode.BlockPlacements.ContainsKey(key);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         public async Task RenderAsync(ViewContext context)
         {
             EditModeRequest? editMode = EditModeRequest.Get(httpContextAccessor.HttpContext);
-            if (editMode is null
-                || context.ViewData.Model is not IBlockReference block
-                || !editMode.BlockKeys.Contains(block.ContentKey))
+            if (editMode is null || BlockOf(context.ViewData.Model, editMode) is not { } block)
             {
                 await inner.RenderAsync(context);
                 return;
             }
 
-            // Same block key => same id, so nested partials for one block (e.g. a grid item's areas) share it.
+            // Same block key => same id, so nested partials for one block (e.g. a grid item's areas, or a block's
+            // partial and the element partial inside it) share it; the page keeps the outermost range.
             var id = editMode.Markers.Register(
                 MarkerKind.Block,
                 block.ContentKey,
                 ownerIsBlock: true,
-                contentTypeKey: BlockContentTypeKey(block));
+                contentTypeKey: block.ContentTypeKey);
             await context.Writer.WriteAsync($"<!--uve:b:{id}-->");
             await inner.RenderAsync(context);
             await context.Writer.WriteAsync($"<!--/uve:b:{id}-->");

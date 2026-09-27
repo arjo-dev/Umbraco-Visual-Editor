@@ -38,13 +38,26 @@
             </div>
 
             <h2>More cards</h2>
-            @* The partial only gets the element: marked with the opt-in helper, as the page can't tell it's a block. *@
+            @* The partial only gets the element (block.Content): still marked automatically, by the element. *@
             <div class="more-cards">
                 @foreach (BlockListItem block in Model.MoreCards ?? Enumerable.Empty<BlockListItem>())
                 {
+                    @await Html.PartialAsync("Cards/CardElement", block.Content)
+                }
+            </div>
+
+            <h2>Inline cards</h2>
+            @* Markup written in the loop itself: no view per block to recognise it by, so the opt-in helper marks it. *@
+            <div class="inline-cards">
+                @foreach (BlockListItem block in Model.InlineCards ?? Enumerable.Empty<BlockListItem>())
+                {
+                    var card = (CompatCard)block.Content;
                     using (Html.VisualEditorBlock(block))
                     {
-                        @await Html.PartialAsync("Cards/CardElement", block.Content)
+                        <article class="card">
+                            <h3>@card.Heading</h3>
+                            <p>@card.Text</p>
+                        </article>
                     }
                 }
             </div>

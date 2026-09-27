@@ -50,16 +50,17 @@ Aliases are case-insensitive. The site fails to start if an alias is blank or ap
 
 ## Templates, helpers and limitations
 
-The Visual editor recognises content however templates write it: models (ModelsBuilder or compiled), `Value()`, partials, block views, view components and cached partials. Some markup can't be recognised as a block on its own, such as a partial that only gets the block's element. For that there's `Html.VisualEditorBlock`:
+The Visual editor recognises content however templates write it: models (ModelsBuilder or compiled), `Value()`, partials, block views, view components and cached partials. Blocks are recognised by the view that renders them, whether it gets the block or just its element (`block.Content`). Markup a loop writes itself, with no view per block, can't be recognised on its own. For that there's `Html.VisualEditorBlock`:
 
 ```cshtml
 @using UmbracoVisualEditor
 
 @foreach (var block in Model.Cards)
 {
+    var card = (Card)block.Content;
     using (Html.VisualEditorBlock(block))
     {
-        @await Html.PartialAsync("Card", block.Content)
+        <article class="card"><h3>@card.Heading</h3></article>
     }
 }
 ```

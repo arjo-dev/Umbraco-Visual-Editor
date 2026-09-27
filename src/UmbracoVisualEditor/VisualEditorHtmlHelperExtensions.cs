@@ -13,14 +13,15 @@ public static class VisualEditorHtmlHelperExtensions
 {
     /// <summary>
     /// Marks the markup written inside the <c>using</c> as a block, so the Visual editor can select, move and edit it.
-    /// Blocks are marked automatically when a view's model is the block (<see cref="IBlockReference"/>); use this where
-    /// the markup is written some other way, e.g. a partial that only gets the block's element:
+    /// Blocks are marked automatically when a view's model is the block (<see cref="IBlockReference"/>) or its content
+    /// element; use this where there's no view per block, e.g. markup a loop writes itself:
     /// <code>
     /// @foreach (var block in Model.Cards)
     /// {
+    ///     var card = (Card)block.Content;
     ///     using (Html.VisualEditorBlock(block))
     ///     {
-    ///         @await Html.PartialAsync("Card", block.Content)
+    ///         &lt;article class="card"&gt;&lt;h3&gt;@card.Heading&lt;/h3&gt;&lt;/article&gt;
     ///     }
     /// }
     /// </code>

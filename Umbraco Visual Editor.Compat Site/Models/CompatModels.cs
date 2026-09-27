@@ -28,6 +28,9 @@ public partial class CompatPage : PublishedContentModel
     /// <summary>Rendered by a hand-rolled loop whose partial only gets each block's element.</summary>
     public BlockListModel? MoreCards => this.Value<BlockListModel>(_publishedValueFallback, "moreCards");
 
+    /// <summary>Rendered by a loop that writes each block's markup itself, marked with the helper.</summary>
+    public BlockListModel? InlineCards => this.Value<BlockListModel>(_publishedValueFallback, "inlineCards");
+
     /// <summary>Rendered by a view component.</summary>
     public string? Sidebar => this.Value<string>(_publishedValueFallback, "sidebar");
 

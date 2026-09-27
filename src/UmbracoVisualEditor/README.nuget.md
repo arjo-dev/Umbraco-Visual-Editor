@@ -41,16 +41,17 @@ By default the Visual editor is offered for every document type with a template.
 
 ## Templates
 
-The Visual editor reads your templates as they are: models, partials, view components, block views and cached partials. For markup it can't recognise as a block, such as a partial that only gets the block's element, there's a helper:
+The Visual editor reads your templates as they are: models, partials, view components, block views and cached partials. Blocks are recognised by the view that renders them, whether it gets the block or its element. For markup a loop writes itself, with no view per block, there's a helper:
 
 ```cshtml
 @using UmbracoVisualEditor
 
 @foreach (var block in Model.Cards)
 {
+    var card = (Card)block.Content;
     using (Html.VisualEditorBlock(block))
     {
-        @await Html.PartialAsync("Card", block.Content)
+        <article class="card"><h3>@card.Heading</h3></article>
     }
 }
 ```

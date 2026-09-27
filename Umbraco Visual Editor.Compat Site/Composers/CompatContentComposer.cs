@@ -65,6 +65,7 @@ public class CreateCompatContent(
 
         IDataType cards = await BlockList("Compat Cards");
         IDataType moreCards = await BlockList("Compat More Cards");
+        IDataType inlineCards = await BlockList("Compat Inline Cards");
 
         // The page's template: the view is in Views/compatPage.cshtml, which the template keeps as it is.
         var view = await System.IO.File.ReadAllTextAsync(Path.Combine(environment.ContentRootPath, "Views", "compatPage.cshtml"), cancellationToken);
@@ -82,6 +83,7 @@ public class CreateCompatContent(
         page.AddPropertyType(Property(await DataType("Richtext editor"), "body", "Body"), "content", "Content");
         page.AddPropertyType(Property(cards, "cards", "Cards"), "content", "Content");
         page.AddPropertyType(Property(moreCards, "moreCards", "More Cards"), "content", "Content");
+        page.AddPropertyType(Property(inlineCards, "inlineCards", "Inline Cards"), "content", "Content");
         page.AddPropertyType(Property(await DataType("Textstring"), "sidebar", "Sidebar"), "content", "Content");
         page.AddPropertyType(Property(await DataType("True/false"), "hideSidebar", "Hide Sidebar"), "content", "Content");
         page.AddPropertyType(Property(await DataType("Textstring"), "footerNote", "Footer Note"), "content", "Content");
@@ -102,8 +104,11 @@ public class CreateCompatContent(
             ("3c7f0b8e-0000-4f6c-9b1d-0000000000a1", "First card", "Rendered by a hand-rolled loop; its partial gets the block."),
             ("3c7f0b8e-0000-4f6c-9b1d-0000000000a2", "Second card", "Also given the block, so it's marked automatically.")));
         content.SetValue("moreCards", Blocks(
-            ("3c7f0b8e-0000-4f6c-9b1d-0000000000b1", "Element-only card", "Its partial only gets the element; the helper marks it."),
-            ("3c7f0b8e-0000-4f6c-9b1d-0000000000b2", "Another element-only card", "Marked with Html.VisualEditorBlock.")));
+            ("3c7f0b8e-0000-4f6c-9b1d-0000000000b1", "Element-only card", "Its partial only gets the element, and it's still marked."),
+            ("3c7f0b8e-0000-4f6c-9b1d-0000000000b2", "Another element-only card", "Marked by its element.")));
+        content.SetValue("inlineCards", Blocks(
+            ("3c7f0b8e-0000-4f6c-9b1d-0000000000c1", "Inline card", "Written in the loop itself; the helper marks it."),
+            ("3c7f0b8e-0000-4f6c-9b1d-0000000000c2", "Another inline card", "Marked with Html.VisualEditorBlock.")));
         content.SetValue("sidebar", "Written by a view component.");
         content.SetValue("footerNote", "Written by a cached partial.");
         contentService.Save(content);

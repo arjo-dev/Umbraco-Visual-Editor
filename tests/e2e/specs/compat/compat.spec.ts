@@ -63,13 +63,25 @@ test('moves a block a hand-rolled loop renders', async ({ page }) => {
 	await expect.poll(() => headings(list)).toEqual([before[1], before[0], ...before.slice(2)]);
 });
 
-test('moves a block whose partial only gets its element, marked with the helper', async ({ page }) => {
+test('moves a block whose partial only gets its element, marked by the element', async ({ page }) => {
 	await openVisualEditor(page, COMPAT_PAGE);
 	const list = canvas(page).locator('.more-cards');
 	const before = await headings(list);
 
 	await selectBlock(page, list.locator('.card').nth(1));
 	await canvas(page).locator('uve-overlay').getByRole('button', { name: 'Move up' }).click();
+
+	await waitForRender(page);
+	await expect.poll(() => headings(list)).toEqual([before[1], before[0], ...before.slice(2)]);
+});
+
+test('moves a block whose markup the loop writes itself, marked with the helper', async ({ page }) => {
+	await openVisualEditor(page, COMPAT_PAGE);
+	const list = canvas(page).locator('.inline-cards');
+	const before = await headings(list);
+
+	await selectBlock(page, list.locator('.card').first());
+	await canvas(page).locator('uve-overlay').getByRole('button', { name: 'Move down' }).click();
 
 	await waitForRender(page);
 	await expect.poll(() => headings(list)).toEqual([before[1], before[0], ...before.slice(2)]);

@@ -30,7 +30,7 @@ The first release.
 - **Preview sizes:** desktop, tablet and mobile, each with a choice of sizes.
 - **Keyboard navigation** on the page (Tab, the arrow keys, Enter and Escape), screen reader announcements, and backoffice localisation (English).
 - **Configuration:** a `VisualEditor` appsettings section (`Enabled`, `AllowedDocumentTypes`, `ExcludedDocumentTypes`), validated at startup and included in the appsettings JSON schema.
-- **`Html.VisualEditorBlock`:** marks blocks the page can't recognise as blocks on its own.
+- **Blocks are recognised by their views**, whether a view gets the block or just its content element. **`Html.VisualEditorBlock`** marks markup a loop writes itself.
 - **Support for Umbraco 17 and 18.**
 
 ### Security

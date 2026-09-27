@@ -45,6 +45,8 @@ In the Visual editor, and only there, the page is rendered with markers (ADR 000
 | No models (`Model.Value<T>("alias")`) | Yes. The marker is in the value, not the model. | Compat Site (its models use `Value<T>`) |
 | Umbraco's default block partials (`GetBlockListHtmlAsync`, `GetBlockGridHtmlAsync`, `GetBlockHtmlAsync`) | Yes | Test Site |
 | Hand-rolled block loops whose partial gets the block | Yes | Compat Site |
+| Partials that only get the block's element (`block.Content`) | Yes. Recognised by the element: a block's content in the edited document. | Compat Site |
+| Markup a loop writes itself, with no view per block | With `Html.VisualEditorBlock` | Compat Site |
 | View components | Yes | Compat Site |
 | `Html.CachedPartialAsync` | Yes. In the Visual editor it always renders fresh, with markers, and never fills the cache, so visitors never get marked or unsaved output. | Compat Site; the Test Site in CI, with `Hosting:Debug=false` |
 | ASP.NET output caching | Yes. The package keeps render sessions out of it, whatever the site's policies (see below). | Compat Site |
@@ -54,16 +56,17 @@ In the Visual editor, and only there, the page is rendered with markers (ADR 000
 
 ### `Html.VisualEditorBlock`
 
-A block the page can't tell is a block needs marking by hand. That's markup written inline in a loop, or a partial that only gets the block's element:
+A block is recognised by the view that renders it: one whose model is the block, or the block's content element (`block.Content`, often a ModelsBuilder model). Markup a loop writes itself, with no view per block, can't be recognised, and needs marking by hand:
 
 ```cshtml
 @using UmbracoVisualEditor
 
 @foreach (var block in Model.Cards)
 {
+    var card = (Card)block.Content;
     using (Html.VisualEditorBlock(block))
     {
-        @await Html.PartialAsync("Card", block.Content)
+        <article class="card"><h3>@card.Heading</h3></article>
     }
 }
 ```
