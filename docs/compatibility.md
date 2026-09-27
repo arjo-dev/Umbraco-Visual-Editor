@@ -14,7 +14,7 @@ The Visual editor supports **Umbraco 18** (the default) and **Umbraco 17**.
 A build is for one major version: the two aren't binary compatible where the package touches them. To build for 17, set the Umbraco version for MSBuild:
 
 ```bash
-dotnet build src/UmbracoVisualEditor -p:UmbracoVersion=17.7.0
+dotnet build src/UmbracoVisualEditor -p:UmbracoVersion=17.4.2
 ```
 
 An `UmbracoVersion` environment variable does the same. `Directory.Packages.props` uses it for every Umbraco package, and a `17.x` version defines `UMBRACO_17`.

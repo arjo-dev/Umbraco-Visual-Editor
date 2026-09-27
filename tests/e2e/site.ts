@@ -22,7 +22,8 @@ export type SiteName = keyof typeof SITES;
  * MainDom and temp). Release, so it's a separate build from the one a dev site runs, without appsettings.Local.json.
  */
 export function throwawaySite(site: SiteName, url: string, login: string, password: string, runDir: string) {
-	mkdirSync(join(runDir, 'temp'), { recursive: true });
+	// Created up front: some Umbraco versions fail to start if the media root doesn't exist.
+	for (const folder of ['temp', 'media', 'logs']) mkdirSync(join(runDir, folder), { recursive: true });
 	const uSync = SITES[site].uSync ? exportCommittedUSync(runDir) : null;
 	return {
 		command: 'dotnet run -c Release --no-launch-profile',

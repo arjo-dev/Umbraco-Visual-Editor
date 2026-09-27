@@ -8,7 +8,7 @@ A release publishes two NuGet packages from the same commit, one per Umbraco maj
 | `v1.2` | 18.1.2 | 17.1.2 |
 | `v1.3-beta.1` | 18.1.3-beta.1 (prerelease) | 17.1.3-beta.1 (prerelease) |
 
-The package's major is the Umbraco major, so it's clear which one to install. Each package depends on its own major only: `[18.2.0, 19.0.0)` and `[17.7.0, 18.0.0)`, from the Umbraco version it's built against.
+The package's major is the Umbraco major, so it's clear which one to install. Each package depends on its own major only: `[18.2.0, 19.0.0)` and `[17.4.2, 18.0.0)`, from the Umbraco version it's built against.
 
 ## How to release
 
@@ -39,7 +39,7 @@ The package has the `umbraco-marketplace` tag, so the Umbraco Marketplace picks 
 
 ```bash
 dotnet pack src/UmbracoVisualEditor -c Release -p:Version=18.0.0-local.1 -o artifacts
-dotnet pack src/UmbracoVisualEditor -c Release -p:Version=17.0.0-local.1 -p:UmbracoVersion=17.7.0 -o artifacts
+dotnet pack src/UmbracoVisualEditor -c Release -p:Version=17.0.0-local.1 -p:UmbracoVersion=17.4.2 -o artifacts
 ```
 
 The Compat Site can use a packed package instead of the project: set `VisualEditorPackageVersion` and `RestoreAdditionalProjectSources` (both MSBuild properties, or environment variables):
