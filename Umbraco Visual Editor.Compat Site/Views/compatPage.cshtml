@@ -50,8 +50,11 @@
             </div>
         </div>
 
-        @* A view component. *@
-        <aside>@await Component.InvokeAsync("CompatSidebar", new { page = Model })</aside>
+        @* A view component, unless the True/False says to hide it. *@
+        @if (!Model.HideSidebar)
+        {
+            <aside>@await Component.InvokeAsync("CompatSidebar", new { page = Model })</aside>
+        }
 
         @* A cached partial: in edit mode it must render fresh, with markers, and never fill the cache. *@
         @await Html.CachedPartialAsync("CachedFooter", Model, TimeSpan.FromMinutes(10))

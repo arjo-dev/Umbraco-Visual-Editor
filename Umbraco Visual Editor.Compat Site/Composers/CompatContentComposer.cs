@@ -83,6 +83,7 @@ public class CreateCompatContent(
         page.AddPropertyType(Property(cards, "cards", "Cards"), "content", "Content");
         page.AddPropertyType(Property(moreCards, "moreCards", "More Cards"), "content", "Content");
         page.AddPropertyType(Property(await DataType("Textstring"), "sidebar", "Sidebar"), "content", "Content");
+        page.AddPropertyType(Property(await DataType("True/false"), "hideSidebar", "Hide Sidebar"), "content", "Content");
         page.AddPropertyType(Property(await DataType("Textstring"), "footerNote", "Footer Note"), "content", "Content");
         page.AllowedTemplates = [template!];
         page.SetDefaultTemplate(template);

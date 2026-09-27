@@ -98,7 +98,7 @@ public sealed class OverlayContentBuilder(
 
         var configuration = propertyType.DataType.ConfigurationObject;
         IDataValueEditor valueEditor = editor.GetValueEditor(configuration);
-        var data = new ContentPropertyData(PendingUploads.Remove(value.Value), configuration)
+        var data = new ContentPropertyData(EditorValue.FromJson(PendingUploads.Remove(value.Value)), configuration)
         {
             ContentKey = documentKey,
             // The Image Cropper refuses values without it.

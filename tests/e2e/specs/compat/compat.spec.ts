@@ -75,6 +75,23 @@ test('moves a block whose partial only gets its element, marked with the helper'
 	await expect.poll(() => headings(list)).toEqual([before[1], before[0], ...before.slice(2)]);
 });
 
+test('renders a True/False as it is set in the side panel', async ({ page }) => {
+	await openVisualEditor(page, COMPAT_PAGE);
+	const sidebar = canvas(page).locator('aside');
+	await expect(sidebar).toBeVisible();
+
+	// Not on the page itself (it only decides whether the sidebar shows): under Page settings.
+	await sidePanel(page).getByRole('tab', { name: 'Page settings' }).click();
+	const toggle = sidePanel(page).locator('umb-property').filter({ hasText: 'Hide Sidebar' }).locator('uui-toggle');
+	await toggle.click();
+	await waitForRender(page);
+	await expect(sidebar).toHaveCount(0);
+
+	await toggle.click();
+	await waitForRender(page);
+	await expect(sidebar).toBeVisible();
+});
+
 // The flows below use the backoffice's own editors inside the Visual editor, which can change between Umbraco
 // versions; the Compat Site is the one that runs on Umbraco 17 too, so they're checked here as well.
 

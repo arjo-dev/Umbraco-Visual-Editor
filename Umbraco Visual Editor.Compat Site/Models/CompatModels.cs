@@ -31,6 +31,9 @@ public partial class CompatPage : PublishedContentModel
     /// <summary>Rendered by a view component.</summary>
     public string? Sidebar => this.Value<string>(_publishedValueFallback, "sidebar");
 
+    /// <summary>A True/False: hides the sidebar.</summary>
+    public bool HideSidebar => this.Value<bool>(_publishedValueFallback, "hideSidebar");
+
     /// <summary>Rendered in a cached partial.</summary>
     public string? FooterNote => this.Value<string>(_publishedValueFallback, "footerNote");
 }
