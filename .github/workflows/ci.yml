@@ -250,7 +250,7 @@ jobs:
     timeout-minutes: 20
     env:
       # Keep in step with UMBRACO_17_VERSION in release.yml.
-      UmbracoVersion: 17.0.0
+      UmbracoVersion: 17.4.2
 
     steps:
       - uses: actions/checkout@v7
