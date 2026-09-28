@@ -7,7 +7,7 @@ The **Visual editor** gives Umbraco editors a way to edit content on the page it
 
 The standard editor (the **Content** tab) is one click away, and saving and publishing work as they always do.
 
-It reuses the CMS's property editors and reads the site's templates as they are, so it works with an existing document model without changes. It's published as the NuGet package **UmbracoVisualEditor**.
+It reuses the CMS's property editors and reads the site's templates as they are, so it works with an existing document model without changes. It's published as the NuGet package **Arjo.UmbracoVisualEditor**.
 
 ## Install
 
