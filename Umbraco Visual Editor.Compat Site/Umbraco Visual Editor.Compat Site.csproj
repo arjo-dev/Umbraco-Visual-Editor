@@ -43,10 +43,10 @@
     <ProjectReference Include="..\src\UmbracoVisualEditor\UmbracoVisualEditor.csproj" />
   </ItemGroup>
   <ItemGroup Condition="'$(VisualEditorPackageVersion)' != ''">
-    <PackageReference Include="UmbracoVisualEditor" VersionOverride="$(VisualEditorPackageVersion)" />
+    <PackageReference Include="Arjo.UmbracoVisualEditor" VersionOverride="$(VisualEditorPackageVersion)" />
   </ItemGroup>
 
   <!-- As the NuGet package does it (buildTransitive): the VisualEditor settings in the appsettings schema. -->
-  <Import Project="..\src\UmbracoVisualEditor\buildTransitive\UmbracoVisualEditor.targets" Condition="'$(VisualEditorPackageVersion)' == ''" />
+  <Import Project="..\src\UmbracoVisualEditor\buildTransitive/package.targets" Condition="'$(VisualEditorPackageVersion)' == ''" />
 
 </Project>

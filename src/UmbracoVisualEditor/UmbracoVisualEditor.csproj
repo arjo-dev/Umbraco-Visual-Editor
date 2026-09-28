@@ -77,13 +77,13 @@
     <None Include="Client\public\umbraco-package.json" Pack="false" />
 
     <!--
-      The VisualEditor settings' JSON schema (#32), registered with the site's appsettings schema by the .targets (#39: not
-      a .props, as the Razor SDK packs its own buildTransitive/UmbracoVisualEditor.props for static web assets, and a
-      package can only have one).
+      The VisualEditor settings' JSON schema (#32), registered with the site's appsettings schema by
+      buildTransitive/package.targets. It's packed as buildTransitive/$(PackageId).targets: NuGet only imports a file named
+      after the package, and it can't be the .props, which the Razor SDK packs for static web assets (#39).
     -->
     <Content Remove="appsettings-schema.UmbracoVisualEditor.json" />
     <None Include="appsettings-schema.UmbracoVisualEditor.json" Pack="true" PackagePath="" />
-    <None Include="buildTransitive\UmbracoVisualEditor.targets" Pack="true" PackagePath="buildTransitive" />
+    <None Include="buildTransitive\package.targets" Pack="true" PackagePath="buildTransitive\$(PackageId).targets" />
   </ItemGroup>
 
   <!--

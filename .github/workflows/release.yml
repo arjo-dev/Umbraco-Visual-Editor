@@ -81,14 +81,21 @@ jobs:
       - name: Pack for Umbraco 17
         run: dotnet pack src/UmbracoVisualEditor/UmbracoVisualEditor.csproj -c Release -p:SkipClientBuild=true -p:UmbracoVersion="$UMBRACO_17_VERSION" -p:Version="$V17" -o artifacts
 
-      - name: Check the packages' Umbraco dependencies
+      - name: Check the packages' dependencies and buildTransitive targets
         run: |
           set -euo pipefail
+          # By version, not package ID: the ID is the project's PackageId, whatever it is.
           check() {
-            nuspec="$(unzip -p "artifacts/UmbracoVisualEditor.$1.nupkg" UmbracoVisualEditor.nuspec)"
+            file="$(ls artifacts/*."$1".nupkg)"
+            id="$(basename "$file" ".$1.nupkg")"
+            nuspec="$(unzip -p "$file" '*.nuspec')"
             grep -q "id=\"Umbraco.Cms.Web.Common\" version=\"\[$2, $3)\"" <<< "$nuspec" \
-              || { echo "::error::UmbracoVisualEditor $1 doesn't depend on Umbraco [$2, $3)"; grep -o '<dependency [^>]*>' <<< "$nuspec"; exit 1; }
-            echo "✓ UmbracoVisualEditor $1 depends on Umbraco [$2, $3)"
+              || { echo "::error::$id $1 doesn't depend on Umbraco [$2, $3)"; grep -o '<dependency [^>]*>' <<< "$nuspec"; exit 1; }
+            echo "✓ $id $1 depends on Umbraco [$2, $3)"
+            # NuGet only imports buildTransitive files named after the package: without it, the settings' schema is lost.
+            unzip -l "$file" | grep -q "buildTransitive/$id.targets" \
+              || { echo "::error::$id $1 has no buildTransitive/$id.targets"; unzip -l "$file" | grep buildTransitive; exit 1; }
+            echo "✓ $id $1 has buildTransitive/$id.targets"
           }
           check "$V18" "$(sed -n 's:.*<UmbracoVersion[^>]*>\(.*\)</UmbracoVersion>.*:\1:p' Directory.Packages.props)" 19.0.0
           check "$V17" "$UMBRACO_17_VERSION" 18.0.0
