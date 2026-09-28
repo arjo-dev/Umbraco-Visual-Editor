@@ -19,7 +19,7 @@ Install the package version that matches your Umbraco version's major:
 | 17.x | 17.x |
 
 ```bash
-dotnet add package UmbracoVisualEditor
+dotnet add package Arjo.UmbracoVisualEditor
 ```
 
 Run the site and open a document that has a template: it gets a **Visual editor** tab next to **Content**. Nothing else is needed.
