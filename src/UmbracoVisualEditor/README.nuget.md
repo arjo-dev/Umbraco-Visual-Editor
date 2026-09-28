@@ -20,7 +20,7 @@ Install the package version that matches your Umbraco version's major:
 ## Install
 
 ```bash
-dotnet add package UmbracoVisualEditor
+dotnet add package Arjo.UmbracoVisualEditor
 ```
 
 Run the site and open a document that has a template: it gets a **Visual editor** tab next to **Content**.
@@ -57,11 +57,3 @@ The Visual editor reads your templates as they are: models, partials, view compo
 ```
 
 Outside the Visual editor, the helper writes nothing.
-
-## More
-
-- [Compatibility and limitations](https://github.com/arjo-dev/Umbraco-Visual-Editor/blob/main/docs/compatibility.md)
-- [Security](https://github.com/arjo-dev/Umbraco-Visual-Editor/blob/main/docs/security.md)
-- [Changelog](https://github.com/arjo-dev/Umbraco-Visual-Editor/blob/main/CHANGELOG.md)
-
-MIT licensed.

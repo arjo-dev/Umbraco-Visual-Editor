@@ -19,7 +19,7 @@
     -p:UmbracoVersion=17.x. The release workflow sets Version (18.1.0 / 17.1.0 for tag v1.0; see docs/releasing.md).
   -->
   <PropertyGroup>
-    <PackageId>UmbracoVisualEditor</PackageId>
+    <PackageId>Arjo.UmbracoVisualEditor</PackageId>
     <Product>UmbracoVisualEditor</Product>
     <Title>Umbraco Visual Editor</Title>
     <Description>Edit Umbraco content on the page itself: the Visual editor renders your real front end, with unsaved changes, and lets editors change text in place, move, add and edit blocks, and use Umbraco's own property editors beside the page.</Description>
