@@ -93,7 +93,7 @@ The package doesn't include the file: it's only linked if the site has it, and c
 
 ## Limitations
 
-- **Text the template changes can't be edited in place.** Text is only editable in place when the page shows it exactly as it's stored. Truncated, reformatted or combined text can still be selected, and edited in the side panel.
+- **Text the template changes can't be edited in place.** Text is only editable in place when the page shows it exactly as it's stored. Truncated, reformatted or combined text can still be selected, and edited in the side panel. Where editing on the page causes trouble, `VisualEditor:EnablePropertyLevelEditing: false` turns it off for all text and rich text: it's then edited in the side panel only.
 - **Values used only in attributes or CSS can't be selected on the page.** Examples are a background image in a `style`, a URL, or a `data-*` attribute read by a script. They're listed under **Page settings** in the side panel. The Test Site's hero image is one.
 - **Content from other pages isn't editable here.** For example, a footer that renders the home page's properties. It's edited on its own page.
 - **Scripts that build markup after the page loads** (a carousel, a code highlighter) aren't run again when an edit is patched into the page (#18). What they add may be missing until the page is reloaded. A [stylesheet for the Visual editor](#styles-for-the-visual-editor-only) can make up for what they'd show or hide.

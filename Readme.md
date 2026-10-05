@@ -45,6 +45,7 @@ The editor is offered on every document type that has a template. To narrow that
 | `Enabled` | `true` | Turns the Visual editor on or off everywhere. |
 | `AllowedDocumentTypes` | `[]` | Document type aliases to offer it for. Empty means all of them. |
 | `ExcludedDocumentTypes` | `[]` | Document type aliases never to offer it for. |
+| `EnablePropertyLevelEditing` | `true` | Whether text and rich text can be edited on the page itself. When `false`, double-clicking them (or pressing Enter) opens them in the side panel instead. Blocks can still be selected, moved, added and deleted on the page. |
 
 Aliases are case-insensitive. The site fails to start if an alias is blank or appears in both lists. The Visual tab is hidden where the editor isn't offered, and the render endpoint refuses those documents with a 403.
 

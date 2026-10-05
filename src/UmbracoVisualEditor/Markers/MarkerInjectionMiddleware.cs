@@ -3,7 +3,9 @@ using System.Text.Json;
 using UmbracoVisualEditor.Rendering;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Options;
 using Umbraco.Cms.Core.Models;
+using UmbracoVisualEditor.Configuration;
 using Umbraco.Cms.Core.Services;
 
 namespace UmbracoVisualEditor.Markers;
@@ -92,7 +94,11 @@ internal sealed class MarkerInjectionMiddleware(RequestDelegate next)
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
-    public async Task InvokeAsync(HttpContext context, IContentTypeService contentTypeService, IWebHostEnvironment environment)
+    public async Task InvokeAsync(
+        HttpContext context,
+        IContentTypeService contentTypeService,
+        IWebHostEnvironment environment,
+        IOptionsMonitor<VisualEditorOptions> options)
     {
         if (!context.Request.Path.StartsWithSegments(RenderSessionContentFinder.PathPrefix.TrimEnd('/'), StringComparison.OrdinalIgnoreCase))
         {
@@ -131,7 +137,14 @@ internal sealed class MarkerInjectionMiddleware(RequestDelegate next)
 
         var html = Encoding.UTF8.GetString(buffer.ToArray());
         var manifest = JsonSerializer.Serialize(
-            new { editMode.Session.DocumentKey, editMode.Session.Culture, Markers = SafeWithLabels(editMode.Markers.All, contentTypeService, SafePlacements(editMode)) },
+            new
+            {
+                editMode.Session.DocumentKey,
+                editMode.Session.Culture,
+                // Read by the canvas: whether text and rich text are edited on the page or only in the side panel.
+                PropertyLevelEditing = options.CurrentValue.EnablePropertyLevelEditing,
+                Markers = SafeWithLabels(editMode.Markers.All, contentTypeService, SafePlacements(editMode)),
+            },
             JsonOptions);
         // Checked each time, so adding or removing the stylesheet needs no restart.
         var withStylesheet = environment.WebRootFileProvider.GetFileInfo(RenderStylesheetPath).Exists;

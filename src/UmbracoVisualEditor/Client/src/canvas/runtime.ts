@@ -5,7 +5,8 @@
  * - Talks to the backoffice over the protocol (docs/protocol.md): ready, hover, select, rendered; render,
  *   setSelection, highlight, setReadonly.
  * - Inline editing of plain text properties (#20, inline-edit.ts): double-click, or Enter on the selection. Rich text
- *   (#57, rich-text-edit.ts) the same way, with the backoffice's own editor mounted on the element.
+ *   (#57, rich-text-edit.ts) the same way, with the backoffice's own editor mounted on the element. A site can turn both
+ *   off (VisualEditor:EnablePropertyLevelEditing, in the manifest): then they open the property in the side panel.
  * - A toolbar on the selected block (#25): move up/down, duplicate, delete, settings (the host changes the document).
  * - Drag and drop of Block List (#26, drag.ts) and Block Grid blocks (#27, grid.ts, into and between areas): a handle
  *   on hovered and selected blocks, a drop line, autoscroll near the edges; Alt+Up/Down moves the selected block from
@@ -386,6 +387,9 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 	/** Something is being edited in place: the element, whose events belong to the editor. */
 	const editing = () => inline.element ?? richText.element;
 
+	/** Text and rich text can be edited on the page: not read-only, and not turned off by the site (EnablePropertyLevelEditing). */
+	const editsInPlace = () => !readonly && manifest?.propertyLevelEditing !== false;
+
 	/** Asks to edit `target` in place; false when it isn't plain text shown as it is stored. */
 	function requestInlineEdit(target: CanvasTarget | null, from?: Node | null) {
 		const element = inlineEditableElement(target, from);
@@ -486,7 +490,11 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 	const onDoubleClick = (event: MouseEvent) => {
 		if (readonly || editing()) return;
 		const target = index.targetAt(event.target as Element);
-		if (!requestInlineEdit(target, event.target as Node) && !richText.request(target)) return;
+		if (!editsInPlace()) {
+			// Editing on the page is turned off: a property opens its editor in the side panel instead.
+			if (target?.ref.kind !== 'Property') return;
+			channel?.send({ type: 'openEditor', target: target.ref });
+		} else if (!requestInlineEdit(target, event.target as Node) && !richText.request(target)) return;
 		event.preventDefault();
 		event.stopPropagation();
 	};
@@ -574,7 +582,7 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 	 * read-only) asks the host to take focus to its editor in the side panel.
 	 */
 	function enter(target: CanvasTarget) {
-		if (!readonly && (requestInlineEdit(target) || richText.request(target))) return;
+		if (editsInPlace() && (requestInlineEdit(target) || richText.request(target))) return;
 		if (target.ref.kind === 'Block') {
 			const list = navigable();
 			const inner = list[list.indexOf(target) + 1];

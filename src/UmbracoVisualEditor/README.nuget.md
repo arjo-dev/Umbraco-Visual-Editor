@@ -34,10 +34,13 @@ By default the Visual editor is offered for every document type with a template.
   "VisualEditor": {
     "Enabled": true,
     "AllowedDocumentTypes": ["contentPage", "home"],
-    "ExcludedDocumentTypes": ["errorPage"]
+    "ExcludedDocumentTypes": ["errorPage"],
+    "EnablePropertyLevelEditing": true
   }
 }
 ```
+
+`EnablePropertyLevelEditing: false` turns off editing text and rich text on the page itself: they open in the side panel instead.
 
 ## Templates
 
