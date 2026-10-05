@@ -1,0 +1,7 @@
+/*
+ * The site's styles for its pages in the Visual editor only: linked in render sessions, never on the live site
+ * (docs/compatibility.md). The Compat spec checks it applies.
+ */
+:root {
+    --compat-render-stylesheet: linked;
+}

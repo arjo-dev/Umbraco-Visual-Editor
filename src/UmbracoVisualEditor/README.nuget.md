@@ -40,7 +40,7 @@ By default the Visual editor is offered for every document type with a template.
 }
 ```
 
-`EnablePropertyLevelEditing: false` turns off editing text and rich text on the page itself: they open in the side panel instead.
+`EnablePropertyLevelEditing: false` turns off editing text and rich text on the page itself: they open in the side panel instead. This feature can sometimes go a little odd on setups - please raise an issue if you have trouble with this feature.
 
 ## Templates
 
@@ -60,3 +60,14 @@ The Visual editor reads your templates as they are: models, partials, view compo
 ```
 
 Outside the Visual editor, the helper writes nothing.
+
+## Render CSS and JS injection
+
+Because of the way we load the content into the viewer there can be issues displaying the content after change; for example if you have an animate on scroll effect in place. We inject a single CSS and JS file into the rendered view (back office only) so you can write your own corrections/workarounds for this.  
+  
+If the file doesn't exist, then it just won't get loaded in. The CSS lives at `/wwwroot/App_Plugins/ArjoVisualEditor/backoffice-render.css` and the JS lives at `/wwwroot/App_Plugins/ArjoVisualEditor/backoffice-render.js`.  
+  
+As well as just loading in these scripts we also fire events on the `document` when a render occurs.  
+  
+`visual-editor:before-render` happens just before we render the new content.  
+`visual-editor:rendered` happens just after.  
