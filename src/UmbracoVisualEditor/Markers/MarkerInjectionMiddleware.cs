@@ -3,6 +3,7 @@ using System.Text.Json;
 using UmbracoVisualEditor.Rendering;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Options;
 using Umbraco.Cms.Core.Models;
 using UmbracoVisualEditor.Configuration;
@@ -12,7 +13,7 @@ namespace UmbracoVisualEditor.Markers;
 
 /// <summary>
 /// For render-session responses: appends the marker manifest and the canvas script before <c>&lt;/body&gt;</c>,
-/// links the site's <see cref="RenderStylesheetPath"/> (if it has one) at the end of the head,
+/// links the site's <see cref="RenderStylesheetPath"/> (if it has one) at the end of the head, both versioned by content,
 /// and stops the response being cached or indexed. Other requests pass straight through.
 /// </summary>
 internal sealed class MarkerInjectionMiddleware(RequestDelegate next)
@@ -146,9 +147,14 @@ internal sealed class MarkerInjectionMiddleware(RequestDelegate next)
                 Markers = SafeWithLabels(editMode.Markers.All, contentTypeService, SafePlacements(editMode)),
             },
             JsonOptions);
-        // Checked each time, so adding or removing the stylesheet needs no restart.
-        var withStylesheet = environment.WebRootFileProvider.GetFileInfo(RenderStylesheetPath).Exists;
-        html = Inject(html, manifest, withStylesheet);
+        // Versioned by their content, so browsers don't go on with a cached copy after an upgrade or an edit. Checked each
+        // time, so adding or removing the stylesheet needs no restart.
+        IFileProvider files = environment.WebRootFileProvider;
+        html = Inject(
+            html,
+            manifest,
+            VersionedAsset.Url(files, CanvasScriptPath) ?? CanvasScriptPath,
+            VersionedAsset.Url(files, RenderStylesheetPath));
 
         var bytes = Encoding.UTF8.GetBytes(html);
         context.Response.ContentLength = bytes.Length;
@@ -156,15 +162,16 @@ internal sealed class MarkerInjectionMiddleware(RequestDelegate next)
     }
 
     /// <summary>
-    /// Adds the marker manifest and the canvas script before <c>&lt;/body&gt;</c> and, if <paramref name="withStylesheet"/>,
-    /// links the render stylesheet before <c>&lt;/head&gt;</c>: after the template's own styles, so it wins ties with them.
+    /// Adds the marker manifest and the canvas script (<paramref name="scriptUrl"/>) before <c>&lt;/body&gt;</c> and, if
+    /// the site has one (<paramref name="stylesheetUrl"/>), links the render stylesheet before <c>&lt;/head&gt;</c>: after
+    /// the template's own styles, so it wins ties with them.
     /// </summary>
-    internal static string Inject(string html, string manifest, bool withStylesheet)
+    internal static string Inject(string html, string manifest, string scriptUrl, string? stylesheetUrl)
     {
         var scripts =
             $"<script type=\"application/json\" id=\"uve-markers\">{manifest.Replace("</", "<\\/")}</script>" +
-            $"<script type=\"module\" src=\"{CanvasScriptPath}\"></script>";
-        var link = withStylesheet ? $"<link rel=\"stylesheet\" href=\"{RenderStylesheetPath}\">" : string.Empty;
+            $"<script type=\"module\" src=\"{scriptUrl}\"></script>";
+        var link = stylesheetUrl is null ? string.Empty : $"<link rel=\"stylesheet\" href=\"{stylesheetUrl}\">";
 
         var headEnd = html.IndexOf("</head>", StringComparison.OrdinalIgnoreCase);
         if (headEnd < 0)
