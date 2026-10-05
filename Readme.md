@@ -67,6 +67,8 @@ The Visual editor recognises content however templates write it: models (ModelsB
 
 What works on its own, where the helper is needed, and the limitations are in [docs/compatibility.md](docs/compatibility.md). One example of a limitation: text the template changes before showing it can only be edited in the side panel.
 
+The visual editor uses DOM replacement in order to change content when you change a property in the back office, therefore any JavaScript based rendering won't work after the initial view. We inject a CSS file into the back office render so you can adjust the page view to help this, which will only show in the back office not on the front end.
+
 ## Security
 
 How render sessions, the canvas frame and its messaging are protected, and the risks that remain, are in [docs/security.md](docs/security.md).
