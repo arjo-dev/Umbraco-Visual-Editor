@@ -9,6 +9,10 @@ public class VisualEditorOptionsTests
         => Assert.True(new VisualEditorOptions().IsEnabledFor("home"));
 
     [Fact]
+    public void ByDefault_PropertiesCanBeEditedOnThePage()
+        => Assert.True(new VisualEditorOptions().EnablePropertyLevelEditing);
+
+    [Fact]
     public void Disabled_TurnsItOffEverywhere()
         => Assert.False(new VisualEditorOptions { Enabled = false }.IsEnabledFor("home"));
 

@@ -51,6 +51,8 @@ export interface MarkerInfo {
 export interface MarkerManifest {
 	documentKey: string;
 	culture: string | null;
+	/** False when the site turns off editing text and rich text on the page (VisualEditor:EnablePropertyLevelEditing). */
+	propertyLevelEditing?: boolean;
 	markers: MarkerInfo[];
 }
 

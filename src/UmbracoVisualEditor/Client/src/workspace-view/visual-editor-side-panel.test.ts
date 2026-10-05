@@ -24,6 +24,25 @@ describe('side panel tabs', () => {
 		expect(activeTab(panel)).to.equal(1);
 	});
 
+	it("gives each property a new editor, so one property's editor never gets another's value", async () => {
+		const panel = await fixture<ArjoVisualEditorSidePanelElement>(
+			html`<arjo-visual-editor-side-panel .selected=${title}></arjo-visual-editor-side-panel>`,
+		);
+		const editor = () => panel.shadowRoot!.querySelector('arjo-visual-editor-property-editor');
+		const before = editor();
+
+		// The same property again (a re-render) keeps its editor.
+		panel.selected = { ...title, label: 'Title' };
+		await panel.updateComplete;
+		expect(editor()).to.equal(before);
+
+		// Rich text, then a text box: a reused rich text editor wrote `{ ...'Title', markup }` into the title.
+		panel.selected = { ...title, alias: 'body' };
+		await panel.updateComplete;
+		expect(editor()).to.not.equal(before);
+		expect(editor()?.alias).to.equal('body');
+	});
+
 	it('shows the selection when something else is selected', async () => {
 		const panel = await fixture<ArjoVisualEditorSidePanelElement>(
 			html`<arjo-visual-editor-side-panel .selected=${title}></arjo-visual-editor-side-panel>`,

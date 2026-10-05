@@ -76,6 +76,7 @@ const pageHtml = ({
 	title = 'Hello',
 	caption = 'A caption',
 	after = '',
+	propertyLevelEditing = undefined as boolean | undefined,
 } = {}) => `<!doctype html><body style="margin:0">
 		<h1 id="title" style="margin:40px 0 0">${stega(1)}${title}</h1>
 		<!--uve:b:2--><div id="outer" style="padding:20px"><!--uve:b:3--><div id="inner" style="padding:20px">
@@ -85,14 +86,14 @@ const pageHtml = ({
 		<input id="field">
 		<div style="height:2000px"></div>
 		${after}
-		<script type="application/json" id="uve-markers">${JSON.stringify(manifest)}</script>
+		<script type="application/json" id="uve-markers">${JSON.stringify({ ...manifest, propertyLevelEditing })}</script>
 	</body>`;
 
 /** The page in a same-origin frame. */
-async function page(): Promise<{ frame: HTMLIFrameElement; doc: Document }> {
+async function page(html = pageHtml()): Promise<{ frame: HTMLIFrameElement; doc: Document }> {
 	const frame = document.createElement('iframe');
 	frame.style.cssText = 'width: 800px; height: 600px';
-	frame.srcdoc = pageHtml();
+	frame.srcdoc = html;
 	const loaded = new Promise((resolve) => frame.addEventListener('load', resolve, { once: true }));
 	document.body.append(frame);
 	await loaded;
@@ -325,6 +326,24 @@ describe('canvas runtime', () => {
 		expect(sent.some((m) => m.type === 'inlineEditStart')).to.equal(false);
 	});
 
+	it('opens text in the side panel, not on the page, when the site turns off editing in place', async () => {
+		// A page rendered with VisualEditor:EnablePropertyLevelEditing false.
+		runtime.destroy();
+		frame.remove();
+		({ frame, doc } = await page(pageHtml({ propertyLevelEditing: false })));
+		runtime = createRuntime(doc, { send: (m) => sent.push(m) })!;
+		const win = doc.defaultView as typeof window;
+
+		doc.getElementById('title')!.dispatchEvent(new win.MouseEvent('dblclick', { bubbles: true, cancelable: true }));
+		click(doc, 'caption');
+		doc.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Enter' }));
+
+		expect(sent.some((m) => m.type === 'inlineEditStart' || m.type === 'richTextEditStart')).to.equal(false);
+		expect(
+			sent.filter((m) => m.type === 'openEditor').map((m) => m.type === 'openEditor' && m.target.alias),
+		).to.deep.equal(['title', 'caption']);
+	});
+
 	it('draws the selection box over the element', async () => {
 		click(doc, 'title');
 		await nextFrame();
@@ -383,6 +402,25 @@ describe('canvas runtime', () => {
 			expect(doc.getElementById('outer')).to.equal(outer); // the same element, updated in place
 			expect(rendered()).to.deep.equal([{ type: 'rendered', url: '/__visual-editor/render/2', ok: true }]);
 			expect(sent.filter((m) => m.type === 'ready')).to.have.length(2);
+		});
+
+		it("tells the page's scripts before and after, with the new content in place (and no markers) after", async () => {
+			responses['/__visual-editor/render/2'] = [pageHtml({ title: 'Hello again' })];
+			const seen: string[] = [];
+			doc.addEventListener('visual-editor:before-render', (e) =>
+				seen.push(`before ${(e as CustomEvent).detail.url} ${doc.getElementById('title')!.textContent}`),
+			);
+			doc.addEventListener('visual-editor:rendered', (e) =>
+				seen.push(`after ${(e as CustomEvent).detail.url} ${doc.getElementById('title')!.textContent}`),
+			);
+
+			expect(await runtime.render('/__visual-editor/render/2')).to.equal(true);
+
+			expect(seen).to.deep.equal([
+				'before /__visual-editor/render/2 Hello',
+				'after /__visual-editor/render/2 Hello again',
+			]);
+			expect(rendered()).to.deep.equal([{ type: 'rendered', url: '/__visual-editor/render/2', ok: true }]);
 		});
 
 		it('re-resolves markers: new text is selectable and has no marker characters left', async () => {

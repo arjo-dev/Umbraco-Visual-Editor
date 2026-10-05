@@ -29,8 +29,10 @@ The first release.
 - **Open documents in the Visual editor:** a setting in each user's profile (it's a choice, not remembered from the tabs they use). Links to a tab still open that tab.
 - **Preview sizes:** desktop, tablet and mobile, each with a choice of sizes.
 - **Keyboard navigation** on the page (Tab, the arrow keys, Enter and Escape), screen reader announcements, and backoffice localisation (English).
-- **Configuration:** a `VisualEditor` appsettings section (`Enabled`, `AllowedDocumentTypes`, `ExcludedDocumentTypes`), validated at startup and included in the appsettings JSON schema.
+- **Configuration:** a `VisualEditor` appsettings section (`Enabled`, `AllowedDocumentTypes`, `ExcludedDocumentTypes`, and `EnablePropertyLevelEditing` to turn off editing text and rich text on the page), validated at startup and included in the appsettings JSON schema.
 - **Blocks are recognised by their views**, whether a view gets the block or just its content element. **`Html.VisualEditorBlock`** marks markup a loop writes itself.
+- **Styles and scripts for the Visual editor only:** a site's `wwwroot/App_Plugins/ArjoVisualEditor/backoffice-render.css` and `backoffice-render.js`, if it has them, are loaded into its pages in the Visual editor, and never on the live site.
+- **Re-render events:** `visual-editor:before-render` and `visual-editor:rendered` on the page's `document`, so scripts can set themselves up again after an edit is patched in.
 - **Support for Umbraco 17 and 18.**
 
 ### Security

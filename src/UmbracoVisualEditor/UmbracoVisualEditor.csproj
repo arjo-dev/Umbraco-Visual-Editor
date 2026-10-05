@@ -115,12 +115,19 @@
   <!--
     The package version in the built umbraco-package.json (#39), which the backoffice shows under Packages. The source
     (Client/public) keeps 0.0.0. Runs whether or not the client was built by this build (CI builds it separately).
+    The bundle's URL gets a version from its content (?v=…), so browsers load the new bundle after an upgrade rather
+    than a cached one. The files it imports have content hashes in their names already (Vite).
   -->
   <Target Name="StampPackageVersion" AfterTargets="BuildClient" BeforeTargets="AssignTargetPaths" Condition="Exists('$(ClientOutputDir)umbraco-package.json')">
+    <GetFileHash Files="$(ClientOutputDir)arjo-visual-editor.js" Algorithm="SHA256" HashEncoding="hex">
+      <Output TaskParameter="Hash" PropertyName="_ArjoBundleHash" />
+    </GetFileHash>
     <PropertyGroup>
+      <_ArjoBundleVersion>$(_ArjoBundleHash.ToLowerInvariant().Substring(0, 12))</_ArjoBundleVersion>
       <_ArjoManifest>$(ClientOutputDir)umbraco-package.json</_ArjoManifest>
       <_ArjoManifestText>$([System.IO.File]::ReadAllText('$(_ArjoManifest)'))</_ArjoManifestText>
       <_ArjoManifestStamped>$([System.Text.RegularExpressions.Regex]::Replace('$(_ArjoManifestText)', '"version":\s*"[^"]*"', '"version": "$(Version)"'))</_ArjoManifestStamped>
+      <_ArjoManifestStamped>$([System.Text.RegularExpressions.Regex]::Replace('$(_ArjoManifestStamped)', '(/arjo-visual-editor\.js)(\?v=[^"]*)?"', '$1?v=$(_ArjoBundleVersion)"'))</_ArjoManifestStamped>
     </PropertyGroup>
     <WriteLinesToFile File="$(_ArjoManifest)" Lines="$([MSBuild]::Escape('$(_ArjoManifestStamped.TrimEnd())'))" Overwrite="true" WriteOnlyWhenDifferent="true" />
   </Target>

@@ -21,6 +21,12 @@ public sealed class VisualEditorOptions
     /// <summary>Document type aliases never to offer it for (applied after <see cref="AllowedDocumentTypes"/>).</summary>
     public string[] ExcludedDocumentTypes { get; set; } = [];
 
+    /// <summary>
+    /// Whether text and rich text can be edited on the page itself. When false, double-clicking them (or Enter) opens
+    /// them in the side panel instead; blocks can still be selected, moved, added and deleted. Default: true.
+    /// </summary>
+    public bool EnablePropertyLevelEditing { get; set; } = true;
+
     /// <summary>Whether the Visual editor is offered for documents of this type.</summary>
     public bool IsEnabledFor(string documentTypeAlias)
         => Enabled

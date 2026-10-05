@@ -75,12 +75,51 @@ It takes the block (`IBlockReference`) or its element (`IPublishedElement`). Out
 
 Without it, the block's text can still be edited in place (its values are marked), but the block itself can't be selected, moved, duplicated or deleted on the page, and has no "+" buttons. It's still in the side panel under Page settings.
 
+### Styles for the Visual editor only
+
+A site can style its pages in the Visual editor without changing them anywhere else. It adds the stylesheet `wwwroot/App_Plugins/ArjoVisualEditor/backoffice-render.css`, and the Visual editor links it at the end of the page's `<head>`, after the template's own styles. It's never linked on the live site or in preview.
+
+This helps where the page relies on scripts that don't run, or don't run the same way, in the Visual editor, for example:
+
+```css
+/* Sections that a script fades in on scroll: show them. */
+.reveal { opacity: 1 !important; transform: none !important; }
+
+/* A cookie banner that covers the page. */
+#cookie-banner { display: none; }
+```
+
+The package doesn't include the file: it's only linked if the site has it, and changes apply on the next render, with no restart. Put it in the site's own `wwwroot`.
+
+### Scripts for the Visual editor only, and re-render events
+
+When something is edited, the Visual editor renders the page again and patches the changes into it, rather than reloading it. The page's scripts don't run again, so anything they built (a carousel, a code highlighter) may be lost or out of date. The Visual editor fires two events on the page's `document` so scripts can catch up:
+
+| Event | When |
+|---|---|
+| `visual-editor:before-render` | Just before a new render is patched in: tear widgets down here. |
+| `visual-editor:rendered` | After it's patched in: set them up again. |
+
+Both have the render's URL in `event.detail.url`. They aren't fired on the first load, where the page's scripts run as usual, and they're never fired on the live site.
+
+A site can listen for them in its own scripts, or put Visual-editor-only code in `wwwroot/App_Plugins/ArjoVisualEditor/backoffice-render.js`. Like the stylesheet, it's only loaded in the Visual editor, and only if the site has it. It's a classic deferred script, loaded before the Visual editor's own script, so its listeners are there before any re-render:
+
+```js
+// wwwroot/App_Plugins/ArjoVisualEditor/backoffice-render.js
+document.addEventListener('visual-editor:before-render', () => window.mySlider?.destroy());
+document.addEventListener('visual-editor:rendered', () => {
+    window.mySlider = new Slider('.slider');
+});
+```
+
+Both files are loaded with a version from their content (`?v=…`), so browsers pick up changes straight away.
+
 ## Limitations
 
-- **Text the template changes can't be edited in place.** Text is only editable in place when the page shows it exactly as it's stored. Truncated, reformatted or combined text can still be selected, and edited in the side panel.
+- **Text the template changes can't be edited in place.** Text is only editable in place when the page shows it exactly as it's stored. Truncated, reformatted or combined text can still be selected, and edited in the side panel. Where editing on the page causes trouble, `VisualEditor:EnablePropertyLevelEditing: false` turns it off for all text and rich text: it's then edited in the side panel only.
 - **Values used only in attributes or CSS can't be selected on the page.** Examples are a background image in a `style`, a URL, or a `data-*` attribute read by a script. They're listed under **Page settings** in the side panel. The Test Site's hero image is one.
 - **Content from other pages isn't editable here.** For example, a footer that renders the home page's properties. It's edited on its own page.
-- **Scripts that build markup after the page loads** (a carousel, a code highlighter) aren't run again when an edit is patched into the page (#18). What they add may be missing until the page is reloaded.
+- **Scripts that build markup after the page loads** (a carousel, a code highlighter) aren't run again when an edit is patched into the page (#18). What they add may be missing until the page is reloaded. They can set themselves up again on the [re-render events](#scripts-for-the-visual-editor-only-and-re-render-events), and a [stylesheet for the Visual editor](#styles-for-the-visual-editor-only) can make up for what they'd show or hide.
 - **Output caching and publishing.** Render sessions are never output-cached, but the site's own pages are, as the site configures them. After publishing from the Visual editor, visitors see the change once the cached page expires or is evicted, exactly as when publishing from the Content tab.
 - **Strict Content Security Policies** need to allow the canvas script (see [security.md](security.md)).
 

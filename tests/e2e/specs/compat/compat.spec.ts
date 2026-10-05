@@ -51,6 +51,33 @@ test('edits text in a cached partial, which stays cached for visitors', async ({
 	expect(live).not.toContain('uve-markers');
 });
 
+test("links the site's render stylesheet in the Visual editor, and not on the live site", async ({ page }) => {
+	await openVisualEditor(page, COMPAT_PAGE);
+	const linked = () =>
+		canvas(page)
+			.locator('html')
+			.evaluate((html) => getComputedStyle(html).getPropertyValue('--compat-render-stylesheet').trim());
+
+	await expect.poll(linked).toBe('linked');
+	const live = await (await page.request.get(`/?live=${Date.now()}`)).text();
+	expect(live).not.toContain('backoffice-render.css');
+});
+
+test("runs the site's render script in the Visual editor, which hears each re-render", async ({ page }) => {
+	await openVisualEditor(page, COMPAT_PAGE);
+	const script = () =>
+		canvas(page)
+			.locator('html')
+			.evaluate(() => (window as unknown as { compatRenderScript?: { renders: number } }).compatRenderScript ?? null);
+
+	await expect.poll(script).toEqual({ loaded: true, renders: 0 });
+	await editInPlace(page, canvas(page).locator('h1'), unique('Re-rendered'));
+	await expect.poll(script).toEqual({ loaded: true, renders: 1 });
+
+	const live = await (await page.request.get(`/?live=${Date.now()}`)).text();
+	expect(live).not.toContain('backoffice-render.js');
+});
+
 test('moves a block a hand-rolled loop renders', async ({ page }) => {
 	await openVisualEditor(page, COMPAT_PAGE);
 	const list = canvas(page).locator('.cards');

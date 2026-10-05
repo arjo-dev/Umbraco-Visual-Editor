@@ -45,6 +45,7 @@ The editor is offered on every document type that has a template. To narrow that
 | `Enabled` | `true` | Turns the Visual editor on or off everywhere. |
 | `AllowedDocumentTypes` | `[]` | Document type aliases to offer it for. Empty means all of them. |
 | `ExcludedDocumentTypes` | `[]` | Document type aliases never to offer it for. |
+| `EnablePropertyLevelEditing` | `true` | Whether text and rich text can be edited on the page itself. When `false`, double-clicking them (or pressing Enter) opens them in the side panel instead. Blocks can still be selected, moved, added and deleted on the page. |
 
 Aliases are case-insensitive. The site fails to start if an alias is blank or appears in both lists. The Visual tab is hidden where the editor isn't offered, and the render endpoint refuses those documents with a 403.
 
@@ -67,7 +68,7 @@ The Visual editor recognises content however templates write it: models (ModelsB
 
 What works on its own, where the helper is needed, and the limitations are in [docs/compatibility.md](docs/compatibility.md). One example of a limitation: text the template changes before showing it can only be edited in the side panel.
 
-The visual editor uses DOM replacement in order to change content when you change a property in the back office, therefore any JavaScript based rendering won't work after the initial view. We inject a CSS file into the back office render so you can adjust the page view to help this, which will only show in the back office not on the front end.
+The visual editor uses DOM replacement in order to change content when you change a property in the back office, therefore any JavaScript based rendering won't work after the initial view. We inject a CSS file into the back office render so you can adjust the page view to help this, which will only show in the back office not on the front end. Add it to the site as `wwwroot/App_Plugins/ArjoVisualEditor/backoffice-render.css`: it's linked at the end of the page's `<head>`, after the template's own styles, and only if the site has it (see [docs/compatibility.md](docs/compatibility.md#styles-for-the-visual-editor-only)). Scripts can also set themselves up again after each re-render: the Visual editor fires `visual-editor:before-render` and `visual-editor:rendered` on the page's `document`, and loads the site's `wwwroot/App_Plugins/ArjoVisualEditor/backoffice-render.js` if it has one (see [docs/compatibility.md](docs/compatibility.md#scripts-for-the-visual-editor-only-and-re-render-events)).
 
 ## Security
 
