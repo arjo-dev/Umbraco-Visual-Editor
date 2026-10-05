@@ -1,0 +1,29 @@
+{
+    "$schema": "https://marketplace.umbraco.com/umbraco-marketplace-schema.json", 
+    "AuthorDetails": {
+      "Name": "Richard Ockerby",
+	  "Url": "https://arjo.dev",
+	  "Description": "Richard Ockerby is an Umbraco MVP x5 and is a member of the Community Packages Team",
+      "ImageUrl": "https://github.com/rockerby.png"
+    },
+	"DocumentationUrl": "https://docs.umbracotranslator.com",
+    "Category": "Editor Tools",
+    "LicenseTypes": [ "Free" ],
+    "PackageType": "Package",
+    "Tags": ["visual editing"],
+    "Screenshots": [
+		{
+		  "ImageUrl": "https://github.com/arjo-dev/Umbraco-Visual-Editor/screenshots/property-selection.png",
+		  "Caption": "Visual editor open selecting a property to edit"
+		},
+		{
+		  "ImageUrl": "https://github.com/arjo-dev/Umbraco-Visual-Editor/screenshots/list-selection.png",
+		  "Caption": "Visual editor open selecting a list"
+		},
+		{
+		  "ImageUrl": "https://github.com/arjo-dev/Umbraco-Visual-Editor/screenshots/mobile-editing.png",
+		  "Caption": "Visual editor open with mobile viewport"
+		}
+	],
+    "Title": "Umbraco Visual Editor"
+  }
