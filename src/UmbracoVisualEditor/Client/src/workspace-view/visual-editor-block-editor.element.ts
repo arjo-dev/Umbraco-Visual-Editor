@@ -1,4 +1,13 @@
-import { css, customElement, html, keyed, nothing, property, repeat, state } from '@umbraco-cms/backoffice/external/lit';
+import {
+	css,
+	customElement,
+	html,
+	keyed,
+	nothing,
+	property,
+	repeat,
+	state,
+} from '@umbraco-cms/backoffice/external/lit';
 import type { PropertyValues } from '@umbraco-cms/backoffice/external/lit';
 import { UmbLitElement } from '@umbraco-cms/backoffice/lit-element';
 import { UMB_DOCUMENT_WORKSPACE_CONTEXT } from '@umbraco-cms/backoffice/document';
