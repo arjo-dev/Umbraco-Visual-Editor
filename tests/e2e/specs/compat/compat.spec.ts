@@ -51,6 +51,18 @@ test('edits text in a cached partial, which stays cached for visitors', async ({
 	expect(live).not.toContain('uve-markers');
 });
 
+test("links the site's render stylesheet in the Visual editor, and not on the live site", async ({ page }) => {
+	await openVisualEditor(page, COMPAT_PAGE);
+	const linked = () =>
+		canvas(page)
+			.locator('html')
+			.evaluate((html) => getComputedStyle(html).getPropertyValue('--compat-render-stylesheet').trim());
+
+	await expect.poll(linked).toBe('linked');
+	const live = await (await page.request.get(`/?live=${Date.now()}`)).text();
+	expect(live).not.toContain('backoffice-render.css');
+});
+
 test('moves a block a hand-rolled loop renders', async ({ page }) => {
 	await openVisualEditor(page, COMPAT_PAGE);
 	const list = canvas(page).locator('.cards');

@@ -75,12 +75,28 @@ It takes the block (`IBlockReference`) or its element (`IPublishedElement`). Out
 
 Without it, the block's text can still be edited in place (its values are marked), but the block itself can't be selected, moved, duplicated or deleted on the page, and has no "+" buttons. It's still in the side panel under Page settings.
 
+### Styles for the Visual editor only
+
+A site can style its pages in the Visual editor without changing them anywhere else. It adds the stylesheet `wwwroot/App_Plugins/ArjoVisualEditor/backoffice-render.css`, and the Visual editor links it at the end of the page's `<head>`, after the template's own styles. It's never linked on the live site or in preview.
+
+This helps where the page relies on scripts that don't run, or don't run the same way, in the Visual editor, for example:
+
+```css
+/* Sections that a script fades in on scroll: show them. */
+.reveal { opacity: 1 !important; transform: none !important; }
+
+/* A cookie banner that covers the page. */
+#cookie-banner { display: none; }
+```
+
+The package doesn't include the file: it's only linked if the site has it, and changes apply on the next render, with no restart. Put it in the site's own `wwwroot`.
+
 ## Limitations
 
 - **Text the template changes can't be edited in place.** Text is only editable in place when the page shows it exactly as it's stored. Truncated, reformatted or combined text can still be selected, and edited in the side panel.
 - **Values used only in attributes or CSS can't be selected on the page.** Examples are a background image in a `style`, a URL, or a `data-*` attribute read by a script. They're listed under **Page settings** in the side panel. The Test Site's hero image is one.
 - **Content from other pages isn't editable here.** For example, a footer that renders the home page's properties. It's edited on its own page.
-- **Scripts that build markup after the page loads** (a carousel, a code highlighter) aren't run again when an edit is patched into the page (#18). What they add may be missing until the page is reloaded.
+- **Scripts that build markup after the page loads** (a carousel, a code highlighter) aren't run again when an edit is patched into the page (#18). What they add may be missing until the page is reloaded. A [stylesheet for the Visual editor](#styles-for-the-visual-editor-only) can make up for what they'd show or hide.
 - **Output caching and publishing.** Render sessions are never output-cached, but the site's own pages are, as the site configures them. After publishing from the Visual editor, visitors see the change once the cached page expires or is evicted, exactly as when publishing from the Content tab.
 - **Strict Content Security Policies** need to allow the canvas script (see [security.md](security.md)).
 
