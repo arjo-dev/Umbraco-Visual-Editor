@@ -39,6 +39,15 @@ public class MarkerInjectionTests
     }
 
     [Fact]
+    public void Inject_LoadsTheSitesRenderScriptBeforeTheCanvas()
+    {
+        const string siteScript = "/App_Plugins/ArjoVisualEditor/backoffice-render.js?v=3";
+        var html = MarkerInjectionMiddleware.Inject(Page, "{}", ScriptUrl, null, siteScript);
+
+        Assert.EndsWith($"</script><script defer src=\"{siteScript}\"></script>{Script}</body></html>", html);
+    }
+
+    [Fact]
     public void Inject_EscapesTheManifestsClosingTags()
     {
         var html = MarkerInjectionMiddleware.Inject(Page, "{\"label\":\"</script>\"}", ScriptUrl, null);
