@@ -404,6 +404,25 @@ describe('canvas runtime', () => {
 			expect(sent.filter((m) => m.type === 'ready')).to.have.length(2);
 		});
 
+		it("tells the page's scripts before and after, with the new content in place (and no markers) after", async () => {
+			responses['/__visual-editor/render/2'] = [pageHtml({ title: 'Hello again' })];
+			const seen: string[] = [];
+			doc.addEventListener('visual-editor:before-render', (e) =>
+				seen.push(`before ${(e as CustomEvent).detail.url} ${doc.getElementById('title')!.textContent}`),
+			);
+			doc.addEventListener('visual-editor:rendered', (e) =>
+				seen.push(`after ${(e as CustomEvent).detail.url} ${doc.getElementById('title')!.textContent}`),
+			);
+
+			expect(await runtime.render('/__visual-editor/render/2')).to.equal(true);
+
+			expect(seen).to.deep.equal([
+				'before /__visual-editor/render/2 Hello',
+				'after /__visual-editor/render/2 Hello again',
+			]);
+			expect(rendered()).to.deep.equal([{ type: 'rendered', url: '/__visual-editor/render/2', ok: true }]);
+		});
+
 		it('re-resolves markers: new text is selectable and has no marker characters left', async () => {
 			responses['/__visual-editor/render/2'] = [pageHtml({ caption: 'New caption' })];
 			await runtime.render('/__visual-editor/render/2');

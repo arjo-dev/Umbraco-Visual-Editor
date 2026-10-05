@@ -14,7 +14,8 @@
  * - Adding blocks (#28): "+" buttons on a hovered or selected block's top and bottom edges, and a placeholder in every
  *   empty grid area (also a drop target while dragging); the host opens the block catalogue.
  * - Live re-render (#18): a `render` message patches the newer page in (patch.ts) rather than reloading, then
- *   re-resolves the markers and keeps the selection, scroll position and focus.
+ *   re-resolves the markers and keeps the selection, scroll position and focus. The page's scripts get events before
+ *   and after it (BEFORE_RENDER_EVENT, RENDERED_EVENT), to set themselves up again.
  * Only active inside the visual editor (a nonce in the URL fragment); opening a render URL directly just shows the page.
  */
 import {
@@ -38,6 +39,14 @@ import { BLOCK_LIST, blockListsOf, dropSpotAt, type DropSpot } from './drag.js';
 import { BLOCK_GRID, containerOf, gridContainersOf, gridDropSpotAt, spanAt } from './grid.js';
 import { fetchRender, patchDocument } from './patch.js';
 import { TargetIndex, targetLabel, type CanvasTarget } from './targets.js';
+
+/**
+ * Events on the page's `document` around a live re-render, for the site's scripts (docs/compatibility.md): tear down
+ * before the new render is patched in, set up again after it. `detail.url` is the render's URL. Not on the first load:
+ * the site's scripts run then as they always do.
+ */
+export const BEFORE_RENDER_EVENT = 'visual-editor:before-render';
+export const RENDERED_EVENT = 'visual-editor:rendered';
 
 export interface CanvasRuntime {
 	/** Rebuilt after every live re-render. */
@@ -644,6 +653,7 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 			return false;
 		}
 
+		announce(BEFORE_RENDER_EVENT, url);
 		patchDocument(doc, next, (node) => node === overlay.host);
 		manifest = readManifest(doc)!;
 		index = new TargetIndex(resolveMarkers(manifest, doc));
@@ -665,9 +675,16 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 			// Not a same-origin URL for this document (e.g. an about:srcdoc test page); nothing to remember.
 		}
 
+		announce(RENDERED_EVENT, url);
 		sendReady();
 		channel?.send({ type: 'rendered', url, ok: true });
 		return true;
+	}
+
+	/** Tells the site's scripts about a re-render (docs/compatibility.md); a listener's error doesn't stop it. */
+	function announce(type: string, url: string) {
+		const win = doc.defaultView;
+		if (win) doc.dispatchEvent(new win.CustomEvent(type, { detail: { url } }));
 	}
 
 	sendReady();
