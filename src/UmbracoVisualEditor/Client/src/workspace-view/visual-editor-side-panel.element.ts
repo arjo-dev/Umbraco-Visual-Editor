@@ -1,4 +1,4 @@
-import { css, customElement, html, nothing, property, state } from '@umbraco-cms/backoffice/external/lit';
+import { css, customElement, html, keyed, nothing, property, state } from '@umbraco-cms/backoffice/external/lit';
 import type { PropertyValues } from '@umbraco-cms/backoffice/external/lit';
 import { UmbLitElement } from '@umbraco-cms/backoffice/lit-element';
 import { sameTarget, type TargetRef } from '../protocol/index.js';
@@ -135,11 +135,16 @@ export class ArjoVisualEditorSidePanelElement extends UmbLitElement {
 			`;
 		}
 
+		// Keyed: a new editor for each property (and block). The CMS's editors aren't made to change property: reused, a
+		// rich text editor was given the next property's value and wrote a rich text value (`{ ...value, markup }`) into it.
 		if (target.kind === 'Property' && !target.ownerIsBlock && target.alias) {
-			return html`<arjo-visual-editor-property-editor
-				.alias=${target.alias}
-				.contentHref=${this.contentHref}
-			></arjo-visual-editor-property-editor>`;
+			return keyed(
+				`property:${target.alias}`,
+				html`<arjo-visual-editor-property-editor
+					.alias=${target.alias}
+					.contentHref=${this.contentHref}
+				></arjo-visual-editor-property-editor>`,
+			);
 		}
 
 		// A block, or a property inside one: the block's content and settings.
@@ -153,11 +158,14 @@ export class ArjoVisualEditorSidePanelElement extends UmbLitElement {
 			<p class="detail">
 				${target.kind === 'Block' ? detail : this.localize.term('arjoVisualEditor_blockSelected', heading)}
 			</p>
-			<arjo-visual-editor-block-editor
-				.blockKey=${target.ownerKey}
-				.culture=${this.culture}
-				.tab=${this.blockTab}
-			></arjo-visual-editor-block-editor>
+			${keyed(
+				`block:${target.ownerKey}`,
+				html`<arjo-visual-editor-block-editor
+					.blockKey=${target.ownerKey}
+					.culture=${this.culture}
+					.tab=${this.blockTab}
+				></arjo-visual-editor-block-editor>`,
+			)}
 			${this.contentHref ? html`<a class="standard" href=${this.contentHref}>${this.localize.term('arjoVisualEditor_showInStandardEditor')}</a>` : nothing}
 		`;
 	}

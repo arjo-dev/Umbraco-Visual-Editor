@@ -1,4 +1,4 @@
-import { css, customElement, html, nothing, property, repeat, state } from '@umbraco-cms/backoffice/external/lit';
+import { css, customElement, html, keyed, nothing, property, repeat, state } from '@umbraco-cms/backoffice/external/lit';
 import type { PropertyValues } from '@umbraco-cms/backoffice/external/lit';
 import { UmbLitElement } from '@umbraco-cms/backoffice/lit-element';
 import { UMB_DOCUMENT_WORKSPACE_CONTEXT } from '@umbraco-cms/backoffice/document';
@@ -158,11 +158,13 @@ export class ArjoVisualEditorBlockEditorElement extends UmbLitElement {
 						</uui-tab-group>`
 					: nothing
 			}
-			${
+			${keyed(
+				// New editors for the other tab: reused, one with the same alias would be given the other type's value.
+				tab,
 				tab === 'settings'
 					? this.#renderProperties('settingsData', this._block.settings, this._settingsType)
-					: this.#renderProperties('contentData', this._block.content, this._contentType)
-			}
+					: this.#renderProperties('contentData', this._block.content, this._contentType),
+			)}
 		`;
 	}
 
