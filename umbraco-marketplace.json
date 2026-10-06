@@ -13,15 +13,19 @@
     "Tags": ["visual editing"],
     "Screenshots": [
 		{
-		  "ImageUrl": "https://github.com/arjo-dev/Umbraco-Visual-Editor/screenshots/property-selection.png",
+		  "VideoUrl": "https://www.youtube.com/watch?v=KjWfCVCZCqs",
+		  "Caption": "Watch a demo of the Visual Editor in action"
+		},
+		{
+		  "ImageUrl": "https://github.com/arjo-dev/Umbraco-Visual-Editor/blob/main/screenshots/property-selection.png?raw=true",
 		  "Caption": "Visual editor open selecting a property to edit"
 		},
 		{
-		  "ImageUrl": "https://github.com/arjo-dev/Umbraco-Visual-Editor/screenshots/list-selection.png",
+		  "ImageUrl": "https://github.com/arjo-dev/Umbraco-Visual-Editor/blob/main/screenshots/list-selection.png?raw=true",
 		  "Caption": "Visual editor open selecting a list"
 		},
 		{
-		  "ImageUrl": "https://github.com/arjo-dev/Umbraco-Visual-Editor/screenshots/mobile-editing.png",
+		  "ImageUrl": "https://github.com/arjo-dev/Umbraco-Visual-Editor/blob/main/screenshots/mobile-editing.png?raw=true",
 		  "Caption": "Visual editor open with mobile viewport"
 		}
 	],
