@@ -59,8 +59,6 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 	@state() private _status: 'idle' | 'rendering' | 'error' = 'idle';
 	@state() private _error?: string;
 	@state() private _targetCount?: number;
-	/** Document properties the canvas found on the page; the rest are listed under Page settings (#22). */
-	@state() private _visibleAliases?: ReadonlySet<string>;
 	/** Targets on the page, as the canvas last reported them. */
 	@state() private _targets: TargetRef[] = [];
 	/** Validation errors for the variant being edited (#23). */
@@ -224,9 +222,6 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 				// A selection made before the page showed it (e.g. a block just duplicated) now gets its labels.
 				if (this._selected)
 					this._selected = message.targets.find((t) => sameTarget(t, this._selected)) ?? this._selected;
-				this._visibleAliases = new Set(
-					message.targets.filter((t) => !t.ownerIsBlock && t.alias).map((t) => t.alias as string),
-				);
 				break;
 			case 'rendered':
 				if (message.url !== this.#pendingRender) break; // an older render; a newer one is on its way
@@ -699,7 +694,6 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 									@keydown=${this.#onPanelKeyDown}
 									.selected=${this._selected}
 									.targetCount=${this._targetCount}
-									.visibleAliases=${this._visibleAliases}
 									.errors=${this._errors}
 									.targets=${this._targets}
 									.richText=${this._richText}

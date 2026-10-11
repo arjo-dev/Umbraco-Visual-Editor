@@ -24,15 +24,15 @@ const properties: PropertyModel[] = [
 ];
 
 describe('pageSettings', () => {
-	it("lists the properties the page doesn't show, by tab then group, in sort order, merging compositions", () => {
-		const result = pageSettings(containers, properties, new Set(['title']));
+	it('lists every property, by tab then group, in sort order, merging compositions', () => {
+		const result = pageSettings(containers, properties);
 		expect(result).to.deep.equal([
 			{ name: null, groups: [{ name: 'Settings', aliases: ['theme'] }] },
 			{
 				name: 'Content',
 				groups: [
 					{ name: null, aliases: ['onTab'] },
-					{ name: 'Hero', aliases: ['subtitle'] },
+					{ name: 'Hero', aliases: ['title', 'subtitle'] },
 				],
 			},
 			{
@@ -45,12 +45,12 @@ describe('pageSettings', () => {
 		]);
 	});
 
-	it('leaves out tabs and groups whose properties are all on the page', () => {
-		const visible = new Set(['title', 'subtitle', 'onTab', 'theme']);
-		expect(pageSettings(containers, properties, visible).map((t) => t.name)).to.deep.equal(['SEO']);
+	it('leaves out tabs and groups without properties', () => {
+		const seoOnly = properties.filter((p) => ['meta', 'meta-2', 'nav'].includes(p.container!.id));
+		expect(pageSettings(containers, seoOnly).map((t) => t.name)).to.deep.equal(['SEO']);
 	});
 
-	it('is empty when everything is on the page', () => {
-		expect(pageSettings(containers, properties, new Set(properties.map((p) => p.alias)))).to.deep.equal([]);
+	it('is empty for a document type without properties', () => {
+		expect(pageSettings(containers, [])).to.deep.equal([]);
 	});
 });

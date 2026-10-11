@@ -12,7 +12,7 @@ import './visual-editor-page-settings.element.js';
  * Visual editor side panel, with two views:
  * - **Selection:** edits what is selected on the canvas. A document property gets the CMS's own property editor
  *   (#19); a block, or a property inside one, gets the block's content and settings (#25).
- * - **Page settings:** the properties the page doesn't show (#22).
+ * - **Page settings:** all of the document's properties, by tab and group, as on the Content tab (#22).
  * Selecting something on the canvas switches to Selection. Validation errors (#23) are listed above both views while
  * there are any; clicking one fires `show-error` (the workspace view selects it on the page).
  *
@@ -24,8 +24,6 @@ import './visual-editor-page-settings.element.js';
 @customElement('arjo-visual-editor-side-panel')
 export class ArjoVisualEditorSidePanelElement extends UmbLitElement {
 	@property({ attribute: false }) selected: TargetRef | null = null;
-	/** Aliases of the document properties shown on the page; undefined until the canvas has connected. */
-	@property({ attribute: false }) visibleAliases?: ReadonlySet<string>;
 
 	/** Validation errors for the variant being edited. */
 	@property({ attribute: false }) errors: VisualEditorError[] = [];
@@ -188,7 +186,7 @@ export class ArjoVisualEditorSidePanelElement extends UmbLitElement {
 			${
 				this._view === 'settings'
 					? html`<arjo-visual-editor-page-settings
-							.visibleAliases=${this.visibleAliases}
+							.editingOnPage=${this.richText && !this.richText.target.ownerIsBlock ? this.richText.target.alias : null}
 						></arjo-visual-editor-page-settings>`
 					: html`<uui-box class="selection" tabindex="-1" headline=${this.localize.term('arjoVisualEditor_selection')}
 							>${this.#renderSelection()}</uui-box
