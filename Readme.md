@@ -1,3 +1,5 @@
+![NuGet](https://img.shields.io/nuget/v/arjo.umbracovisualeditor)
+
 # Umbraco Visual Editor
 
 The **Visual editor** gives Umbraco editors a way to edit content on the page itself. It adds a **Visual editor** tab to documents that shows the site's real front end, including changes that aren't saved yet. Editors can:
