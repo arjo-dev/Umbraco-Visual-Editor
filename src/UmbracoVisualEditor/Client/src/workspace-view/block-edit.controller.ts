@@ -27,6 +27,7 @@ import {
 	putBlockInArea,
 	withColumnSpan,
 } from './block-operations.js';
+import { requestElementType } from './element-type.js';
 import {
 	allowedInGrid,
 	areaOf,
@@ -256,9 +257,7 @@ export class ArjoBlockEditController extends UmbControllerBase {
 		} else {
 			const owner = locateBlock(workspace.getValues() ?? [], ownerKey, activeCulture);
 			if (!owner) return null;
-			const { data: elementType } = await new UmbDocumentTypeDetailRepository(this).requestByUnique(
-				owner.content.contentTypeKey,
-			);
+			const elementType = await requestElementType(this, owner.content.contentTypeKey);
 			dataTypeKey = elementType?.properties.find((p) => p.alias === alias)?.dataType.unique;
 		}
 		if (!dataTypeKey) return null;

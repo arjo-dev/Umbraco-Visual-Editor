@@ -2,10 +2,10 @@ import { UmbControllerBase } from '@umbraco-cms/backoffice/class-api';
 import type { UmbControllerHost } from '@umbraco-cms/backoffice/controller-api';
 import { UmbDataTypeDetailRepository, type UmbDataTypeDetailModel } from '@umbraco-cms/backoffice/data-type';
 import { UMB_DOCUMENT_WORKSPACE_CONTEXT } from '@umbraco-cms/backoffice/document';
-import { UmbDocumentTypeDetailRepository } from '@umbraco-cms/backoffice/document-type';
 import { UmbPropertyEditorConfigCollection } from '@umbraco-cms/backoffice/property-editor';
 import { UmbVariantId } from '@umbraco-cms/backoffice/variant';
 import { sameTarget, type HostMessage, type TargetRef } from '../protocol/index.js';
+import { requestElementType } from './element-type.js';
 import { locateValue, showsValue, withBlockPropertyValue, type ValueLocation } from './property-values.js';
 
 /** Property editors that can be edited in place, and whether they're multi-line (as canvas/inline-edit.ts). */
@@ -172,9 +172,7 @@ export class ArjoInlineEditController extends UmbControllerBase {
 			// The property type: the document's own, or the block element type's.
 			let dataTypeUnique = holder.dataType.unique;
 			if (location.block) {
-				const { data: elementType } = await new UmbDocumentTypeDetailRepository(this).requestByUnique(
-					location.block.contentTypeKey,
-				);
+				const elementType = await requestElementType(this, location.block.contentTypeKey);
 				const propertyType = elementType?.properties.find((p) => p.alias === target.alias);
 				if (!propertyType) return null;
 				dataTypeUnique = propertyType.dataType.unique;
