@@ -131,6 +131,23 @@ test('renders a True/False as it is set in the side panel', async ({ page }) => 
 	await expect(sidebar).toBeVisible();
 });
 
+test('lists every property under Page settings, as the Content tab does, including the ones on the page', async ({
+	page,
+}) => {
+	await openVisualEditor(page, COMPAT_PAGE);
+	await sidePanel(page).getByRole('tab', { name: 'Page settings' }).click();
+	const settings = sidePanel(page).locator('arjo-visual-editor-page-settings');
+	for (const label of ['Title', 'Body', 'Cards', 'Hide Sidebar']) {
+		await expect(settings.locator('umb-property').filter({ hasText: label }).first()).toBeVisible();
+	}
+
+	// The title is on the page too: edited here, the page shows it.
+	const text = unique('From Page settings');
+	await settings.locator('umb-property').filter({ hasText: 'Title' }).first().locator('input').fill(text);
+	await waitForRender(page);
+	await expect(canvas(page).locator('h1')).toHaveText(text);
+});
+
 // The flows below use the backoffice's own editors inside the Visual editor, which can change between Umbraco
 // versions; the Compat Site is the one that runs on Umbraco 17 too, so they're checked here as well.
 

@@ -15,7 +15,7 @@ The first release.
 - **Editing in place:**
   - Textstring and Textarea text can be edited in place on the page.
   - Rich text is edited in place with the backoffice's own editor, whose toolbar sits above the text.
-- **Side panel:** the selected property or block is edited with Umbraco's property editors, beside the page. Properties that aren't on the page are under **Page settings**.
+- **Side panel:** the selected property or block is edited with Umbraco's property editors, beside the page. **Page settings** lists all of the page's properties, by tab and group as on the Content tab, including the ones the page doesn't show.
 - **Blocks (Block List, Block Grid and Single Block):**
   - select a block, and edit its content and settings;
   - drag to reorder, or move with Alt+Up/Down;

@@ -63,8 +63,7 @@ export default {
 		noSettings: 'This block has no settings.',
 		noProperties: 'This block has no properties to edit.',
 		blockGone: "This block isn't in the document any more.",
-		allOnPage: 'Every property of this page is on the page itself.',
-		notOnPageHint: "Properties that aren't shown on the page, or are empty.",
+		pageHasNoProperties: 'This page has no properties to edit.',
 		propertyGone: "This field isn't on the document type any more.",
 		// Profile (#48)
 		openDocumentsIn: 'Open documents in',
