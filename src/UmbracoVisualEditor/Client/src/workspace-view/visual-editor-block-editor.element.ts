@@ -11,12 +11,10 @@ import {
 import type { PropertyValues } from '@umbraco-cms/backoffice/external/lit';
 import { UmbLitElement } from '@umbraco-cms/backoffice/lit-element';
 import { UMB_DOCUMENT_WORKSPACE_CONTEXT } from '@umbraco-cms/backoffice/document';
-import {
-	UmbDocumentTypeDetailRepository,
-	type UmbDocumentTypeDetailModel,
-} from '@umbraco-cms/backoffice/document-type';
+import type { UmbDocumentTypeDetailModel } from '@umbraco-cms/backoffice/document-type';
 import type { UmbPropertyDatasetElement, UmbPropertyValueData } from '@umbraco-cms/backoffice/property';
 import { ArjoBlockEditController } from './block-edit.controller.js';
+import { requestElementType } from './element-type.js';
 import { pageSettings } from './page-settings.js';
 import { locateBlock, type BlockData, type BlockDataKind, type LocatedBlock } from './property-values.js';
 
@@ -45,7 +43,6 @@ export class ArjoVisualEditorBlockEditorElement extends UmbLitElement {
 
 	#edit = new ArjoBlockEditController(this);
 	#workspace?: typeof UMB_DOCUMENT_WORKSPACE_CONTEXT.TYPE;
-	#repository = new UmbDocumentTypeDetailRepository(this);
 
 	constructor() {
 		super();
@@ -75,7 +72,7 @@ export class ArjoVisualEditorBlockEditorElement extends UmbLitElement {
 		if (!data) return set(undefined);
 		let type = elementTypes.get(data.contentTypeKey);
 		if (!type) {
-			type = this.#repository.requestByUnique(data.contentTypeKey).then(({ data }) => data);
+			type = requestElementType(this, data.contentTypeKey);
 			elementTypes.set(data.contentTypeKey, type);
 		}
 		const loaded = await type;
