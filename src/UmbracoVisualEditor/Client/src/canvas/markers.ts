@@ -4,6 +4,7 @@
  * - comments: <!--uve:p:ID--> ... <!--/uve:p:ID--> (rich text) and <!--uve:b:ID--> ... <!--/uve:b:ID--> (blocks)
  * Runs inside the rendered page. Strips the stega characters so the page's text is clean afterwards.
  */
+import type { BlockPosition } from '../protocol/index.js';
 
 export type MarkerKind = 'Property' | 'Block';
 
@@ -130,6 +131,28 @@ export function resolveMarkers(manifest: MarkerManifest, root: Document = docume
 	}
 
 	return targets;
+}
+
+/**
+ * Empty Block Lists and Grids a template marks with `Html.VisualEditorEmptyBlocks` (#97): Umbraco writes nothing for
+ * an empty one, so the helper writes an element with no height where it would be. Where a block added there goes.
+ */
+export function readEmptyBlockSpots(root: Document = document): Array<{ element: Element; at: BlockPosition }> {
+	const spots: Array<{ element: Element; at: BlockPosition }> = [];
+	for (const element of root.querySelectorAll('[data-uve-empty-blocks]')) {
+		let spot: { ownerKey?: unknown; propertyAlias?: unknown; editorAlias?: unknown };
+		try {
+			spot = JSON.parse(element.getAttribute('data-uve-empty-blocks')!);
+		} catch {
+			continue;
+		}
+		if (typeof spot.ownerKey !== 'string' || typeof spot.propertyAlias !== 'string') continue;
+		const at: BlockPosition = { ownerKey: spot.ownerKey, propertyAlias: spot.propertyAlias, areaKey: null, index: 0 };
+		// The host tells grid positions by `areaOwnerKey` being there: null for the grid's root.
+		if (spot.editorAlias === 'Umbraco.BlockGrid') Object.assign(at, { areaOwnerKey: null, areaAlias: null });
+		spots.push({ element, at });
+	}
+	return spots;
 }
 
 /**

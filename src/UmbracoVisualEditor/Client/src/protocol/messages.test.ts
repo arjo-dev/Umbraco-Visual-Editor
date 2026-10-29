@@ -77,6 +77,7 @@ describe('parseHostMessage', () => {
 		{ type: 'setErrors', errors: [{ target: title, message: 'Required' }] },
 		{ type: 'setErrors', errors: [] },
 		{ type: 'setReadonly', readonly: false },
+		{ type: 'setShowEmpty', show: true },
 		{ type: 'richTextEditing', target: title, active: true },
 		{ type: 'beginInlineEdit', target: title, maxLength: 512, multiline: false },
 		{ type: 'beginInlineEdit', target: title, maxLength: null, multiline: true },

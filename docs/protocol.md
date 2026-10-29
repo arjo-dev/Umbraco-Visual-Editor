@@ -78,6 +78,7 @@ Block positions use `{ ownerKey, propertyAlias, areaKey | null, index }`.
 | `setSelection` | `target \| null`, `reveal?: boolean` | The selected target (the host is the source of truth); `reveal` scrolls it into view |
 | `setErrors` | `errors: { target, message }[]` | Validation errors to mark on the page (#23); replaces the previous set, and is sent again whenever a page connects |
 | `setReadonly` | `readonly: boolean` | Turn editing affordances off or on (#31) |
+| `setShowEmpty` | `show: boolean` | Empty places to add blocks to (empty grid areas, and empty block properties marked with `Html.VisualEditorEmptyBlocks`, #97): `true` gives them room on the page with a dashed box; `false` leaves the layout alone and shows a line on hover. Sent whenever a page connects. |
 | `richTextEditing` | `target`, `active: boolean` | The host's editor is on (or off) that element: the canvas leaves events inside it to the editor and defers renders meanwhile |
 | `beginInlineEdit` | `target`, `maxLength: number | null`, `multiline: boolean` | Go ahead with an `inlineEditStart`. Only sent when the text matches the stored value, the property is TextBox/TextArea and the user may edit it; otherwise the side panel opens. |
 | `setDevice` | `width: number \| null` | Emulated viewport width in CSS px; `null` is full width (#16) |

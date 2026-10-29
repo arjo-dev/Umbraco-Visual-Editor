@@ -44,6 +44,7 @@ In the Visual editor, and only there, the page is rendered with markers (ADR 000
 | Compiled models (SourceCodeManual/Auto, or written by hand) | Yes | Compat Site |
 | No models (`Model.Value<T>("alias")`) | Yes. The marker is in the value, not the model. | Compat Site (its models use `Value<T>`) |
 | Umbraco's default block partials (`GetBlockListHtmlAsync`, `GetBlockGridHtmlAsync`, `GetBlockHtmlAsync`) | Yes | Test Site |
+| An empty Block List or Block Grid (Umbraco's helpers write nothing for one) | With `Html.VisualEditorEmptyBlocks` | Test Site |
 | Hand-rolled block loops whose partial gets the block | Yes | Compat Site |
 | Partials that only get the block's element (`block.Content`) | Yes. Recognised by the element: a block's content in the edited document. | Compat Site |
 | Markup a loop writes itself, with no view per block | With `Html.VisualEditorBlock` | Compat Site |
@@ -74,6 +75,21 @@ A block is recognised by the view that renders it: one whose model is the block,
 It takes the block (`IBlockReference`) or its element (`IPublishedElement`). Outside the Visual editor it writes nothing.
 
 Without it, the block's text can still be edited in place (its values are marked), but the block itself can't be selected, moved, duplicated or deleted on the page, and has no "+" buttons. It's still in the side panel under Page settings.
+
+### `Html.VisualEditorEmptyBlocks`
+
+Umbraco's `GetBlockListHtml` and `GetBlockGridHtml` (and their async versions) write nothing at all for an empty Block List or Block Grid. They don't even run its partial, so there's nothing on the page to show where the first block would go. Put this next to the call to fix that:
+
+```cshtml
+@using UmbracoVisualEditor
+
+@await Html.GetBlockGridHtmlAsync(Model, "bodyText")
+@Html.VisualEditorEmptyBlocks(Model, "bodyText")
+```
+
+It takes the document, or a block's content element, and the property's alias. It writes nothing on the live site, or when the property has blocks. In the Visual editor, an empty property gets an empty element with no height, so the page's layout doesn't change. Hovering over that spot shows a line with an **Add block** button. The toolbar's **Show empty block areas** toggle gives these spots, and empty grid areas, room on the page.
+
+Without it, the first block goes in through the side panel (**Page settings**). After that, the blocks have their own "+" buttons.
 
 ### Styles for the Visual editor only
 
