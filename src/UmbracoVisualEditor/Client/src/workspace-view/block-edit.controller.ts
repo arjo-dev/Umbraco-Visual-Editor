@@ -207,6 +207,20 @@ export class ArjoBlockEditController extends UmbControllerBase {
 		return null;
 	}
 
+	/**
+	 * A document property that has no value yet, e.g. an empty Block Grid the page marks (#97): the first block added
+	 * there creates its value, in the edited culture when the property varies by culture.
+	 */
+	async #unsetListAt(to: BlockPosition, activeCulture: string | null) {
+		const workspace = this.#workspace;
+		if (!workspace || to.ownerKey !== workspace.getUnique()) return null;
+		const structure = await workspace.structure.getPropertyStructureByAlias(to.propertyAlias);
+		if (!structure) return null;
+		const culture = structure.variesByCulture ? activeCulture : null;
+		const property: PropertyValueModel = { alias: to.propertyAlias, culture, segment: null };
+		return { property, value: undefined, culture };
+	}
+
 	/** A document property value with the Block List at `to` replaced by `update(list)`. */
 	#withList(value: unknown, to: BlockPosition, culture: string | null, update: (list: unknown) => unknown) {
 		if (to.ownerKey === this.#workspace?.getUnique()) return update(value);
@@ -404,7 +418,7 @@ export class ArjoBlockEditController extends UmbControllerBase {
 		) => Promise<{ create: string } | { paste: string[] } | null>,
 	): Promise<string | undefined> {
 		const workspace = this.#workspace;
-		const target = workspace && this.#listAt(at, activeCulture);
+		const target = workspace && (this.#listAt(at, activeCulture) ?? (await this.#unsetListAt(at, activeCulture)));
 		if (!workspace || !target || !(await this.#canWrite(target.property, activeCulture))) return undefined;
 		const values = await this.#listConfiguration(at, activeCulture);
 		if (!values) return undefined;

@@ -27,6 +27,14 @@ public sealed class VisualEditorOptions
     /// </summary>
     public bool EnablePropertyLevelEditing { get; set; } = true;
 
+    /// <summary>
+    /// Whether Umbraco's <c>GetBlockListHtml</c> and <c>GetBlockGridHtml</c> (and their async versions) mark where an
+    /// empty Block List or Block Grid would be, so the first block can be added on the page (#97). They do in views that
+    /// import <c>UmbracoVisualEditor.Extensions</c> (the package's global using, or <c>_ViewImports.cshtml</c>).
+    /// <c>Html.VisualEditorEmptyBlocks</c> marks them whatever this says. Default: true.
+    /// </summary>
+    public bool AutoMarkEmptyBlocks { get; set; } = true;
+
     /// <summary>Whether the Visual editor is offered for documents of this type.</summary>
     public bool IsEnabledFor(string documentTypeAlias)
         => Enabled

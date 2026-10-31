@@ -86,6 +86,11 @@ export type HostMessage =
 	/** Validation errors to mark on the page (#23); replaces the previous set. */
 	| { type: 'setErrors'; errors: Array<{ target: TargetRef; message: string }> }
 	| { type: 'setReadonly'; readonly: boolean }
+	/**
+	 * Empty places to add blocks to (#97: empty grid areas, and empty block properties a template marks): `show` gives
+	 * them room on the page with a dashed box; otherwise they leave the layout alone and show a line on hover.
+	 */
+	| { type: 'setShowEmpty'; show: boolean }
 	/** Rich text is (or is no longer) being edited in place: the canvas leaves that element alone meanwhile. */
 	| { type: 'richTextEditing'; target: TargetRef; active: boolean }
 	/** Go ahead with an `inlineEditStart`. Not sent when it can't be edited in place (the side panel is used instead). */
@@ -163,6 +168,7 @@ const hostValidators: Record<HostMessageType, (m: Obj) => boolean> = {
 	setErrors: (m) =>
 		Array.isArray(m.errors) && m.errors.every((e) => isObj(e) && isTargetRef(e.target) && isStr(e.message)),
 	setReadonly: (m) => typeof m.readonly === 'boolean',
+	setShowEmpty: (m) => typeof m.show === 'boolean',
 	richTextEditing: (m) => isTargetRef(m.target) && typeof m.active === 'boolean',
 	beginInlineEdit: (m) =>
 		isTargetRef(m.target) &&

@@ -44,6 +44,7 @@ In the Visual editor, and only there, the page is rendered with markers (ADR 000
 | Compiled models (SourceCodeManual/Auto, or written by hand) | Yes | Compat Site |
 | No models (`Model.Value<T>("alias")`) | Yes. The marker is in the value, not the model. | Compat Site (its models use `Value<T>`) |
 | Umbraco's default block partials (`GetBlockListHtmlAsync`, `GetBlockGridHtmlAsync`, `GetBlockHtmlAsync`) | Yes | Test Site |
+| An empty Block List or Block Grid (Umbraco's helpers write nothing for one) | Yes, through `GetBlockListHtml`/`GetBlockGridHtml` once views import `UmbracoVisualEditor.Extensions` ([see below](#empty-block-lists-and-block-grids)). Otherwise with `Html.VisualEditorEmptyBlocks`. | Test Site (`_ViewImports.cshtml`) |
 | Hand-rolled block loops whose partial gets the block | Yes | Compat Site |
 | Partials that only get the block's element (`block.Content`) | Yes. Recognised by the element: a block's content in the edited document. | Compat Site |
 | Markup a loop writes itself, with no view per block | With `Html.VisualEditorBlock` | Compat Site |
@@ -74,6 +75,42 @@ A block is recognised by the view that renders it: one whose model is the block,
 It takes the block (`IBlockReference`) or its element (`IPublishedElement`). Outside the Visual editor it writes nothing.
 
 Without it, the block's text can still be edited in place (its values are marked), but the block itself can't be selected, moved, duplicated or deleted on the page, and has no "+" buttons. It's still in the side panel under Page settings.
+
+### Empty Block Lists and Block Grids
+
+Umbraco's `GetBlockListHtml` and `GetBlockGridHtml` (and their async versions) write nothing at all for an empty Block List or Block Grid. They don't even run its partial, so on its own the page has nothing to show where the first block would go.
+
+The package has its own versions of those helpers in the `UmbracoVisualEditor.Extensions` namespace. They take the same arguments, call Umbraco's and write the same output. In the Visual editor, they also mark where an empty one would be: an element with no height, so the page's layout doesn't change. Hovering over that spot shows a line with an **Add block** button. The toolbar's **Show empty block areas** toggle gives these spots, and empty grid areas, room on the page.
+
+Views use them instead of Umbraco's once they import that namespace. Nothing else in the template changes, because a view's `Html` matches them more closely than Umbraco's.
+
+- **Views compiled at build time:** the NuGet package adds `UmbracoVisualEditor.Extensions` as a global using, so there's nothing to do.
+- **Views compiled at runtime (ModelsBuilder `InMemoryAuto`):** global usings don't reach these. Add the namespace to `Views/_ViewImports.cshtml`:
+
+  ```cshtml
+  @using UmbracoVisualEditor.Extensions
+  ```
+
+The namespace holds only these helpers, so importing it can't clash with a site's own names.
+
+**Turning it off:**
+- `VisualEditor:AutoMarkEmptyBlocks: false` in appsettings: the helpers only call Umbraco's.
+- `<VisualEditorGlobalUsing>false</VisualEditorGlobalUsing>` in the site's `.csproj`: the package doesn't add the global using.
+
+#### `Html.VisualEditorEmptyBlocks`
+
+For a Block List or Block Grid a template renders some other way, such as its own loop, mark where it would be by hand:
+
+```cshtml
+@using UmbracoVisualEditor
+
+@foreach (var block in Model.Cards) { … }
+@Html.VisualEditorEmptyBlocks(Model, "cards")
+```
+
+It takes the document, or a block's content element, and the property's alias. It writes nothing on the live site, or when the property has blocks, and marks whatever `AutoMarkEmptyBlocks` says. Don't use it next to `GetBlockListHtml` or `GetBlockGridHtml` as well, or the spot is marked twice.
+
+Without either, the first block goes in through the side panel (**Page settings**). After that, the blocks have their own "+" buttons.
 
 ### Styles for the Visual editor only
 

@@ -13,6 +13,7 @@ const SHORTCUT = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl';
  * @fires size-change - detail: { device, sizeId } - the size chosen for that device.
  * @fires toggle-tree - the content tree toggle was pressed.
  * @fires toggle-panel - the side panel toggle was pressed.
+ * @fires toggle-empty - the empty block areas toggle was pressed.
  * @fires undo - Undo was pressed.
  * @fires redo - Redo was pressed.
  */
@@ -26,6 +27,8 @@ export class ArjoVisualEditorToolbarElement extends UmbLitElement {
 	@property({ type: Boolean }) panelOpen = true;
 	/** Whether the section sidebar (content tree) is shown in visual mode. */
 	@property({ type: Boolean }) treeVisible = false;
+	/** Empty places to add blocks to get room on the canvas (#97), rather than a line on hover. */
+	@property({ type: Boolean }) showEmpty = false;
 	@property({ type: Boolean }) rendering = false;
 	/** The page can't be changed by this user (#31): shown as a tag. */
 	@property({ type: Boolean }) readonly = false;
@@ -72,6 +75,10 @@ export class ArjoVisualEditorToolbarElement extends UmbLitElement {
 		return this.localize.term(
 			this.treeVisible ? 'arjoVisualEditor_hideContentTree' : 'arjoVisualEditor_showContentTree',
 		);
+	}
+
+	get #emptyLabel() {
+		return this.localize.term(this.showEmpty ? 'arjoVisualEditor_hideEmptyAreas' : 'arjoVisualEditor_showEmptyAreas');
 	}
 
 	get #panelLabel() {
@@ -167,6 +174,21 @@ export class ArjoVisualEditorToolbarElement extends UmbLitElement {
 				></uui-loader-circle>
 				<uui-button
 					compact
+					look=${this.showEmpty ? 'primary' : 'secondary'}
+					label=${this.#emptyLabel}
+					title=${this.#emptyLabel}
+					aria-pressed=${this.showEmpty}
+					@click=${() => this.dispatchEvent(new CustomEvent('toggle-empty'))}
+				>
+					<!-- A dotted outline with a circled "+": an empty place to add blocks to. -->
+					<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+						<rect x="3" y="3" width="18" height="18" rx="2" stroke-dasharray="2 2.6" />
+						<circle cx="12" cy="12" r="4.5" />
+						<path d="M12 9.75v4.5M9.75 12h4.5" />
+					</svg>
+				</uui-button>
+				<uui-button
+					compact
 					look=${this.panelOpen ? 'primary' : 'secondary'}
 					label=${this.#panelLabel}
 					title=${this.#panelLabel}
@@ -232,6 +254,18 @@ export class ArjoVisualEditorToolbarElement extends UmbLitElement {
 
 		.end {
 			margin-left: auto;
+		}
+
+		/* Drawn like the backoffice's own (line) icons, at uui-icon's size. */
+		.icon {
+			width: 1.15em;
+			height: 1.15em;
+			vertical-align: bottom;
+			fill: none;
+			stroke: currentColor;
+			stroke-width: 1.75;
+			stroke-linecap: round;
+			stroke-linejoin: round;
 		}
 
 		uui-loader-circle {

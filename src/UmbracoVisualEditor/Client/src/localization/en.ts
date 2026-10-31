@@ -20,6 +20,8 @@ export default {
 		readOnly: 'Read-only',
 		readOnlyDescription: 'You can look, but not change this page here',
 		updatingPreview: 'Updating preview',
+		showEmptyAreas: 'Show empty block areas',
+		hideEmptyAreas: 'Hide empty block areas',
 		showSidePanel: 'Show side panel',
 		hideSidePanel: 'Hide side panel',
 		deviceDesktop: 'Desktop',

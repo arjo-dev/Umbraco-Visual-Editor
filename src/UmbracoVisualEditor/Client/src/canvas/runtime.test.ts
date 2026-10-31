@@ -792,6 +792,65 @@ describe('canvas runtime', () => {
 			});
 			expect(runtime.overlay.host.shadowRoot!.querySelectorAll('.add')).to.have.length(0);
 		});
+
+		describe('empty block properties a template marks (#97)', () => {
+			const spot = (editorAlias: string) =>
+				`<div id="empty" data-uve-empty-blocks='${JSON.stringify({ ownerKey: 'doc', ownerIsBlock: false, propertyAlias: 'grid', editorAlias })}' style="display:block;height:0"></div>`;
+			const placeholder = () => runtime.overlay.host.shadowRoot!.querySelector<HTMLElement>('.placeholder');
+
+			async function load(editorAlias = 'Umbraco.BlockGrid') {
+				runtime.destroy();
+				frame.remove();
+				({ frame, doc } = await page(pageHtml({ after: spot(editorAlias) })));
+				runtime = createRuntime(doc, { send: (m) => sent.push(m) })!;
+				sent = [];
+			}
+
+			it('shows a line there, leaving the layout alone, that asks to add the first block', async () => {
+				await load();
+				expect(placeholder()!.classList.contains('line')).to.equal(true);
+				expect(doc.getElementById('empty')!.getBoundingClientRect().height).to.equal(0);
+				placeholder()!.querySelector<HTMLButtonElement>('.placeholder-add')!.click();
+				expect(sent).to.deep.equal([
+					{
+						type: 'blockInsertRequest',
+						at: {
+							ownerKey: 'doc',
+							propertyAlias: 'grid',
+							areaKey: null,
+							index: 0,
+							areaOwnerKey: null,
+							areaAlias: null,
+						},
+					},
+				]);
+			});
+
+			it('asks for a list position for a Block List', async () => {
+				await load('Umbraco.BlockList');
+				placeholder()!.querySelector<HTMLButtonElement>('.placeholder-add')!.click();
+				expect(sent).to.deep.equal([
+					{ type: 'blockInsertRequest', at: { ownerKey: 'doc', propertyAlias: 'grid', areaKey: null, index: 0 } },
+				]);
+			});
+
+			it('gives it room while empty places are shown, and gives it back after', async () => {
+				await load();
+				doc.getElementById('empty')!.style.minHeight = '';
+				handleHostMessage(runtime, { type: 'setShowEmpty', show: true });
+				expect(placeholder()!.classList.contains('line')).to.equal(false);
+				expect(doc.getElementById('empty')!.getBoundingClientRect().height).to.be.greaterThan(0);
+				handleHostMessage(runtime, { type: 'setShowEmpty', show: false });
+				expect(placeholder()!.classList.contains('line')).to.equal(true);
+				expect(doc.getElementById('empty')!.getBoundingClientRect().height).to.equal(0);
+			});
+
+			it('shows none while read-only', async () => {
+				await load();
+				handleHostMessage(runtime, { type: 'setReadonly', readonly: true });
+				expect(placeholder()).to.equal(null);
+			});
+		});
 	});
 
 	describe('variants', () => {

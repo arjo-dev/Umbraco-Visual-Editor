@@ -39,14 +39,22 @@ export interface OverlayOptions {
 }
 
 /**
- * An empty place on the page, drawn as a dashed box: an empty grid area blocks can be added to (with a "+" button,
- * #28), or a block with nothing to show yet (a note only; clicks go through to the block).
+ * An empty place on the page, drawn as a dashed box: an empty place blocks can be added to (with a "+" button, #28),
+ * or a block with nothing to show yet (a note only; clicks go through to the block).
  */
 export interface Placeholder {
 	element: Element;
 	label: string;
 	onInsert?: () => void;
+	/**
+	 * Drawn as a line across the place, with its button, only while hovered (#97): for a place with no room on the
+	 * page, so it doesn't change the layout.
+	 */
+	line?: boolean;
 }
+
+/** Height of a line placeholder's hover strip, centred on its place. */
+const LINE_HIT = 12;
 
 /** What a resize would give (#27): the block's new box, and a label such as "6 / 12". */
 export interface ResizePreview {
@@ -284,10 +292,10 @@ export class CanvasOverlay {
 		return button;
 	}
 
-	/** An empty place to add blocks to: a dashed box over it, with a "+" button. */
-	#placeholder({ element, label, onInsert }: Placeholder) {
+	/** An empty place to add blocks to: a dashed box over it (or a line, on hover), with a "+" button. */
+	#placeholder({ element, label, onInsert, line }: Placeholder) {
 		const box = this.#doc.createElement('div');
-		box.className = `placeholder${onInsert ? '' : ' note'}`;
+		box.className = `placeholder${onInsert ? '' : ' note'}${line ? ' line' : ''}`;
 		const rect = element.getBoundingClientRect();
 		if (!rect.width) {
 			box.hidden = true;
@@ -295,9 +303,9 @@ export class CanvasOverlay {
 		}
 		Object.assign(box.style, {
 			left: `${rect.left}px`,
-			top: `${rect.top}px`,
+			top: `${line ? rect.top + rect.height / 2 - LINE_HIT / 2 : rect.top}px`,
 			width: `${rect.width}px`,
-			height: `${rect.height}px`,
+			height: `${line ? LINE_HIT : rect.height}px`,
 		});
 		if (!onInsert) {
 			const note = this.#doc.createElement('span');
@@ -526,6 +534,16 @@ const STYLES = `
 		background: ${PROPERTY_COLOR}; font-weight: 600;
 	}
 	.placeholder-add:hover, .placeholder-add:focus-visible { filter: brightness(1.15); }
+	/* A line on hover (#97): the strip catches the pointer; the line and its button only show while it's over it. */
+	.placeholder.line { outline: none; background: none; pointer-events: auto; overflow: visible; }
+	.placeholder.line::before {
+		content: ''; position: absolute; left: 0; right: 0; top: 50%; margin-top: -1px;
+		border-top: 2px dashed ${PROPERTY_COLOR};
+	}
+	.placeholder.line::before, .placeholder.line .placeholder-add { opacity: 0; transition: opacity 0.1s; }
+	.placeholder.line .placeholder-add { position: relative; padding: 2px 8px; font-size: 11px; }
+	.placeholder.line:hover::before, .placeholder.line:hover .placeholder-add,
+	.placeholder.line:focus-within::before, .placeholder.line:focus-within .placeholder-add { opacity: 1; }
 	.placeholder.note { outline-color: ${BLOCK_COLOR}; background: color-mix(in srgb, ${BLOCK_COLOR} 8%, transparent); }
 	.placeholder-note { padding: 4px 10px; color: #6b4b12; font-style: italic; }
 	.box.dragging { background: color-mix(in srgb, ${BLOCK_COLOR} 18%, transparent); outline: 2px dashed ${BLOCK_COLOR}; outline-offset: 3px; }

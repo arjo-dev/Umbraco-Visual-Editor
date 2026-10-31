@@ -37,6 +37,7 @@ import './visual-editor-canvas.element.js';
 
 const RENDER_DEBOUNCE_MS = 300;
 const PANEL_STORAGE_KEY = 'arjo.visualEditor.panelOpen';
+const SHOW_EMPTY_STORAGE_KEY = 'arjo.visualEditor.showEmpty';
 const PANEL_WIDTH_STORAGE_KEY = 'arjo.visualEditor.panelWidth';
 /** Arrow keys on the resize handle move it this far (Shift: further). */
 const PANEL_KEY_STEP = 16;
@@ -76,6 +77,7 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 	/** The user wants the content tree visible in visual mode (remembered by the visual mode context). */
 	@state() private _treeVisible = false;
 	@state() private _panelOpen = readPanelOpen();
+	@state() private _showEmpty = readShowEmpty();
 	@state() private _panelWidth = readPanelWidth();
 	/** The panel edge is being dragged: the canvas stops taking pointer events so the drag isn't lost to the iframe. */
 	@state() private _resizing = false;
@@ -199,6 +201,7 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 				this.#channel?.send({ type: 'setSelection', target: this._selected });
 				this.#channel?.send({ type: 'setDevice', width: this.#deviceWidth });
 				this.#channel?.send({ type: 'setReadonly', readonly: this._readonly });
+				this.#channel?.send({ type: 'setShowEmpty', show: this._showEmpty });
 				this.#channel?.send({ type: 'setStrings', strings: this.#canvasStrings() });
 				this.#sendErrors();
 			},
@@ -554,6 +557,17 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 		event.preventDefault();
 	}
 
+	/** Empty places to add blocks to get room on the canvas (#97), or show a line on hover. */
+	#setShowEmpty(show: boolean) {
+		this._showEmpty = show;
+		this.#channel?.send({ type: 'setShowEmpty', show });
+		try {
+			localStorage.setItem(SHOW_EMPTY_STORAGE_KEY, String(show));
+		} catch {
+			// A per-browser convenience only.
+		}
+	}
+
 	#setPanelOpen(open: boolean) {
 		this._panelOpen = open;
 		try {
@@ -661,6 +675,7 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 				.sizeId=${this._sizes[this._device]}
 				.treeVisible=${this._treeVisible}
 				.panelOpen=${this._panelOpen}
+				.showEmpty=${this._showEmpty}
 				.rendering=${this._status === 'rendering'}
 				.scale=${this._scale}
 				?readonly=${this._readonly}
@@ -672,6 +687,7 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 				@size-change=${this.#onSizeChange}
 				@toggle-tree=${() => this.#visualMode?.setShowTree(!this._treeVisible)}
 				@toggle-panel=${() => this.#setPanelOpen(!this._panelOpen)}
+				@toggle-empty=${() => this.#setShowEmpty(!this._showEmpty)}
 			></arjo-visual-editor-toolbar>
 			<div class="body ${this._resizing ? 'resizing' : ''}">
 				<div class="canvas">${this.#renderCanvas()}${this.#renderRichTextEditor()}</div>
@@ -813,6 +829,14 @@ function readPanelOpen() {
 		return localStorage.getItem(PANEL_STORAGE_KEY) !== 'false';
 	} catch {
 		return true;
+	}
+}
+
+function readShowEmpty() {
+	try {
+		return localStorage.getItem(SHOW_EMPTY_STORAGE_KEY) === 'true';
+	} catch {
+		return false;
 	}
 }
 

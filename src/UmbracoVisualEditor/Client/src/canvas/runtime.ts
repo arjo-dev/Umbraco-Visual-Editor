@@ -12,7 +12,8 @@
  *   on hovered and selected blocks, a drop line, autoscroll near the edges; Alt+Up/Down moves the selected block from
  *   the keyboard. Grid blocks can also be resized: a handle on the selected block's right edge changes its column span.
  * - Adding blocks (#28): "+" buttons on a hovered or selected block's top and bottom edges, and a placeholder in every
- *   empty grid area (also a drop target while dragging); the host opens the block catalogue.
+ *   empty grid area (also a drop target while dragging) and empty block property a template marks (#97); the host
+ *   opens the block catalogue. Placeholders are a line on hover, or boxes with room on the page (setShowEmpty).
  * - Live re-render (#18): a `render` message patches the newer page in (patch.ts) rather than reloading, then
  *   re-resolves the markers and keeps the selection, scroll position and focus. The page's scripts get events before
  *   and after it (BEFORE_RENDER_EVENT, RENDERED_EVENT), to set themselves up again.
@@ -30,7 +31,7 @@ import {
 	type HostMessage,
 	type TargetRef,
 } from '../protocol/index.js';
-import { readManifest, resolveMarkers } from './markers.js';
+import { readEmptyBlockSpots, readManifest, resolveMarkers } from './markers.js';
 import { InlineEditor, inlineEditableElement } from './inline-edit.js';
 import { RichTextEditState } from './rich-text-edit.js';
 import { guardNavigation } from './navigation.js';
@@ -67,6 +68,8 @@ export interface CanvasRuntime {
 	 * be hovered and selected (the side panel shows them, read-only), but nothing is edited from the page.
 	 */
 	setReadonly(readonly: boolean): void;
+	/** Give empty places to add blocks to room on the page (#97), rather than a line on hover. */
+	setShowEmpty(show: boolean): void;
 	setHighlight(target: TargetRef | null): void;
 	/** The words to use, in the backoffice user's language (#35). */
 	setStrings(strings: Partial<CanvasStrings>): void;
@@ -158,16 +161,43 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 		);
 	}
 
+	/** Empty places get room on the page (the toolbar's toggle, #97); otherwise they leave the layout alone. */
+	let showEmpty = false;
+	/** Elements given a height for an empty place, and the inline min-height they had before. */
+	const reserved = new Map<HTMLElement, string>();
+
 	/**
-	 * Placeholders in empty grid areas (#28): an empty area renders with no height, so it gets one (on the page, in
-	 * edit mode only; a re-render resets it, and this runs again) and a "+ Add block" button.
+	 * Placeholders in empty places blocks can be added to (#28): empty grid areas, and empty Block Lists and Grids a
+	 * template marks with `Html.VisualEditorEmptyBlocks` (#97). They render with no height, so they show a line with a
+	 * "+ Add block" button on hover; with `showEmpty` they get a height (on the page, in edit mode only; a re-render
+	 * resets it, and this runs again) and a dashed box.
 	 */
 	function refreshPlaceholders() {
-		const empty = readonly ? [] : gridContainersOf(index.targets).filter((c) => c.areaOwnerKey && !c.blocks.length);
-		for (const container of empty) {
-			const element = container.element as HTMLElement;
-			if (element.getBoundingClientRect().height < EMPTY_AREA_HEIGHT)
-				element.style.minHeight = `${EMPTY_AREA_HEIGHT}px`;
+		for (const [element, minHeight] of reserved) element.style.minHeight = minHeight;
+		reserved.clear();
+
+		const areas = readonly ? [] : gridContainersOf(index.targets).filter((c) => c.areaOwnerKey && !c.blocks.length);
+		const empty: Array<{ element: Element; at: BlockPosition }> = [
+			...areas.map((container) => ({
+				element: container.element,
+				at: {
+					ownerKey: container.ownerKey,
+					propertyAlias: container.propertyAlias,
+					areaKey: null,
+					index: 0,
+					areaOwnerKey: container.areaOwnerKey,
+					areaAlias: container.areaAlias,
+				},
+			})),
+			...(readonly ? [] : readEmptyBlockSpots(doc)),
+		];
+		if (showEmpty) {
+			for (const { element } of empty) {
+				const el = element as HTMLElement;
+				if (el.getBoundingClientRect().height >= EMPTY_AREA_HEIGHT) continue;
+				reserved.set(el, el.style.minHeight);
+				el.style.minHeight = `${EMPTY_AREA_HEIGHT}px`;
+			}
 		}
 		// Blocks with nothing to show yet (e.g. one just added): say where their content is edited.
 		const blank = readonly ? [] : index.targets.filter(isEmptyBlock);
@@ -178,21 +208,11 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 		}
 		overlay.setPlaceholders([
 			...blank.map((target) => ({ element: target.elements[0], label: strings.editInSidePanel })),
-			...empty.map((container) => ({
-				element: container.element,
+			...empty.map(({ element, at }) => ({
+				element,
 				label: strings.addBlock,
-				onInsert: () =>
-					channel?.send({
-						type: 'blockInsertRequest',
-						at: {
-							ownerKey: container.ownerKey,
-							propertyAlias: container.propertyAlias,
-							areaKey: null,
-							index: 0,
-							areaOwnerKey: container.areaOwnerKey,
-							areaAlias: container.areaAlias,
-						},
-					}),
+				line: !showEmpty,
+				onInsert: () => channel?.send({ type: 'blockInsertRequest', at }),
 			})),
 		]);
 	}
@@ -717,6 +737,11 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 			// Redraw the selection: its tools and handles depend on it.
 			overlay.setSelection(selected, selected ? index.ancestorsOf(selected) : []);
 		},
+		setShowEmpty(value) {
+			if (value === showEmpty) return;
+			showEmpty = value;
+			refreshPlaceholders();
+		},
 		setHighlight(ref) {
 			highlighted = ref;
 			overlay.setHighlight(index.find(ref));
@@ -758,6 +783,9 @@ export function handleHostMessage(runtime: CanvasRuntime, message: HostMessage) 
 			break;
 		case 'setReadonly':
 			runtime.setReadonly(message.readonly);
+			break;
+		case 'setShowEmpty':
+			runtime.setShowEmpty(message.show);
 			break;
 		case 'setStrings':
 			runtime.setStrings(message.strings);
