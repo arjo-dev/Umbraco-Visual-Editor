@@ -4,23 +4,20 @@ import { UMB_DOCUMENT_WORKSPACE_CONTEXT } from '@umbraco-cms/backoffice/document
 import { pageSettings, type ContainerModel, type PageSettingsTab, type PropertyModel } from './page-settings.js';
 
 /**
- * The side panel's Page settings view (#22): the document properties the page doesn't show (SEO and meta fields,
- * "hide from navigation", settings, or ones that are empty), grouped by the document type's tabs and groups. Each
- * uses the CMS's own editor, as in #19.
+ * The side panel's Page settings view (#22): all of the document's properties, as on the Content tab, grouped by the
+ * document type's tabs and groups: the ones on the page and the ones it doesn't show (SEO and meta fields, "hide from
+ * navigation", settings). Each uses the CMS's own editor, as in #19.
  */
 @customElement('arjo-visual-editor-page-settings')
 export class ArjoVisualEditorPageSettingsElement extends UmbLitElement {
-	/** Aliases of the document properties the canvas found on the page; undefined until it has connected. */
-	@property({ attribute: false }) visibleAliases?: ReadonlySet<string>;
-
-	@state() private _containers: ContainerModel[] = [];
-	@state() private _properties: PropertyModel[] = [];
-
 	/**
-	 * Properties listed since this view opened. They stay listed even once they show on the page (e.g. an empty field
-	 * you've just typed into), so the field you're editing doesn't disappear.
+	 * The document property whose rich text is being edited on the page (#57), if any: a note takes the place of its
+	 * editor, as in the Selection view, since a second editor on the same value would fight the one on the page.
 	 */
-	#listed = new Set<string>();
+	@property({ attribute: false }) editingOnPage: string | null = null;
+
+	@state() private _containers?: ContainerModel[];
+	@state() private _properties?: PropertyModel[];
 
 	constructor() {
 		super();
@@ -50,7 +47,10 @@ export class ArjoVisualEditorPageSettingsElement extends UmbLitElement {
 						${repeat(
 							group.aliases,
 							(alias) => alias,
-							(alias) => html`<umb-content-workspace-property .alias=${alias}></umb-content-workspace-property>`,
+							(alias) =>
+								alias === this.editingOnPage
+									? html`<p class="hint">${this.localize.term('arjoVisualEditor_richTextHint')}</p>`
+									: html`<umb-content-workspace-property .alias=${alias}></umb-content-workspace-property>`,
 						)}
 					</uui-box>
 				`,
@@ -59,13 +59,10 @@ export class ArjoVisualEditorPageSettingsElement extends UmbLitElement {
 	}
 
 	override render() {
-		if (!this.visibleAliases) return html`<uui-loader-bar></uui-loader-bar>`;
-		const visible = new Set([...this.visibleAliases].filter((alias) => !this.#listed.has(alias)));
-		const tabs = pageSettings(this._containers, this._properties, visible);
-		for (const alias of tabs.flatMap((t) => t.groups.flatMap((g) => g.aliases))) this.#listed.add(alias);
-		if (!tabs.length) return html`<p class="hint">${this.localize.term('arjoVisualEditor_allOnPage')}</p>`;
+		if (!this._containers || !this._properties) return html`<uui-loader-bar></uui-loader-bar>`;
+		const tabs = pageSettings(this._containers, this._properties);
+		if (!tabs.length) return html`<p class="hint">${this.localize.term('arjoVisualEditor_pageHasNoProperties')}</p>`;
 		return html`
-			<p class="hint">${this.localize.term('arjoVisualEditor_notOnPageHint')}</p>
 			${repeat(
 				tabs,
 				(tab) => tab.name,

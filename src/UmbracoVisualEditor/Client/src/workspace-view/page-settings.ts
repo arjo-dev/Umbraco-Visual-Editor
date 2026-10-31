@@ -1,6 +1,6 @@
 /**
- * Page settings (#22): the document properties that aren't shown on the page (SEO fields, "hide from navigation",
- * settings, or simply empty), grouped as on the Content tab: by tab, then group. Containers from the document type
+ * Page settings (#22): all of the document's properties, as on the Content tab (the page's own and the ones it doesn't
+ * show, such as SEO fields), grouped as there: by tab, then group. Containers from the document type
  * and its compositions are merged by name, as the Content tab does.
  */
 
@@ -38,13 +38,12 @@ interface Ordered<T> {
 const byOrder = <T>(a: Ordered<T>, b: Ordered<T>) => a.sortOrder - b.sortOrder;
 
 /**
- * Groups the properties not in `visibleAliases` by tab and group. Empty tabs and groups are left out; groups outside
- * any tab come first, as on the Content tab.
+ * Groups the properties by tab and group. Empty tabs and groups are left out; groups outside any tab come first, as on
+ * the Content tab.
  */
 export function pageSettings(
 	containers: readonly ContainerModel[],
 	properties: readonly PropertyModel[],
-	visibleAliases: ReadonlySet<string>,
 ): PageSettingsTab[] {
 	const byId = new Map(containers.map((c) => [c.id, c]));
 	// Tab name -> its sort order and its groups (group name -> properties). Merged by name across compositions.
@@ -59,7 +58,6 @@ export function pageSettings(
 	const groupOrder = new Map<string, number>();
 
 	for (const property of properties) {
-		if (visibleAliases.has(property.alias)) continue;
 		const container = property.container ? byId.get(property.container.id) : undefined;
 
 		let tabName: string | null = null;

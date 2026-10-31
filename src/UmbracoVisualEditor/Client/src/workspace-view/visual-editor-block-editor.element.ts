@@ -110,7 +110,7 @@ export class ArjoVisualEditorBlockEditorElement extends UmbLitElement {
 			value: entry.values.find((v) => v.alias === p.alias && (v.culture ?? null) === this.#cultureOf(type, p.alias))
 				?.value,
 		}));
-		const tabs = pageSettings(type.containers, type.properties, new Set());
+		const tabs = pageSettings(type.containers, type.properties);
 		if (!tabs.length) return html`<p class="hint">${this.localize.term('arjoVisualEditor_noProperties')}</p>`;
 
 		return html`
