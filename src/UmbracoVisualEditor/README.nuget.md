@@ -23,6 +23,12 @@ Install the package version that matches your Umbraco version's major:
 dotnet add package Arjo.UmbracoVisualEditor
 ```
 
+Then add this line to your site's `Views/_ViewImports.cshtml`, so the Visual editor can show where to add the first block to an empty Block List or Block Grid:
+
+```cshtml
+@using UmbracoVisualEditor.Extensions
+```
+
 Run the site and open a document that has a template: it gets a **Visual editor** tab next to **Content**.
 
 ## Configure (optional)

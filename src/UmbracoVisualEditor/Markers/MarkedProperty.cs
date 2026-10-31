@@ -1,3 +1,4 @@
+using Umbraco.Cms.Core.Models.Blocks;
 using Umbraco.Cms.Core.Models.PublishedContent;
 using Umbraco.Cms.Core.Strings;
 using Umbraco.Extensions;
@@ -6,7 +7,8 @@ namespace UmbracoVisualEditor.Markers;
 
 /// <summary>
 /// Decorates a published property so its converted value carries a marker when the page renders it:
-/// plain text gets an invisible <see cref="Stega"/> prefix; rich text (HTML) is wrapped in marker comments.
+/// plain text gets an invisible <see cref="Stega"/> prefix; rich text (HTML) is wrapped in marker comments; an empty
+/// Block List or Block Grid is remembered as this property's (<see cref="MarkerRegistry.EmptyBlocksFor"/>).
 /// Other value types (numbers, dates, pickers, media) pass through unmarked.
 /// </summary>
 internal sealed class MarkedProperty(
@@ -51,9 +53,23 @@ internal sealed class MarkedProperty(
                 var id = Register(culture, segment);
                 return new HtmlEncodedString($"<!--uve:p:{id}-->{html.ToHtmlString()}<!--/uve:p:{id}-->");
 
+            // Empty block editors (#97): a value of their own rather than Umbraco's shared Empty, so the template
+            // helpers can tell whose it is and mark where it would be. Still empty, so templates see no difference.
+            case BlockGridModel { Count: 0 } grid:
+                return EmptyBlocks(new BlockGridModel([], grid.GridColumns), isGrid: true);
+
+            case BlockListModel { Count: 0 }:
+                return EmptyBlocks(new BlockListModel([]), isGrid: false);
+
             default:
                 return value;
         }
+    }
+
+    private object EmptyBlocks(object value, bool isGrid)
+    {
+        registry.RegisterEmptyBlocks(value, new EmptyBlocksSpot(ownerKey, ownerIsBlock, Alias, isGrid));
+        return value;
     }
 
     private int Register(string? culture, string? segment)

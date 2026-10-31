@@ -24,7 +24,15 @@ Install the package version that matches your Umbraco version's major:
 dotnet add package Arjo.UmbracoVisualEditor
 ```
 
-Run the site and open a document that has a template: it gets a **Visual editor** tab next to **Content**. Nothing else is needed.
+Then add this line to your site's `Views/_ViewImports.cshtml`:
+
+```cshtml
+@using UmbracoVisualEditor.Extensions
+```
+
+It lets the Visual editor show where to add the first block to an empty Block List or Block Grid (see [Empty Block Lists and Block Grids](#empty-block-lists-and-block-grids)). Everything else works without it.
+
+Run the site and open a document that has a template: it gets a **Visual editor** tab next to **Content**.
 
 Documents open on the **Content** tab, as usual. Anyone who wants them to open in the Visual editor can choose that in their profile: click your avatar, then under **Visual editor**, set **Open documents in**.
 
@@ -48,6 +56,7 @@ The editor is offered on every document type that has a template. To narrow that
 | `AllowedDocumentTypes` | `[]` | Document type aliases to offer it for. Empty means all of them. |
 | `ExcludedDocumentTypes` | `[]` | Document type aliases never to offer it for. |
 | `EnablePropertyLevelEditing` | `true` | Whether text and rich text can be edited on the page itself. When `false`, double-clicking them (or pressing Enter) opens them in the side panel instead. Blocks can still be selected, moved, added and deleted on the page. |
+| `AutoMarkEmptyBlocks` | `true` | Whether `GetBlockListHtml` and `GetBlockGridHtml` mark where an empty Block List or Block Grid would be, so its first block can be added on the page. See [docs/compatibility.md](docs/compatibility.md#empty-block-lists-and-block-grids). |
 
 Aliases are case-insensitive. The site fails to start if an alias is blank or appears in both lists. The Visual tab is hidden where the editor isn't offered, and the render endpoint refuses those documents with a 403.
 
@@ -68,7 +77,23 @@ The Visual editor recognises content however templates write it: models (ModelsB
 }
 ```
 
-What works on its own, where the helper is needed, and the limitations are in [docs/compatibility.md](docs/compatibility.md). One example of a limitation: text the template changes before showing it can only be edited in the side panel.
+### Empty Block Lists and Block Grids
+
+Umbraco's `GetBlockListHtml` and `GetBlockGridHtml` (and their async versions) write nothing at all for an empty Block List or Block Grid, so the page has nothing to show where its first block would go. The package has its own versions of those helpers, which write the same output and, in the Visual editor only, mark that spot. Hovering over it shows a line with an **Add block** button.
+
+Your views use the package's versions once they import its namespace, so you need this in `Views/_ViewImports.cshtml`:
+
+```cshtml
+@using UmbracoVisualEditor.Extensions
+```
+
+Your `GetBlockListHtml` and `GetBlockGridHtml` calls stay as they are. Without the line, the first block can only be added from the side panel (**Page settings**).
+
+The package also adds the namespace as a global using, but that only reaches views compiled at build time, not ones compiled at runtime (ModelsBuilder's `InMemoryAuto` mode, Umbraco's default). The `_ViewImports.cshtml` line works either way. To turn the marking off, set `VisualEditor:AutoMarkEmptyBlocks` to `false`. A Block List or Block Grid rendered without those helpers, by a loop of its own say, can be marked with `@Html.VisualEditorEmptyBlocks(Model, "alias")` (see [docs/compatibility.md](docs/compatibility.md#empty-block-lists-and-block-grids)).
+
+### More
+
+What works on its own, where the helpers are needed, and the limitations are in [docs/compatibility.md](docs/compatibility.md). One example of a limitation: text the template changes before showing it can only be edited in the side panel.
 
 The visual editor uses DOM replacement in order to change content when you change a property in the back office, therefore any JavaScript based rendering won't work after the initial view. We inject a CSS file into the back office render so you can adjust the page view to help this, which will only show in the back office not on the front end. Add it to the site as `wwwroot/App_Plugins/ArjoVisualEditor/backoffice-render.css`: it's linked at the end of the page's `<head>`, after the template's own styles, and only if the site has it (see [docs/compatibility.md](docs/compatibility.md#styles-for-the-visual-editor-only)). Scripts can also set themselves up again after each re-render: the Visual editor fires `visual-editor:before-render` and `visual-editor:rendered` on the page's `document`, and loads the site's `wwwroot/App_Plugins/ArjoVisualEditor/backoffice-render.js` if it has one (see [docs/compatibility.md](docs/compatibility.md#scripts-for-the-visual-editor-only-and-re-render-events)).
 

@@ -3,4 +3,15 @@
   <ItemGroup>
     <UmbracoJsonSchemaFiles Include="$(MSBuildThisFileDirectory)..\appsettings-schema.UmbracoVisualEditor.json" Weight="-70" />
   </ItemGroup>
+
+  <!--
+    Imports UmbracoVisualEditor.Extensions everywhere, views included, so Umbraco's GetBlockListHtml and GetBlockGridHtml
+    calls mark empty Block Lists and Grids for the Visual editor (#97) with no template changes. The namespace holds only
+    those helpers, which write what Umbraco's do. Reaches views compiled at build time; runtime-compiled views
+    (InMemoryAuto) need @using UmbracoVisualEditor.Extensions in _ViewImports.cshtml. Turn it off with <VisualEditorGlobalUsing>false</VisualEditorGlobalUsing>; to keep the
+    using but stop the marking, set VisualEditor:AutoMarkEmptyBlocks to false in appsettings.
+  -->
+  <ItemGroup Condition="'$(VisualEditorGlobalUsing)' != 'false'">
+    <Using Include="UmbracoVisualEditor.Extensions" />
+  </ItemGroup>
 </Project>

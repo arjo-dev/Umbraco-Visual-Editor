@@ -57,10 +57,15 @@ public static class VisualEditorHtmlHelperExtensions
     /// <summary>
     /// Marks where an empty Block List or Block Grid would be, so the Visual editor can show an "Add block" spot there
     /// (#97). Umbraco's <c>GetBlockListHtml</c> and <c>GetBlockGridHtml</c> write nothing at all for an empty value, not
-    /// even their partial, so there's nothing on the page to mark. Put it next to the call:
+    /// even their partial, so there's nothing on the page to mark.
+    /// <para>
+    /// Views that import <c>UmbracoVisualEditor.Extensions</c> get this from those helpers already (see
+    /// <see cref="Extensions.VisualEditorBlockTemplateExtensions"/>). Use it where a template renders a Block List or
+    /// Grid some other way, e.g. its own loop:
+    /// </para>
     /// <code>
-    /// @await Html.GetBlockGridHtmlAsync(Model, "bodyText")
-    /// @Html.VisualEditorEmptyBlocks(Model, "bodyText")
+    /// @foreach (var block in Model.Cards) { … }
+    /// @Html.VisualEditorEmptyBlocks(Model, "cards")
     /// </code>
     /// Writes nothing on the live site, or when the property has blocks. In the Visual editor, an empty property gets
     /// an empty element with no height, which doesn't change the page's layout.
@@ -69,41 +74,36 @@ public static class VisualEditorHtmlHelperExtensions
     /// <param name="owner">The document, or a block's content element, with the property.</param>
     /// <param name="propertyAlias">The Block List or Block Grid property's alias.</param>
     public static IHtmlContent VisualEditorEmptyBlocks(this IHtmlHelper html, IPublishedElement owner, string propertyAlias)
+        => EditModeRequest.Get(html.ViewContext.HttpContext) is null
+            ? HtmlString.Empty
+            : EmptyBlocksMarker(html, owner.GetProperty(propertyAlias)?.GetValue());
+
+    /// <summary>
+    /// The marker for an empty Block List or Block Grid <paramref name="value"/>: an element with no height, where the
+    /// Visual editor shows an "Add block" spot. Nothing outside the Visual editor, or for a value that isn't an empty one
+    /// of the edited document (or its blocks); only those are remembered when their property converts them.
+    /// </summary>
+    internal static IHtmlContent EmptyBlocksMarker(IHtmlHelper html, object? value)
     {
-        EditModeRequest? editMode = EditModeRequest.Get(html.ViewContext.HttpContext);
-        if (editMode is null)
+        EmptyBlocksSpot? spot = EditModeRequest.Get(html.ViewContext.HttpContext)?.Markers.EmptyBlocksFor(value);
+        if (spot is null)
         {
             return HtmlString.Empty;
         }
 
-        // The edited document, or one of its own blocks: not another page's rendered here too.
-        var ownerIsBlock = owner.Key != editMode.Session.DocumentKey;
-        if (ownerIsBlock && !editMode.BlockKeys.Contains(owner.Key))
+        var json = JsonSerializer.Serialize(new
         {
-            return HtmlString.Empty;
-        }
-
-        IPublishedProperty? property = owner.GetProperty(propertyAlias);
-        var editorAlias = property?.PropertyType.EditorAlias;
-        if (property is null || !BlockContainerEditors.Contains(editorAlias!)
-            || property.GetValue() is IEnumerable<IBlockReference> blocks && blocks.Any())
-        {
-            return HtmlString.Empty;
-        }
-
-        var spot = JsonSerializer.Serialize(
-            new { ownerKey = owner.Key, ownerIsBlock, propertyAlias = property.Alias, editorAlias });
+            ownerKey = spot.OwnerKey,
+            ownerIsBlock = spot.OwnerIsBlock,
+            propertyAlias = spot.PropertyAlias,
+            editorAlias = spot.IsGrid
+                ? Umbraco.Cms.Core.Constants.PropertyEditors.Aliases.BlockGrid
+                : Umbraco.Cms.Core.Constants.PropertyEditors.Aliases.BlockList,
+        });
         return new HtmlString(
-            $"<div data-uve-empty-blocks=\"{HtmlEncoder.Default.Encode(spot)}\" " +
+            $"<div data-uve-empty-blocks=\"{HtmlEncoder.Default.Encode(json)}\" " +
             "style=\"display:block;height:0;margin:0;padding:0;border:0\"></div>");
     }
-
-    /// <summary>Block editors whose empty value <see cref="VisualEditorEmptyBlocks"/> can mark.</summary>
-    private static readonly HashSet<string> BlockContainerEditors = new(StringComparer.OrdinalIgnoreCase)
-    {
-        Umbraco.Cms.Core.Constants.PropertyEditors.Aliases.BlockList,
-        Umbraco.Cms.Core.Constants.PropertyEditors.Aliases.BlockGrid,
-    };
 
     private sealed class BlockMarker(TextWriter writer, int id) : IDisposable
     {

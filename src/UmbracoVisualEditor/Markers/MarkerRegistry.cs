@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
 using System.Text.Json.Serialization;
 
 namespace UmbracoVisualEditor.Markers;
@@ -31,11 +32,28 @@ public sealed record MarkerInfo(
     string? OwnerLabel = null,
     BlockPlacement? Block = null);
 
+/// <summary>
+/// Whose empty Block List or Block Grid a converted value is (#97): where a block added to it on the page goes.
+/// <see cref="IsGrid"/> says which, from the value's type.
+/// </summary>
+internal sealed record EmptyBlocksSpot(Guid OwnerKey, bool OwnerIsBlock, string PropertyAlias, bool IsGrid);
+
 /// <summary>Assigns small integer ids to marker targets during one render; each target gets one id.</summary>
 public sealed class MarkerRegistry
 {
     private readonly ConcurrentDictionary<(MarkerKind, Guid, string?, string?), MarkerInfo> _markers = new();
+    private readonly ConditionalWeakTable<object, EmptyBlocksSpot> _emptyBlocks = new();
     private int _nextId;
+
+    /// <summary>
+    /// Remembers whose an empty block value is. Umbraco's helpers only get the value, which doesn't know its
+    /// property, so each empty value is its own instance (see <see cref="MarkedProperty"/>), looked up here.
+    /// </summary>
+    internal void RegisterEmptyBlocks(object value, EmptyBlocksSpot spot) => _emptyBlocks.AddOrUpdate(value, spot);
+
+    /// <summary>Whose empty Block List or Block Grid <paramref name="value"/> is; null when it isn't one we marked.</summary>
+    internal EmptyBlocksSpot? EmptyBlocksFor(object? value)
+        => value is not null && _emptyBlocks.TryGetValue(value, out EmptyBlocksSpot? spot) ? spot : null;
 
     public int Register(
         MarkerKind kind,
