@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json.schemastore.org/launchsettings.json",
+  "iisSettings": {
+    "windowsAuthentication": false,
+    "anonymousAuthentication": true,
+    "iisExpress": {
+      "applicationUrl": "http://localhost:13496",
+      "sslPort": 44315
+    }
+  },
+  "profiles": {
+    "IIS Express": {
+      "commandName": "IISExpress",
+      "launchBrowser": true,
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      }
+    },
+    "Umbraco.Web.UI": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "launchBrowser": true,
+      "applicationUrl": "https://localhost:44315;http://localhost:13496",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      }
+    },
+    "Umbraco 17": {
+      "commandName": "Executable",
+      "executablePath": "dotnet",
+      "commandLineArgs": "run --project \"$(ProjectPath)\" -p:UmbracoVersion=17.7.2 --launch-profile Umbraco.Web.UI",
+      "workingDirectory": "$(ProjectDir)"
+    }
+  }
+}

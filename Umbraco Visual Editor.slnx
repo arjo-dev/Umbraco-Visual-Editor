@@ -6,5 +6,6 @@
     <Project Path="tests/UmbracoVisualEditor.Tests/UmbracoVisualEditor.Tests.csproj" />
   </Folder>
   <Project Path="Umbraco Visual Editor.Compat Site/Umbraco Visual Editor.Compat Site.csproj" />
+  <Project Path="Umbraco Visual Editor.Test Site.v17/Umbraco Visual Editor.Test Site.v17.csproj" />
   <Project Path="Umbraco Visual Editor.Test Site/Umbraco Visual Editor.Test Site.csproj" />
 </Solution>
