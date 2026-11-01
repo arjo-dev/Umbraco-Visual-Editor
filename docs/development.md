@@ -36,6 +36,22 @@ The passwords and secrets above can also be supplied as environment variables, w
 | Admin password | `Umbraco__CMS__Unattended__UnattendedUserPassword` |
 | API client secret | `TestSite__ApiUser__ClientSecret` |
 
+## Development on v17
+
+As the main project defaults to 18 we need to pass in a parameter to the build to get it to output for v17. This can't be ran using Visual Studio itself and needs to be driven from the command line, as such:
+
+```bash
+dotnet run --project "Umbraco Visual Editor.Test Site.v17" -p:UmbracoVersion=17.8.0
+```
+
+You should also start the build task running for the extension project to compile and output any TS package changes by:
+
+```bash
+cd src\UmbracoVisualEditor\Client
+npm run watch
+```
+
+
 ## Extension development
 
 `dotnet build` also builds the extension's client code in `src/UmbracoVisualEditor/Client`. For hot reload while editing TypeScript:
