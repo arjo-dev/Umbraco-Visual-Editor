@@ -60,7 +60,7 @@ In the Visual editor, and only there, the page is rendered with markers (ADR 000
 A block is recognised by the view that renders it: one whose model is the block, or the block's content element (`block.Content`, often a ModelsBuilder model). Markup a loop writes itself, with no view per block, can't be recognised, and needs marking by hand:
 
 ```cshtml
-@using UmbracoVisualEditor
+@using UmbracoVisualEditor.Extensions
 
 @foreach (var block in Model.Cards)
 {
@@ -102,7 +102,7 @@ The namespace holds only these helpers, so importing it can't clash with a site'
 For a Block List or Block Grid a template renders some other way, such as its own loop, mark where it would be by hand:
 
 ```cshtml
-@using UmbracoVisualEditor
+@using UmbracoVisualEditor.Extensions
 
 @foreach (var block in Model.Cards) { … }
 @Html.VisualEditorEmptyBlocks(Model, "cards")
@@ -127,6 +127,33 @@ This helps where the page relies on scripts that don't run, or don't run the sam
 ```
 
 The package doesn't include the file: it's only linked if the site has it, and changes apply on the next render, with no restart. Put it in the site's own `wwwroot`.
+
+The Visual editor also adds the class `uve-editing` to the page's `<html>` element, after any classes the page gives it. Use it to keep Visual-editor rules in the site's own stylesheet instead:
+
+```css
+.uve-editing .reveal { opacity: 1; transform: none; }
+.uve-editing #cookie-banner { display: none; }
+```
+
+The class is on every render, re-renders included, and never on the live site or in preview. Pages with no `<html>` tag don't get it.
+
+### Markup for the Visual editor only
+
+Templates, partials and view components can check whether they're rendering for the Visual editor and add or leave out markup there:
+
+```cshtml
+@using UmbracoVisualEditor.Extensions
+
+@if (!Html.IsVisualEditor())
+{
+    <script src="/js/analytics.js"></script>
+    <partial name="CookieBanner" />
+}
+```
+
+It suits third-party scripts (analytics, consent banners, chat widgets) that shouldn't run in the canvas, and placeholders or hints only editors should see. Where there's no `Html`, in a view component or a render controller say, `HttpContext.IsVisualEditor()` does the same. Both are false on the live site and in Umbraco's preview. Preview has `UmbracoContext.InPreviewMode` for that. The package imports `UmbracoVisualEditor.Extensions` into views compiled at build time, so neither needs a `@using` there, nor in the site's C# code. Views compiled at runtime (InMemoryAuto) need it in `_ViewImports.cshtml`.
+
+Markup that depends on the check doesn't reach visitors through Umbraco's caches. Render sessions are never output-cached ([see below](#output-caching-and-render-sessions)), and `CachedPartial` neither reads nor stores its cache during them. A site's own caches, an `IMemoryCache` in a view component say, aren't covered, so don't cache output that depends on `IsVisualEditor()` there.
 
 ### Scripts for the Visual editor only, and re-render events
 

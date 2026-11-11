@@ -9,6 +9,11 @@
 
 @await Html.PartialAsync("~/Views/Partials/pageHeader.cshtml", new PageHeaderViewModel(Model.Name, Model.Title, Model.Subtitle, Model.MainImage))
 
+@if (Html.IsVisualEditor())
+{
+    <p style="text-align:center">Editting some content are we? Good for you</p>    
+}
+
 @if (Model.ContentRows != null)
 {
     <article>

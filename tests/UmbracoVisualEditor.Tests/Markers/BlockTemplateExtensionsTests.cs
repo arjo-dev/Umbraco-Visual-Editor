@@ -107,4 +107,19 @@ public class BlockTemplateExtensionsTests
 
         Assert.Equal(string.Empty, Text(html.GetBlockListHtml(BlockListModel.Empty)));
     }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void IsVisualEditor_IsTrueOnlyInARenderSession(bool editMode)
+    {
+        IHtmlHelper<object> html = Html(editMode);
+
+        Assert.Equal(editMode, html.IsVisualEditor());
+        Assert.Equal(editMode, html.ViewContext.HttpContext.IsVisualEditor());
+    }
+
+    [Fact]
+    public void IsVisualEditor_IsFalseWithoutARequest()
+        => Assert.False(((HttpContext?)null).IsVisualEditor());
 }
