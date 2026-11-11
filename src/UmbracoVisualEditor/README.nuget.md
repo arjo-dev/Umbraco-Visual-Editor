@@ -53,7 +53,7 @@ By default the Visual editor is offered for every document type with a template.
 The Visual editor reads your templates as they are: models, partials, view components, block views and cached partials. Blocks are recognised by the view that renders them, whether it gets the block or its element. For markup a loop writes itself, with no view per block, there's a helper:
 
 ```cshtml
-@using UmbracoVisualEditor
+@using UmbracoVisualEditor.Extensions
 
 @foreach (var block in Model.Cards)
 {
@@ -67,6 +67,9 @@ The Visual editor reads your templates as they are: models, partials, view compo
 
 Outside the Visual editor, the helper writes nothing.
 
+Templates can also check for the Visual editor themselves. For example, `@if (!Html.IsVisualEditor()) { … }` leaves out analytics or a cookie banner there. Use `HttpContext.IsVisualEditor()` where there's no `Html`. For CSS, the page's `<html>` element has the class `uve-editing` in the Visual editor. Neither applies on the live site or in preview.
+
+
 ## Render CSS and JS injection
 
 Because of the way we load the content into the viewer there can be issues displaying the content after change; for example if you have an animate on scroll effect in place. We inject a single CSS and JS file into the rendered view (back office only) so you can write your own corrections/workarounds for this.  
@@ -77,3 +80,5 @@ As well as just loading in these scripts we also fire events on the `document` w
   
 `visual-editor:before-render` happens just before we render the new content.  
 `visual-editor:rendered` happens just after.  
+  
+For pur CSS fixes, the class `uve-editing` is added to the HTML element only when rendering within the Visual Editor  .

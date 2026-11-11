@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using UmbracoVisualEditor.Rendering;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -171,7 +172,7 @@ internal sealed class MarkerInjectionMiddleware(RequestDelegate next)
     }
 
     /// <summary>
-    /// Adds the marker manifest, the site's render script if it has one (<paramref name="siteScriptUrl"/>) and the canvas
+    /// Adds <see cref="Constants.HtmlClass"/> to <c>&lt;html&gt;</c> and the marker manifest, the site's render script if it has one (<paramref name="siteScriptUrl"/>) and the canvas
     /// script (<paramref name="scriptUrl"/>) before <c>&lt;/body&gt;</c> and, if the site has one
     /// (<paramref name="stylesheetUrl"/>), links the render stylesheet before <c>&lt;/head&gt;</c>: after the template's
     /// own styles, so it wins ties with them.
@@ -190,6 +191,7 @@ internal sealed class MarkerInjectionMiddleware(RequestDelegate next)
             $"<script type=\"module\" src=\"{scriptUrl}\"></script>";
         var link = stylesheetUrl is null ? string.Empty : $"<link rel=\"stylesheet\" href=\"{stylesheetUrl}\">";
 
+        html = AddHtmlClass(html);
         var headEnd = html.IndexOf("</head>", StringComparison.OrdinalIgnoreCase);
         if (headEnd < 0)
         {
@@ -201,5 +203,53 @@ internal sealed class MarkerInjectionMiddleware(RequestDelegate next)
         var bodyEnd = html.LastIndexOf("</body>", StringComparison.OrdinalIgnoreCase);
         html = bodyEnd >= 0 ? html.Insert(bodyEnd, scripts) : html + scripts;
         return headEnd >= 0 ? html.Insert(headEnd, link) : html;
+    }
+
+    private const string HtmlClass = UmbracoVisualEditor.Constants.HtmlClass;
+
+    // The first <html> start tag (not <html-thing>), and its class attribute if it has one.
+    private static readonly Regex HtmlStartTag = new(
+        @"<html(?=[\s>/])(?<attrs>[^>]*)>",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
+    private static readonly Regex ClassAttribute = new(
+        @"(?<=\s)class\s*=\s*(?:""(?<v>[^""]*)""|'(?<v>[^']*)'|(?<v>[^\s""'=<>`]+))",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
+    /// <summary>
+    /// Adds <see cref="Constants.HtmlClass"/> to the page's <c>&lt;html&gt;</c> element, keeping any classes it
+    /// has, so a site's CSS can target the Visual editor. Every render (re-renders too) comes through here, so the class
+    /// stays when the canvas patches a new render in. Pages without an <c>&lt;html&gt;</c> tag are left as they are.
+    /// </summary>
+    internal static string AddHtmlClass(string html)
+    {
+        Match tag = HtmlStartTag.Match(html);
+        if (!tag.Success)
+        {
+            return html;
+        }
+
+        Group attrs = tag.Groups["attrs"];
+        Match existing = ClassAttribute.Match(attrs.Value);
+        string updated;
+        if (!existing.Success)
+        {
+            // Before a self-closing slash, if the tag has one.
+            var insertAt = attrs.Value.TrimEnd().EndsWith('/') ? attrs.Value.LastIndexOf('/') : attrs.Value.Length;
+            updated = attrs.Value.Insert(insertAt, $" class=\"{HtmlClass}\"");
+        }
+        else
+        {
+            var classes = existing.Groups["v"].Value;
+            if (classes.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Contains(HtmlClass))
+            {
+                return html;
+            }
+
+            var value = string.IsNullOrWhiteSpace(classes) ? HtmlClass : $"{classes.Replace("\"", "&quot;")} {HtmlClass}";
+            updated = attrs.Value.Remove(existing.Index, existing.Length).Insert(existing.Index, $"class=\"{value}\"");
+        }
+
+        return html.Remove(attrs.Index, attrs.Length).Insert(attrs.Index, updated);
     }
 }

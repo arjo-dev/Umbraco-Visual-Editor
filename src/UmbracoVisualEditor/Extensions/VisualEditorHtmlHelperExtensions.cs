@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Mvc.Rendering;
 using Umbraco.Cms.Core.Models.Blocks;
 using Umbraco.Cms.Core.Models.PublishedContent;
 
-namespace UmbracoVisualEditor;
+namespace UmbracoVisualEditor.Extensions;
 
 /// <summary>
 /// Opt-in helpers for templates the Visual editor can't read on its own (#38). See docs/compatibility.md.
@@ -14,6 +14,19 @@ namespace UmbracoVisualEditor;
 /// </summary>
 public static class VisualEditorHtmlHelperExtensions
 {
+    /// <summary>
+    /// Whether the page is being rendered for the Visual editor (a render session), so a template can add or leave out
+    /// markup there only:
+    /// <code>
+    /// @if (!Html.IsVisualEditor())
+    /// {
+    ///     &lt;script src="/js/analytics.js"&gt;&lt;/script&gt;
+    /// }
+    /// </code>
+    /// False on the live site and in Umbraco's preview. See <see cref="VisualEditorHttpContextExtensions.IsVisualEditor"/>.
+    /// </summary>
+    public static bool IsVisualEditor(this IHtmlHelper html) => html.ViewContext.HttpContext.IsVisualEditor();
+
     /// <summary>
     /// Marks the markup written inside the <c>using</c> as a block, so the Visual editor can select, move and edit it.
     /// Blocks are marked automatically when a view's model is the block (<see cref="IBlockReference"/>) or its content
@@ -60,7 +73,7 @@ public static class VisualEditorHtmlHelperExtensions
     /// even their partial, so there's nothing on the page to mark.
     /// <para>
     /// Views that import <c>UmbracoVisualEditor.Extensions</c> get this from those helpers already (see
-    /// <see cref="Extensions.VisualEditorBlockTemplateExtensions"/>). Use it where a template renders a Block List or
+    /// <see cref="VisualEditorBlockTemplateExtensions"/>). Use it where a template renders a Block List or
     /// Grid some other way, e.g. its own loop:
     /// </para>
     /// <code>

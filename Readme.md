@@ -65,7 +65,7 @@ Aliases are case-insensitive. The site fails to start if an alias is blank or ap
 The Visual editor recognises content however templates write it: models (ModelsBuilder or compiled), `Value()`, partials, block views, view components and cached partials. Blocks are recognised by the view that renders them, whether it gets the block or just its element (`block.Content`). Markup a loop writes itself, with no view per block, can't be recognised on its own. For that there's `Html.VisualEditorBlock`:
 
 ```cshtml
-@using UmbracoVisualEditor
+@using UmbracoVisualEditor.Extensions
 
 @foreach (var block in Model.Cards)
 {
@@ -96,6 +96,8 @@ The package also adds the namespace as a global using, but that only reaches vie
 What works on its own, where the helpers are needed, and the limitations are in [docs/compatibility.md](docs/compatibility.md). One example of a limitation: text the template changes before showing it can only be edited in the side panel.
 
 The visual editor uses DOM replacement in order to change content when you change a property in the back office, therefore any JavaScript based rendering won't work after the initial view. We inject a CSS file into the back office render so you can adjust the page view to help this, which will only show in the back office not on the front end. Add it to the site as `wwwroot/App_Plugins/ArjoVisualEditor/backoffice-render.css`: it's linked at the end of the page's `<head>`, after the template's own styles, and only if the site has it (see [docs/compatibility.md](docs/compatibility.md#styles-for-the-visual-editor-only)). Scripts can also set themselves up again after each re-render: the Visual editor fires `visual-editor:before-render` and `visual-editor:rendered` on the page's `document`, and loads the site's `wwwroot/App_Plugins/ArjoVisualEditor/backoffice-render.js` if it has one (see [docs/compatibility.md](docs/compatibility.md#scripts-for-the-visual-editor-only-and-re-render-events)).
+
+Templates can also check for the Visual editor themselves. For example, `@if (!Html.IsVisualEditor()) { … }` leaves out analytics or a cookie banner there. Use `HttpContext.IsVisualEditor()` where there's no `Html`. For CSS, the page's `<html>` element has the class `uve-editing` in the Visual editor. Neither applies on the live site or in preview (see [docs/compatibility.md](docs/compatibility.md#markup-for-the-visual-editor-only)).
 
 ## Security
 

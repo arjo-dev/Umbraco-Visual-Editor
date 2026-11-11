@@ -23,7 +23,8 @@ namespace UmbracoVisualEditor.Extensions;
 /// <c>@using UmbracoVisualEditor.Extensions</c> in <c>_ViewImports.cshtml</c>. See docs/compatibility.md.
 /// </para>
 /// Outside the Visual editor, or with <see cref="VisualEditorOptions.AutoMarkEmptyBlocks"/> off, they only call
-/// Umbraco's. This namespace holds nothing else, so importing it everywhere can't clash with a site's own names.
+/// Umbraco's. The namespace holds only these and the Visual editor's own <c>Html</c> helpers
+/// (<see cref="VisualEditorHtmlHelperExtensions"/>) and <see cref="VisualEditorHttpContextExtensions"/>, all named for it, so importing it everywhere can't clash with a site's names.
 /// </summary>
 public static class VisualEditorBlockTemplateExtensions
 {
