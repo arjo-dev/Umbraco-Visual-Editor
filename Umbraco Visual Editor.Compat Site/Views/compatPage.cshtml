@@ -23,6 +23,10 @@
 </head>
 <body>
     <main>
+        @if (Html.IsVisualEditor())
+        {
+            <p style="text-align:center">Welcome to the Visual Editor for Umbraco!</p>
+        }
         <h1>@Model.Title</h1>
 
         <div>
@@ -31,6 +35,7 @@
             <h2>Cards</h2>
             @* A hand-rolled loop with a view of its own: the partial gets the block, so it's marked automatically. *@
             <div class="cards">
+                @Html.VisualEditorEmptyBlocks(Model, "cards")
                 @foreach (BlockListItem block in Model.Cards ?? Enumerable.Empty<BlockListItem>())
                 {
                     @await Html.PartialAsync("Cards/Card", block)
@@ -40,6 +45,7 @@
             <h2>More cards</h2>
             @* The partial only gets the element (block.Content): still marked automatically, by the element. *@
             <div class="more-cards">
+                @Html.VisualEditorEmptyBlocks(Model, "moreCards")
                 @foreach (BlockListItem block in Model.MoreCards ?? Enumerable.Empty<BlockListItem>())
                 {
                     @await Html.PartialAsync("Cards/CardElement", block.Content)
@@ -49,6 +55,7 @@
             <h2>Inline cards</h2>
             @* Markup written in the loop itself: no view per block to recognise it by, so the opt-in helper marks it. *@
             <div class="inline-cards">
+                @Html.VisualEditorEmptyBlocks(Model, "inlineCards")
                 @foreach (BlockListItem block in Model.InlineCards ?? Enumerable.Empty<BlockListItem>())
                 {
                     var card = (CompatCard)block.Content;
