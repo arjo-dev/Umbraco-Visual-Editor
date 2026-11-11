@@ -67,7 +67,7 @@ The Visual editor reads your templates as they are: models, partials, view compo
 
 Outside the Visual editor, the helper writes nothing.
 
-Templates can also check for the Visual editor themselves. For example, `@if (!Html.IsVisualEditor()) { … }` leaves out analytics or a cookie banner there. Use `HttpContext.IsVisualEditor()` where there's no `Html`. For CSS, the page's `<html>` element has the class `uve-editing` in the Visual editor. Neither applies on the live site or in preview.
+Templates can also check for the Visual editor themselves. For example, `@if (!Html.IsVisualEditor()) { ... }` leaves out analytics or a cookie banner there. Use `HttpContext.IsVisualEditor()` where there's no `Html`. For CSS, the page's `<html>` element has the class `uve-editing` in the Visual editor. Neither applies on the live site or in preview.
 
 
 ## Render CSS and JS injection
@@ -81,4 +81,4 @@ As well as just loading in these scripts we also fire events on the `document` w
 `visual-editor:before-render` happens just before we render the new content.  
 `visual-editor:rendered` happens just after.  
   
-For pur CSS fixes, the class `uve-editing` is added to the HTML element only when rendering within the Visual Editor  .
+For pure CSS fixes, the class `uve-editing` is added to the HTML element only when rendering within the Visual Editor  .
