@@ -24,12 +24,6 @@
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"
       }
-    },
-    "Umbraco 17": {
-      "commandName": "Executable",
-      "executablePath": "dotnet",
-      "commandLineArgs": "run --project \"$(ProjectPath)\" -p:UmbracoVersion=17.7.2 --launch-profile Umbraco.Web.UI",
-      "workingDirectory": "$(ProjectDir)"
     }
   }
 }

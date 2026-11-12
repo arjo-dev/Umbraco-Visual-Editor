@@ -23,7 +23,13 @@
       "applicationUrl": "https://localhost:44394;http://localhost:14175",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"
-      }      
+      }
+    },
+    "Umbraco 18": {
+      "commandName": "Executable",
+      "executablePath": "dotnet",
+      "commandLineArgs": "run --project \"$(ProjectPath)\" -p:UmbracoMajor=18 --launch-profile Umbraco.Web.UI",
+      "workingDirectory": "$(ProjectDir)"
     }
   }
 }

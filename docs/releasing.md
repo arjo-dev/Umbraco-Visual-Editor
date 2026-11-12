@@ -38,19 +38,19 @@ The package has the `umbraco-marketplace` tag, so the Umbraco Marketplace picks 
 ## Trying a package locally
 
 ```bash
-dotnet pack src/UmbracoVisualEditor -c Release -p:Version=18.0.0-local.1 -o artifacts
-dotnet pack src/UmbracoVisualEditor -c Release -p:Version=17.0.0-local.1 -p:UmbracoVersion=17.4.2 -o artifacts
+dotnet pack src/UmbracoVisualEditor -c Release -p:Version=18.0.0-local.1 -p:UmbracoMajor=18 -o artifacts
+dotnet pack src/UmbracoVisualEditor -c Release -p:Version=17.0.0-local.1 -o artifacts
 ```
 
 The Compat Site can use a packed package instead of the project: set `VisualEditorPackageVersion` and `RestoreAdditionalProjectSources` (both MSBuild properties, or environment variables):
 
 ```bash
 cd tests/e2e
-VisualEditorPackageVersion=18.0.0-local.1 RestoreAdditionalProjectSources="$PWD/../../artifacts" npm run test:compat
+UmbracoMajor=18 VisualEditorPackageVersion=18.0.0-local.1 RestoreAdditionalProjectSources="$PWD/../../artifacts" npm run test:compat
 ```
 
 Use a new version each time: NuGet caches a package by its version.
 
 ## Updating Umbraco
 
-The Umbraco version for the 18 line is `UmbracoVersion` in `Directory.Packages.props`. For 17, change `UMBRACO_17_VERSION` in `release.yml` and the Umbraco 17 job's `UmbracoVersion` in `ci.yml` together. The package's lower bound follows the version it's built against.
+The Umbraco versions the two lines are built against are `Umbraco17Version` and `Umbraco18Version` in `Directory.Packages.props`; CI and the release workflow read them from there. The package's lower bound follows the version it's built against. The Umbraco 17 Test Site pins its own Umbraco version in its `Directory.Packages.props`.

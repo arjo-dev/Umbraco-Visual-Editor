@@ -5,6 +5,12 @@
     <Nullable>enable</Nullable>
     <CompressionEnabled>false</CompressionEnabled> <!-- Disable compression. E.g. for umbraco backoffice files. These files should be precompressed by node and not let dotnet handle it -->
   </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="umbraco\**" />
+    <Content Remove="umbraco\**" />
+    <EmbeddedResource Remove="umbraco\**" />
+    <None Remove="umbraco\**" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Clean" />

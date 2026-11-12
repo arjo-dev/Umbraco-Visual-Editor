@@ -5,14 +5,35 @@
 - .NET SDK 10
 - Node.js 24 or later
 
-## First run
+## Umbraco versions
+
+Everything builds for **Umbraco 17** (the LTS) by default: the extension, the tests, the Compat Site and the solution (`Umbraco Visual Editor.slnx`). To build for Umbraco 18, pass `-p:UmbracoMajor=18`, or set an `UmbracoMajor=18` environment variable. The versions themselves are in `Directory.Packages.props` (see [compatibility.md](compatibility.md)).
+
+There are two Test Sites, one per major:
+
+| Site | Umbraco | In the solution | Content |
+|---|---|---|---|
+| `Umbraco Visual Editor.Test Site.v17` | 17 | Yes: run it from Visual Studio, or with `dotnet run` | The Clean starter kit, set up on first boot |
+| `Umbraco Visual Editor.Test Site` | 18 only (Clean 8, uSync 18) | No: it only builds with `-p:UmbracoMajor=18` | Clean plus the uSync test content below; what CI and the E2E tests use |
+
+## The Umbraco 17 Test Site (default)
+
+```bash
+dotnet run --project "Umbraco Visual Editor.Test Site.v17" --launch-profile Umbraco.Web.UI
+```
+
+Or open `Umbraco Visual Editor.slnx` in Visual Studio and run `Umbraco Visual Editor.Test Site.v17`. The site runs at `https://localhost:44315`, and it installs itself on first boot with the admin account in its `appsettings.Development.json`.
+
+## The Umbraco 18 Test Site
 
 ```bash
 cd "Umbraco Visual Editor.Test Site"
 dotnet user-secrets set "Umbraco:CMS:Unattended:UnattendedUserPassword" "<choose a password>"
 dotnet user-secrets set "TestSite:ApiUser:ClientSecret" "<choose a client secret>"
-dotnet run --launch-profile Umbraco.Web.UI
+dotnet run -p:UmbracoMajor=18 --launch-profile Umbraco.Web.UI
 ```
+
+Opened in Visual Studio on its own, its `Umbraco 18` launch profile does the same `dotnet run`.
 
 The site runs at `https://localhost:44394`, and the backoffice is at `/umbraco`. Log in as `admin@example.com` with the password you set above.
 
@@ -36,22 +57,6 @@ The passwords and secrets above can also be supplied as environment variables, w
 | Admin password | `Umbraco__CMS__Unattended__UnattendedUserPassword` |
 | API client secret | `TestSite__ApiUser__ClientSecret` |
 
-## Development on v17
-
-As the main project defaults to 18 we need to pass in a parameter to the build to get it to output for v17. This can't be ran using Visual Studio itself and needs to be driven from the command line, as such:
-
-```bash
-dotnet run --project "Umbraco Visual Editor.Test Site.v17" -p:UmbracoVersion=17.8.0
-```
-
-You should also start the build task running for the extension project to compile and output any TS package changes by:
-
-```bash
-cd src\UmbracoVisualEditor\Client
-npm run watch
-```
-
-
 ## Extension development
 
 `dotnet build` also builds the extension's client code in `src/UmbracoVisualEditor/Client`. For hot reload while editing TypeScript:
@@ -63,7 +68,7 @@ npm run watch
 
 Pass `-p:SkipClientBuild=true` to `dotnet build`/`dotnet run` so the two builds don't overlap.
 
-.NET tests live in `tests/` (xUnit v3). Run them with `dotnet test --solution "Umbraco Visual Editor.slnx"`. `global.json` opts `dotnet test` into Microsoft.Testing.Platform, which xUnit v3 needs on the .NET 10 SDK.
+.NET tests live in `tests/` (xUnit v3). Run them with `dotnet test --solution "Umbraco Visual Editor.slnx"` (Umbraco 17), or `dotnet test --project tests/UmbracoVisualEditor.Tests -p:UmbracoMajor=18` for 18. `global.json` opts `dotnet test` into Microsoft.Testing.Platform, which xUnit v3 needs on the .NET 10 SDK.
 
 Other client scripts:
 
@@ -97,7 +102,7 @@ uSync writes each item you save in the backoffice to `uSync/v18`. Commit those f
 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs on every pull request and on pushes to `main`. It:
 
 1. Installs, lints, format-checks, type-checks, builds and unit-tests the client.
-2. Builds the solution with `dotnet build` and runs the .NET tests.
+2. Builds the package, the tests, the Test Site and the Compat Site for Umbraco 18 (`UmbracoMajor=18`), and runs the .NET tests.
 3. Runs a smoke test: installs the Test Site from scratch, with throwaway credentials and `Hosting:Debug=false` like production, and checks that:
    - a render session, done before any page is visited, leaks no markers or unsaved values into live pages;
    - the home page and both playground variants render;
@@ -105,6 +110,8 @@ uSync writes each item you save in the backoffice to `uSync/v18`. Commit those f
    - the Management API lists the `UmbracoVisualEditor` manifest;
    - the first boot left the working tree unchanged.
 4. Runs the end-to-end tests ([`tests/e2e`](../tests/e2e/README.md)) against that site, signed in as its throwaway admin. Then it runs them against a throwaway copy of the **Compat Site** (plain Umbraco with other template conventions, see [compatibility.md](compatibility.md)), and checks the working tree is still unchanged.
+
+A second job, `Umbraco 17`, builds and tests the solution on the default (Umbraco 17, the v17 Test Site included) and runs the Compat Site's end-to-end tests on 17.
 
 If the smoke test fails, the site log is uploaded as the `test-site-log` artifact. If the E2E tests fail, the Playwright report and traces are uploaded as `e2e-report`.
 

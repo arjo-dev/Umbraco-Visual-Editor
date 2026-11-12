@@ -3,14 +3,18 @@
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     <CentralPackageFloatingVersionsEnabled>true</CentralPackageFloatingVersionsEnabled>
     <!--
-      Single source of truth for the Umbraco version used by the extension and the sites. 18 by default; build for
-      Umbraco 17 with -p:UmbracoVersion=17.x (or an UmbracoVersion environment variable), see docs/compatibility.md.
+      Single source of truth for the Umbraco versions used by the extension, the sites, CI and the release: the version
+      each package line is built against. 17 (the LTS) by default; build for Umbraco 18 with -p:UmbracoMajor=18 (or an
+      UmbracoMajor environment variable). -p:UmbracoVersion=x.y.z picks an exact version. See docs/compatibility.md.
     -->
-    <UmbracoVersion Condition="'$(UmbracoVersion)' == ''">18.2.0</UmbracoVersion>
+    <Umbraco17Version>17.4.2</Umbraco17Version>
+    <Umbraco18Version>18.2.0</Umbraco18Version>
+    <UmbracoVersion Condition="'$(UmbracoVersion)' == '' and '$(UmbracoMajor)' == '18'">$(Umbraco18Version)</UmbracoVersion>
+    <UmbracoVersion Condition="'$(UmbracoVersion)' == ''">$(Umbraco17Version)</UmbracoVersion>
     <!--
       The extension's Umbraco dependencies are a range, from the version it's built against to the next major (#39): a
       build is for one major (see docs/compatibility.md), so the package must not install on another.
-      [18.2.0, 19.0.0) by default; restore still uses the lowest, the version built against.
+      [17.4.2, 18.0.0) by default; restore still uses the lowest, the version built against.
     -->
     <UmbracoMajor>$(UmbracoVersion.Substring(0, $(UmbracoVersion.IndexOf('.'))))</UmbracoMajor>
     <UmbracoDependencyRange>[$(UmbracoVersion), $([MSBuild]::Add($(UmbracoMajor), 1)).0.0)</UmbracoDependencyRange>

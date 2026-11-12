@@ -7,7 +7,7 @@
   </PropertyGroup>
 
   <!--
-    Umbraco 17 support (#38): build with -p:UmbracoVersion=17.x. The few API differences are behind UMBRACO_17 (see
+    Umbraco 17 support (#38): 17 is the default build, -p:UmbracoMajor=18 builds for 18. The few API differences are behind UMBRACO_17 (see
     UmbracoCompatibility.cs); a build is for one major version, as the two aren't binary compatible.
   -->
   <PropertyGroup Condition="$(UmbracoVersion.StartsWith('17.'))">
@@ -15,8 +15,8 @@
   </PropertyGroup>
 
   <!--
-    Package (#39). One package line per Umbraco major, from the same code: 18.x built as is, 17.x with
-    -p:UmbracoVersion=17.x. The release workflow sets Version (18.1.0 / 17.1.0 for tag v1.0; see docs/releasing.md).
+    Package (#39). One package line per Umbraco major, from the same code: 17.x built as is, 18.x with
+    -p:UmbracoMajor=18. The release workflow sets Version (18.1.0 / 17.1.0 for tag v1.0; see docs/releasing.md).
   -->
   <PropertyGroup>
     <PackageId>Arjo.UmbracoVisualEditor</PackageId>

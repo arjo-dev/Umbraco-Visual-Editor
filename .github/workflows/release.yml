@@ -16,8 +16,8 @@ env:
   DOTNET_CLI_TELEMETRY_OPTOUT: true
   CLIENT_DIR: src/UmbracoVisualEditor/Client
   E2E_DIR: tests/e2e
-  # The Umbraco 17 the 17.x package is built against. Keep in step with the Umbraco 17 job in ci.yml.
-  UMBRACO_17_VERSION: 17.4.2
+  # The Umbraco versions each package line is built against are Umbraco17Version (the default) and Umbraco18Version
+  # in Directory.Packages.props; -p:UmbracoMajor=18 (or an UmbracoMajor environment variable) builds for 18.
 
 jobs:
   version:
@@ -76,10 +76,10 @@ jobs:
 
       # One after the other: each build stamps its version into the shared client output (umbraco-package.json).
       - name: Pack for Umbraco 18
-        run: dotnet pack src/UmbracoVisualEditor/UmbracoVisualEditor.csproj -c Release -p:SkipClientBuild=true -p:Version="$V18" -o artifacts
+        run: dotnet pack src/UmbracoVisualEditor/UmbracoVisualEditor.csproj -c Release -p:SkipClientBuild=true -p:UmbracoMajor=18 -p:Version="$V18" -o artifacts
 
       - name: Pack for Umbraco 17
-        run: dotnet pack src/UmbracoVisualEditor/UmbracoVisualEditor.csproj -c Release -p:SkipClientBuild=true -p:UmbracoVersion="$UMBRACO_17_VERSION" -p:Version="$V17" -o artifacts
+        run: dotnet pack src/UmbracoVisualEditor/UmbracoVisualEditor.csproj -c Release -p:SkipClientBuild=true -p:Version="$V17" -o artifacts
 
       - name: Check the packages' dependencies and buildTransitive targets
         run: |
@@ -97,8 +97,9 @@ jobs:
               || { echo "::error::$id $1 has no buildTransitive/$id.targets"; unzip -l "$file" | grep buildTransitive; exit 1; }
             echo "✓ $id $1 has buildTransitive/$id.targets"
           }
-          check "$V18" "$(sed -n 's:.*<UmbracoVersion[^>]*>\(.*\)</UmbracoVersion>.*:\1:p' Directory.Packages.props)" 19.0.0
-          check "$V17" "$UMBRACO_17_VERSION" 18.0.0
+          built_against() { sed -n "s:.*<Umbraco$1Version>\(.*\)</Umbraco$1Version>.*:\1:p" Directory.Packages.props; }
+          check "$V18" "$(built_against 18)" 19.0.0
+          check "$V17" "$(built_against 17)" 18.0.0
 
       # Each package installed into the Compat Site as a site would (a PackageReference, from the packed file), and its
       # end-to-end tests run against it: what's published is what was tested.
@@ -114,6 +115,7 @@ jobs:
       - name: Test the Umbraco 18 package
         working-directory: ${{ env.E2E_DIR }}
         env:
+          UmbracoMajor: '18'
           VisualEditorPackageVersion: ${{ env.V18 }}
           RestoreAdditionalProjectSources: ${{ github.workspace }}/artifacts
         run: npm run test:compat
@@ -121,7 +123,6 @@ jobs:
       - name: Test the Umbraco 17 package
         working-directory: ${{ env.E2E_DIR }}
         env:
-          UmbracoVersion: ${{ env.UMBRACO_17_VERSION }}
           VisualEditorPackageVersion: ${{ env.V17 }}
           RestoreAdditionalProjectSources: ${{ github.workspace }}/artifacts
         run: npm run test:compat

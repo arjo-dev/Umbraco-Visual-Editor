@@ -6,5 +6,9 @@
     <Project Path="tests/UmbracoVisualEditor.Tests/UmbracoVisualEditor.Tests.csproj" />
   </Folder>
   <Project Path="Umbraco Visual Editor.Compat Site/Umbraco Visual Editor.Compat Site.csproj" />
-  <Project Path="Umbraco Visual Editor.Test Site/Umbraco Visual Editor.Test Site.csproj" />
+  <!--
+    The Umbraco 17 Test Site: the default build is 17 (Directory.Packages.props). The Umbraco 18 Test Site (Clean, uSync)
+    isn't in the solution, as it only builds with -p:UmbracoMajor=18; see docs/development.md.
+  -->
+  <Project Path="Umbraco Visual Editor.Test Site.v17/Umbraco Visual Editor.Test Site.v17.csproj" />
 </Solution>

@@ -9,15 +9,15 @@ Both are covered by the end-to-end tests in CI (`tests/e2e`: `npm test` and `npm
 
 ## Umbraco versions
 
-The Visual editor supports **Umbraco 18** (the default) and **Umbraco 17**.
+The Visual editor supports **Umbraco 17** (the LTS, and the default build) and **Umbraco 18**.
 
-A build is for one major version: the two aren't binary compatible where the package touches them. To build for 17, set the Umbraco version for MSBuild:
+A build is for one major version: the two aren't binary compatible where the package touches them. To build for 18, pick the major for MSBuild:
 
 ```bash
-dotnet build src/UmbracoVisualEditor -p:UmbracoVersion=17.4.2
+dotnet build src/UmbracoVisualEditor -p:UmbracoMajor=18
 ```
 
-An `UmbracoVersion` environment variable does the same. `Directory.Packages.props` uses it for every Umbraco package, and a `17.x` version defines `UMBRACO_17`.
+An `UmbracoMajor` environment variable does the same. The version each major builds against is `Umbraco17Version` or `Umbraco18Version` in `Directory.Packages.props`, which uses it (as `UmbracoVersion`) for every Umbraco package. `-p:UmbracoVersion=x.y.z` picks an exact version instead. A `17.x` version defines `UMBRACO_17`.
 
 The differences are small:
 - **Published content wrappers.** Umbraco 17's `PublishedContentWrapped` and `PublishedElementWrapped` take an `IPublishedValueFallback` in their constructors (see `UmbracoCompatibility.cs`).
@@ -26,7 +26,7 @@ The differences are small:
 
 The backoffice extension is one build for both: it's built against 18's backoffice and runs in 17's.
 
-**What's checked on 17:** CI's `Umbraco 17` job builds the package and runs the .NET tests against Umbraco 17. It then runs the Compat Site end to end on Umbraco 17. That covers marking, editing text and rich text in place, moving and adding blocks, undo and redo, and output caching. The Test Site is 18-only (its Clean and uSync versions are), so the rest of its flows are only checked on 18.
+**What's checked on 17:** CI's `Umbraco 17` job builds the solution (the package, the Compat Site and the Umbraco 17 Test Site) and runs the .NET tests against Umbraco 17. It then runs the Compat Site end to end on Umbraco 17. That covers marking, editing text and rich text in place, moving and adding blocks, undo and redo, and output caching. The Test Site is 18-only (its Clean and uSync versions are), so the rest of its flows are only checked on 18.
 
 ## How the editor finds things
 

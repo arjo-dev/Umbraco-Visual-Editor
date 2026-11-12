@@ -7,10 +7,14 @@ import { fileURLToPath } from 'node:url';
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
-/** The sites the tests run against: the Test Site, and the Compat Site with other conventions (#38). */
+/**
+ * The sites the tests run against: the Test Site, and the Compat Site with other conventions (#38). The Test Site is
+ * Umbraco 18 only (Clean, uSync), and the default build is 17, so it's always built for 18. The Compat Site builds for
+ * whichever Umbraco the environment picks (UmbracoMajor or UmbracoVersion; 17 by default).
+ */
 export const SITES = {
-	test: { dir: join(REPO, 'Umbraco Visual Editor.Test Site'), uSync: true, port: '44610' },
-	compat: { dir: join(REPO, 'Umbraco Visual Editor.Compat Site'), uSync: false, port: '44620' },
+	test: { dir: join(REPO, 'Umbraco Visual Editor.Test Site'), uSync: true, port: '44610', env: { UmbracoMajor: '18' } },
+	compat: { dir: join(REPO, 'Umbraco Visual Editor.Compat Site'), uSync: false, port: '44620', env: {} },
 } as const;
 export type SiteName = keyof typeof SITES;
 
@@ -29,6 +33,7 @@ export function throwawaySite(site: SiteName, url: string, login: string, passwo
 		command: 'dotnet run -c Release --no-launch-profile',
 		cwd: SITES[site].dir,
 		env: {
+			...SITES[site].env,
 			ASPNETCORE_ENVIRONMENT: 'Development',
 			ASPNETCORE_URLS: url,
 			ConnectionStrings__umbracoDbDSN: `Data Source=${join(runDir, 'Umbraco.sqlite.db')};Cache=Shared;Foreign Keys=True;Pooling=True`,

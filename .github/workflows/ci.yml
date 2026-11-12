@@ -27,6 +27,10 @@ jobs:
     name: Build, lint & test
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      # Umbraco 18: the default build is 17 (Directory.Packages.props), and the Test Site (Clean, uSync) is 18-only.
+      # Read by MSBuild as a property, so everything in this job, the E2E tests' sites included, builds against 18.
+      UmbracoMajor: '18'
 
     steps:
       - uses: actions/checkout@v7
@@ -46,8 +50,8 @@ jobs:
       - uses: actions/cache@v6
         with:
           path: ~/.nuget/packages
-          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Packages.props') }}
-          restore-keys: nuget-${{ runner.os }}-
+          key: nuget-18-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Packages.props') }}
+          restore-keys: nuget-18-${{ runner.os }}-
 
       # ---- Client ----
       - name: Install client dependencies
@@ -75,12 +79,16 @@ jobs:
         run: npm test
 
       # ---- .NET ----
-      # The client is already built above, so skip the csproj's npm build.
-      - name: Build solution
-        run: dotnet build "Umbraco Visual Editor.slnx" -c Release -p:SkipClientBuild=true
+      # The client is already built above, so skip the csproj's npm build. Not the solution: its Test Site is the
+      # Umbraco 17 one (the Umbraco 17 job builds it).
+      - name: Build the package, tests and sites
+        run: |
+          for project in "Umbraco Visual Editor.Test Site" "Umbraco Visual Editor.Compat Site" tests/UmbracoVisualEditor.Tests; do
+            dotnet build "$project" -c Release -p:SkipClientBuild=true
+          done
 
       - name: Test
-        run: dotnet test --solution "Umbraco Visual Editor.slnx" -c Release --no-build
+        run: dotnet test --project tests/UmbracoVisualEditor.Tests/UmbracoVisualEditor.Tests.csproj -c Release --no-build
 
       # ---- Smoke test: fresh install of the Test Site ----
       # The backoffice token endpoint (OpenIddict) only accepts HTTPS, so serve the site with a dev certificate.
@@ -242,15 +250,12 @@ jobs:
           path: ${{ runner.temp }}/site.log
           if-no-files-found: ignore
 
-  # Umbraco 17 (#38): the package builds for either major (UMBRACO_17 in the code; see docs/compatibility.md). The Test
-  # Site is 18-only (Clean, uSync), so on 17 the Compat Site is what's run end to end.
+  # Umbraco 17 (#38), the default build: the package builds for either major (UMBRACO_17 in the code; see
+  # docs/compatibility.md). The Test Site is 18-only (Clean, uSync), so on 17 the Compat Site is what's run end to end.
   umbraco-17:
     name: Umbraco 17
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    env:
-      # Keep in step with UMBRACO_17_VERSION in release.yml.
-      UmbracoVersion: 17.4.2
 
     steps:
       - uses: actions/checkout@v7
@@ -279,11 +284,11 @@ jobs:
           npm ci --no-audit --no-fund
           npm run build
 
-      # UmbracoVersion (above) is read by MSBuild as a property: everything below builds against Umbraco 17.
-      - name: Build and test the package for Umbraco 17
+      # The solution: the package, the tests, the Compat Site and the Umbraco 17 Test Site, all on the default (17).
+      - name: Build and test the solution on Umbraco 17
         run: |
-          dotnet build src/UmbracoVisualEditor/UmbracoVisualEditor.csproj -c Release -p:SkipClientBuild=true
-          dotnet test --project tests/UmbracoVisualEditor.Tests/UmbracoVisualEditor.Tests.csproj -c Release -p:SkipClientBuild=true
+          dotnet build "Umbraco Visual Editor.slnx" -c Release -p:SkipClientBuild=true
+          dotnet test --solution "Umbraco Visual Editor.slnx" -c Release --no-build
 
       - name: Create HTTPS dev certificate
         run: dotnet dev-certs https
