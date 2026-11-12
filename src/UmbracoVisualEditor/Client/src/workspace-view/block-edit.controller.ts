@@ -217,7 +217,10 @@ export class ArjoBlockEditController extends UmbControllerBase {
 		if (!workspace) return null;
 		if (to.ownerKey === workspace.getUnique()) {
 			const structure = await workspace.structure.getPropertyStructureByAlias(to.propertyAlias);
-			if (!structure) return null;
+			if (!structure) {
+				console.warn(`Workspace structure not found for alias: ${to.propertyAlias}`);
+				return null;
+			}
 			const culture = structure.variesByCulture ? activeCulture : null;
 			const property: PropertyValueModel = { alias: to.propertyAlias, culture, segment: null };
 			return { property, value: undefined, culture };
@@ -225,10 +228,16 @@ export class ArjoBlockEditController extends UmbControllerBase {
 
 		// A block's property: the value goes into the block's content, in the document property the block is in.
 		const owner = locateBlock(workspace.getValues() ?? [], to.ownerKey, activeCulture);
-		if (!owner) return null;
+		if (!owner) {
+			console.warn(`Block not found for key: ${to.ownerKey}`);
+			return null;
+		}
 		const elementType = await requestElementType(this, owner.content.contentTypeKey);
 		const structure = elementType?.properties.find((p) => p.alias === to.propertyAlias);
-		if (!structure) return null;
+		if (!structure) {
+			console.warn(`Structure not found for alias: ${to.propertyAlias}`);
+			return null;
+		}
 		const culture = structure.variesByCulture ? activeCulture : null;
 		return { property: owner.property, value: undefined, culture };
 	}
