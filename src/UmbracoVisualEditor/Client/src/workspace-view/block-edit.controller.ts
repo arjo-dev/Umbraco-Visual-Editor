@@ -147,7 +147,7 @@ export class ArjoBlockEditController extends UmbControllerBase {
 		const workspace = this.#workspace;
 		const values = workspace?.getValues() ?? [];
 		const source = workspace && locateBlock(values, blockKey, activeCulture);
-		const target = workspace && this.#listAt(to, activeCulture);
+		const target = workspace && (this.#listAt(to, activeCulture) ?? (await this.#unsetListAt(to, activeCulture)));
 		if (!workspace || !source || !target || !(await this.#canWrite(source.property, activeCulture))) return false;
 		if (target.property !== source.property && !(await this.#canWrite(target.property, activeCulture))) return false;
 
@@ -208,17 +208,29 @@ export class ArjoBlockEditController extends UmbControllerBase {
 	}
 
 	/**
-	 * A document property that has no value yet, e.g. an empty Block Grid the page marks (#97): the first block added
+	 * A block editor property that has no value yet, e.g. an empty Block Grid the page marks (#97), or a nested Block
+	 * List in a block that was just added (its content has no entry for the property at all): the first block added
 	 * there creates its value, in the edited culture when the property varies by culture.
 	 */
 	async #unsetListAt(to: BlockPosition, activeCulture: string | null) {
 		const workspace = this.#workspace;
-		if (!workspace || to.ownerKey !== workspace.getUnique()) return null;
-		const structure = await workspace.structure.getPropertyStructureByAlias(to.propertyAlias);
+		if (!workspace) return null;
+		if (to.ownerKey === workspace.getUnique()) {
+			const structure = await workspace.structure.getPropertyStructureByAlias(to.propertyAlias);
+			if (!structure) return null;
+			const culture = structure.variesByCulture ? activeCulture : null;
+			const property: PropertyValueModel = { alias: to.propertyAlias, culture, segment: null };
+			return { property, value: undefined, culture };
+		}
+
+		// A block's property: the value goes into the block's content, in the document property the block is in.
+		const owner = locateBlock(workspace.getValues() ?? [], to.ownerKey, activeCulture);
+		if (!owner) return null;
+		const elementType = await requestElementType(this, owner.content.contentTypeKey);
+		const structure = elementType?.properties.find((p) => p.alias === to.propertyAlias);
 		if (!structure) return null;
 		const culture = structure.variesByCulture ? activeCulture : null;
-		const property: PropertyValueModel = { alias: to.propertyAlias, culture, segment: null };
-		return { property, value: undefined, culture };
+		return { property: owner.property, value: undefined, culture };
 	}
 
 	/** A document property value with the Block List at `to` replaced by `update(list)`. */
