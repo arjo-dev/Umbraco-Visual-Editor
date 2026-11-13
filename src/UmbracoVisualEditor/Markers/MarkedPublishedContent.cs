@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Http;
 using Umbraco.Cms.Core.Models.PublishedContent;
 
 namespace UmbracoVisualEditor.Markers;
@@ -7,7 +8,11 @@ internal sealed class MarkedPublishedContent : PublishedContentWrapped
 {
     private readonly Dictionary<string, IPublishedProperty> _properties;
 
-    public MarkedPublishedContent(IPublishedContent content, MarkerRegistry registry, IVariationContextAccessor variationContextAccessor)
+    public MarkedPublishedContent(
+        IPublishedContent content,
+        MarkerRegistry registry,
+        IVariationContextAccessor variationContextAccessor,
+        IHttpContextAccessor httpContextAccessor)
 #if UMBRACO_17
         : base(content, UmbracoCompatibility.PublishedValueFallback)
 #else
@@ -15,7 +20,8 @@ internal sealed class MarkedPublishedContent : PublishedContentWrapped
 #endif
         => _properties = content.Properties.ToDictionary(
             p => p.Alias,
-            p => (IPublishedProperty)new MarkedProperty(p, content.Key, ownerIsBlock: false, registry, variationContextAccessor),
+            p => (IPublishedProperty)new MarkedProperty(
+                p, content.Key, ownerIsBlock: false, registry, variationContextAccessor, httpContextAccessor),
             StringComparer.OrdinalIgnoreCase);
 
     public override IEnumerable<IPublishedProperty> Properties => _properties.Values;
@@ -35,7 +41,11 @@ internal sealed class MarkedPublishedElement : PublishedElementWrapped, IPublish
 {
     private readonly Dictionary<string, IPublishedProperty> _properties;
 
-    public MarkedPublishedElement(IPublishedElement element, MarkerRegistry registry, IVariationContextAccessor variationContextAccessor)
+    public MarkedPublishedElement(
+        IPublishedElement element,
+        MarkerRegistry registry,
+        IVariationContextAccessor variationContextAccessor,
+        IHttpContextAccessor httpContextAccessor)
 #if UMBRACO_17
         : base(element, UmbracoCompatibility.PublishedValueFallback)
 #else
@@ -43,7 +53,8 @@ internal sealed class MarkedPublishedElement : PublishedElementWrapped, IPublish
 #endif
         => _properties = element.Properties.ToDictionary(
             p => p.Alias,
-            p => (IPublishedProperty)new MarkedProperty(p, element.Key, ownerIsBlock: true, registry, variationContextAccessor),
+            p => (IPublishedProperty)new MarkedProperty(
+                p, element.Key, ownerIsBlock: true, registry, variationContextAccessor, httpContextAccessor),
             StringComparer.OrdinalIgnoreCase);
 
     public new IEnumerable<IPublishedProperty> Properties => _properties.Values;
