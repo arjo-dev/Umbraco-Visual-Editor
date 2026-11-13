@@ -28,14 +28,17 @@ internal sealed class MarkingPublishedModelFactory(
             if (element is OverlayPublishedContent overlay)
             {
                 // Only our in-memory overlay of the edited document, never a cached published instance of it.
-                element = new MarkedPublishedContent(overlay, editMode.Markers, variationContextAccessor);
+                element = new MarkedPublishedContent(overlay, editMode.Markers, variationContextAccessor, httpContextAccessor);
             }
             else if (element is not IPublishedContent
                 && MarkingScope.IsActive
                 && editMode.BlockKeys.Contains(element.Key))
             {
-                // A block converted from the overlay's (or a marked block's) values during this request.
-                element = new MarkedPublishedElement(element, editMode.Markers, variationContextAccessor);
+                // A block converted from the overlay's (or a marked block's) values during this request. Usually: a
+                // view rendered inside that conversion (a form in a rich text block) can load the page's published
+                // version too, whose blocks have the same keys, and the shared cache keeps those. MarkedProperty
+                // only marks during this request, so live visitors get plain values from them.
+                element = new MarkedPublishedElement(element, editMode.Markers, variationContextAccessor, httpContextAccessor);
             }
         }
 

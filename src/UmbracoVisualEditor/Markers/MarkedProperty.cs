@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Http;
 using Umbraco.Cms.Core.Models.Blocks;
 using Umbraco.Cms.Core.Models.PublishedContent;
 using Umbraco.Cms.Core.Strings;
@@ -10,13 +11,20 @@ namespace UmbracoVisualEditor.Markers;
 /// plain text gets an invisible <see cref="Stega"/> prefix; rich text (HTML) is wrapped in marker comments; an empty
 /// Block List or Block Grid is remembered as this property's (<see cref="MarkerRegistry.EmptyBlocksFor"/>).
 /// Other value types (numbers, dates, pickers, media) pass through unmarked.
+/// <para>
+/// Only during the render session that made it (the request whose <see cref="MarkerRegistry"/> it has). An element
+/// marked here can still end up in Umbraco's shared published cache: a form in a rich text block, say, loads the
+/// page's published version while the rich text converts, inside the marking scope. Any other request (a live
+/// visitor's, or a later render session) gets the plain value.
+/// </para>
 /// </summary>
 internal sealed class MarkedProperty(
     IPublishedProperty inner,
     Guid ownerKey,
     bool ownerIsBlock,
     MarkerRegistry registry,
-    IVariationContextAccessor variationContextAccessor) : IPublishedProperty
+    IVariationContextAccessor variationContextAccessor,
+    IHttpContextAccessor httpContextAccessor) : IPublishedProperty
 {
     // Only free-text editors: marking dropdown/radio values etc. would break code that compares or uses them as
     // CSS classes, and URLs would stop working.
@@ -37,8 +45,16 @@ internal sealed class MarkedProperty(
     public object? GetDeliveryApiValue(bool expanding, string? culture = null, string? segment = null)
         => inner.GetDeliveryApiValue(expanding, culture, segment);
 
+    /// <summary>Whether this request is the render session that made this property.</summary>
+    private bool Marking => ReferenceEquals(EditModeRequest.Get(httpContextAccessor.HttpContext)?.Markers, registry);
+
     public object? GetValue(string? culture = null, string? segment = null)
     {
+        if (!Marking)
+        {
+            return inner.GetValue(culture, segment);
+        }
+
         // Our overlay values, and blocks we created, convert inside the marking scope so their nested blocks are marked.
         // A page property not overlaid is the cached draft: converting it must not mark (and so pollute) shared caches.
         var value = inner is Rendering.OverlayPublishedProperty || ownerIsBlock
