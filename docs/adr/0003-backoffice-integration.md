@@ -22,6 +22,7 @@ Editors switch a document into a visual mode and back. The README says visual mo
    - The entrypoint appends a condition, `Arjo.VisualEditor.Condition.VisualModeInactive`, to **every** `sectionSidebarApp`, including ones registered later. It uses the public `umbExtensionsRegistry.appendCondition` API.
    - `umb-section-default` only renders the sidebar when at least one sidebar app is permitted, so the tree, and everything else in the sidebar, disappears and the workspace takes the full width.
    - The condition starts out permitted, so the sidebar doesn't flicker away while the context resolves.
+   - *Later:* the toolbar has a toggle to show or hide the tree, remembered as one preference. In Overlay mode ([ADR 0005](0005-block-overlay-mode.md)) the tree shows by default, because that mode keeps the backoffice as it is. When nothing is stored, the default depends on the mode; a stored choice wins in both.
 3. **The toggle itself is #13.** The tab is the minimal toggle. #13 can add a more prominent control, such as a workspace action or a header button, that just navigates to the view's route. It can also remember each user's last choice.
 
 ## Options considered

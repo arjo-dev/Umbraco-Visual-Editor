@@ -48,6 +48,8 @@ By default the Visual editor is offered for every document type with a template.
 
 `EnablePropertyLevelEditing: false` turns off editing text and rich text on the page itself: they open in the side panel instead. This feature can sometimes go a little odd on setups - please raise an issue if you have trouble with this feature.
 
+`"EditorMode": "Overlay"` drops the side panel: the page takes the full width, and clicking a block opens Umbraco's own block overlay, as on the Content tab (nested blocks too). Nothing is edited on the page itself then, so `EnablePropertyLevelEditing` doesn't apply, and the document's own properties are edited on the Content tab. The default is `"SidePanel"`.
+
 ## Templates
 
 The Visual editor reads your templates as they are: models, partials, view components, block views and cached partials. Blocks are recognised by the view that renders them, whether it gets the block or its element. For markup a loop writes itself, with no view per block, there's a helper:

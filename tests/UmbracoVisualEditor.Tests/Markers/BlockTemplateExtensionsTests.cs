@@ -8,7 +8,9 @@ using Microsoft.AspNetCore.Html;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.Extensions.DependencyInjection;
+using Umbraco.Cms.Core.Models;
 using Umbraco.Cms.Core.Models.Blocks;
+using Umbraco.Cms.Core.Services;
 // Both, as in a view that imports the package's namespace (#97): calls must bind to ours, and not be ambiguous.
 using Umbraco.Extensions;
 using UmbracoVisualEditor.Extensions;
@@ -31,10 +33,63 @@ public class BlockTemplateExtensionsTests
         };
     }
 
-    private static IHtmlHelper<object> Html(bool editMode, bool autoMark = true)
+    /// <summary>
+    /// A content type service that only knows <see cref="PageType"/>, with an "items" property named "Page items"; or
+    /// one that throws on every call.
+    /// </summary>
+    private class FakeContentTypeService : DispatchProxy
+    {
+        public bool Throws { get; set; }
+
+        protected override object? Invoke(MethodInfo? method, object?[]? args)
+        {
+            if (Throws)
+            {
+                throw new InvalidOperationException("The database is down.");
+            }
+
+            return method?.Name == "Get" && args is [Guid key]
+                ? key == PageType ? Fake<IContentType>(("get_CompositionPropertyTypes", new[] { ItemsProperty() })) : null
+                : throw new NotSupportedException(method?.Name);
+        }
+
+        private static IPropertyType ItemsProperty()
+            => Fake<IPropertyType>(("get_Alias", "items"), ("get_Name", "Page items"));
+    }
+
+    /// <summary>An interface implementation that answers the given getters and nothing else.</summary>
+    private class FakeGetters : DispatchProxy
+    {
+        public Dictionary<string, object?> Values { get; } = [];
+
+        protected override object? Invoke(MethodInfo? method, object?[]? args)
+            => method is not null && Values.TryGetValue(method.Name, out var value)
+                ? value
+                : throw new NotSupportedException(method?.Name);
+    }
+
+    private static T Fake<T>(params (string Getter, object? Value)[] values) where T : class
+    {
+        T fake = DispatchProxy.Create<T, FakeGetters>();
+        foreach ((string getter, object? value) in values)
+        {
+            ((FakeGetters)(object)fake).Values[getter] = value;
+        }
+
+        return fake;
+    }
+
+    private static readonly Guid PageType = Guid.NewGuid();
+
+    private static IHtmlHelper<object> Html(bool editMode, bool autoMark = true, IContentTypeService? contentTypes = null)
     {
         var services = new ServiceCollection();
         services.Configure<VisualEditorOptions>(options => options.AutoMarkEmptyBlocks = autoMark);
+        if (contentTypes is not null)
+        {
+            services.AddSingleton(contentTypes);
+        }
+
         var context = new DefaultHttpContext { RequestServices = services.BuildServiceProvider() };
         if (editMode)
         {
@@ -47,10 +102,10 @@ public class BlockTemplateExtensionsTests
     }
 
     /// <summary>An empty value, remembered as the page's property as <see cref="MarkedProperty"/> would.</summary>
-    private static T Empty<T>(IHtmlHelper html, T value, bool isGrid) where T : class
+    private static T Empty<T>(IHtmlHelper html, T value, bool isGrid, Guid? contentTypeKey = null) where T : class
     {
         EditModeRequest.Get(html.ViewContext.HttpContext)?.Markers
-            .RegisterEmptyBlocks(value, new EmptyBlocksSpot(Page, false, "items", isGrid));
+            .RegisterEmptyBlocks(value, new EmptyBlocksSpot(Page, false, "items", isGrid, contentTypeKey));
         return value;
     }
 
@@ -81,6 +136,40 @@ public class BlockTemplateExtensionsTests
         var output = Text(await html.GetBlockGridHtmlAsync(Empty(html, new BlockGridModel([], 12), isGrid: true)));
 
         Assert.Contains("Umbraco.BlockGrid", WebUtility.HtmlDecode(output));
+    }
+
+    [Fact]
+    public void TheMark_HasThePropertysName_ForItsAddBlockButton()
+    {
+        var contentTypes = DispatchProxy.Create<IContentTypeService, FakeContentTypeService>();
+        IHtmlHelper<object> html = Html(editMode: true, contentTypes: contentTypes);
+
+        var output = Text(html.GetBlockListHtml(Empty(html, new BlockListModel([]), isGrid: false, PageType)));
+
+        Assert.Contains("\"label\":\"Page items\"", WebUtility.HtmlDecode(output));
+    }
+
+    [Theory]
+    [InlineData("no service")]
+    [InlineData("no key")]
+    [InlineData("unknown type")]
+    [InlineData("service throws")]
+    public void TheMark_HasNoName_WhenItCantBeFound_AndStillRenders(string reason)
+    {
+        var contentTypes = DispatchProxy.Create<IContentTypeService, FakeContentTypeService>();
+        ((FakeContentTypeService)(object)contentTypes).Throws = reason == "service throws";
+        IHtmlHelper<object> html = Html(editMode: true, contentTypes: reason == "no service" ? null : contentTypes);
+        Guid? key = reason switch
+        {
+            "no key" => null,
+            "unknown type" => Guid.NewGuid(),
+            _ => PageType,
+        };
+
+        var output = WebUtility.HtmlDecode(Text(html.GetBlockListHtml(Empty(html, new BlockListModel([]), isGrid: false, key))));
+
+        Assert.Contains("data-uve-empty-blocks", output);
+        Assert.Contains("\"label\":null", output);
     }
 
     [Fact]

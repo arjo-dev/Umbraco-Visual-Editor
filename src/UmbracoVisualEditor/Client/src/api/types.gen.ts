@@ -36,7 +36,10 @@ export type VisualEditorConfigurationResponseModel = {
     enabled: boolean;
     allowedDocumentTypes: Array<string>;
     excludedDocumentTypes: Array<string>;
+    editorMode: VisualEditorMode;
 };
+
+export type VisualEditorMode = 'SidePanel' | 'Overlay';
 
 export type GetConfigurationData = {
     body?: never;

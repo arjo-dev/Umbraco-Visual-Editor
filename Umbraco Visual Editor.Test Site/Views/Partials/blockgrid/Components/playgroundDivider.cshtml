@@ -1,0 +1,13 @@
+@inherits UmbracoViewPage<BlockGridItem>
+@using Umbraco.Cms.Core.Models.Blocks
+@*
+    A block with no content, only settings (Playground Divider, with Clean's Rich Text Row Settings). In Overlay mode
+    its overlay opens on Settings. Read without models, so it doesn't depend on ModelsBuilder having a class for it.
+*@
+@{
+    if (Model.Settings?.Value<bool>("hide") ?? false) { return; }
+}
+
+<div class="playground-divider py-4">
+    <hr class="my-0 border-2 opacity-50" />
+</div>

@@ -7,7 +7,11 @@ export const DEFAULT_CANVAS_STRINGS = {
 	block: 'Block',
 	sharedAcrossLanguages: 'Shared across languages',
 	editInSidePanel: 'Edit the content in the side panel',
+	/** The same, in overlay mode (VisualEditor:EditorMode Overlay): a click opens the block's editor. */
+	clickToEdit: 'Click to edit the content',
 	addBlock: 'Add block',
+	/** An empty Block List or Grid's "Add block", with the property's name (#97). */
+	addBlockTo: 'Add block to {0}',
 	addBefore: 'Add a block before this one',
 	addAfter: 'Add a block after this one',
 	moveUp: 'Move up',

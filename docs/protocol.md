@@ -67,7 +67,7 @@ Block positions use `{ ownerKey, propertyAlias, areaKey | null, index }`.
 | `blockInsertRequest` | `at: BlockPosition` | An insertion point "+" is clicked (#28) |
 | `history` | `action: 'undo' \| 'redo'` | Ctrl+Z / Ctrl+Shift+Z or Ctrl+Y (⌘ on a Mac) on the page, outside text being edited, which has its own undo (#33) |
 | `scroll` | `x`, `y` | The canvas scrolls (so the host can restore it after a re-render) |
-| `openEditor` | `target` | Enter on the selection, which can't be edited on the page (read-only, or not plain text). The host opens the side panel with keyboard focus on its editor (#35). |
+| `openEditor` | `target` | Enter on the selection, which can't be edited on the page (read-only, or not plain text). The host opens the side panel with keyboard focus on its editor (#35). In [overlay mode](#overlay-mode), also a click on a target or a breadcrumb: the host opens the block's overlay. |
 
 ### Host → canvas
 
@@ -83,6 +83,7 @@ Block positions use `{ ownerKey, propertyAlias, areaKey | null, index }`.
 | `beginInlineEdit` | `target`, `maxLength: number | null`, `multiline: boolean` | Go ahead with an `inlineEditStart`. Only sent when the text matches the stored value, the property is TextBox/TextArea and the user may edit it; otherwise the side panel opens. |
 | `setDevice` | `width: number \| null` | Emulated viewport width in CSS px; `null` is full width (#16) |
 | `setStrings` | `strings: Record<string, string>` | The canvas's words in the backoffice user's language (#35). Sent whenever a page connects. The canvas's overlay can't reach the backoffice's localisation, so it ships English (`protocol/strings.ts`) and uses these instead; unknown keys are ignored. |
+| `setOpenOnClick` | `open: boolean` | [Overlay mode](#overlay-mode) on or off (`VisualEditor:EditorMode`). Sent whenever a page connects. An older canvas drops it as an unknown type, so it didn't need a new protocol version. |
 
 ## Keyboard (#35)
 
@@ -92,12 +93,23 @@ On the page, when nothing is being edited in place:
 |---|---|
 | Tab / Shift+Tab | The next / previous part of the page, in reading order. Tab starts from the top when the page itself has focus. At either end the key is left alone, so focus can leave the page. |
 | Arrow keys | Once something is selected: down/right is the next part, up/left the previous. |
-| Enter | Edits text in place. On a block, goes to the first thing inside it. Otherwise it opens the side panel with focus on the editor (`openEditor`). |
+| Enter | Edits text in place. On a block, goes to the first thing inside it. Otherwise it opens the side panel with focus on the editor (`openEditor`). In overlay mode, it opens the selection's editor (`openEditor`) straight away. |
 | Escape | Selects the parent block; at the top, clears the selection. In the side panel (outside a field), it goes back to the page. |
 | Alt+Up / Alt+Down | Moves the selected block (#26). |
 | Ctrl+Z / Ctrl+Shift+Z | Undo / redo (#33). |
 
 Keys typed in the page's own form fields are left to the page. Each selection is announced to screen readers through a polite live region in the overlay.
+
+## Overlay mode
+
+With `setOpenOnClick { open: true }` (`VisualEditor:EditorMode: Overlay`), the host has no side panel, and edits blocks in Umbraco's own block overlay ([ADR 0005](adr/0005-block-overlay-mode.md)). The canvas then:
+
+- **Opens rather than edits.** A click on a target selects it and sends `openEditor`. So do a breadcrumb and Enter. Nothing is edited on the page: double-click does nothing, and there are no `inlineEditStart` or `richTextEditStart` messages. Tab, the arrow keys and Escape only select, as in side panel mode.
+- **Works per block.** A property inside a block (its content or its settings) stands for that block. Hover, click, Tab and the host's `setSelection` all land on the block, so `hover`, `select` and `openEditor` name the block. A property with no block target around it, and the document's own properties, stand for themselves.
+- **Shows a hovered block's toolbar.** It sits inside the block's top-right corner, one toolbar at a time. On a nested block, its first button moves the hover (outline and toolbar) to the block around it and selects that block, so only it shows as active. The host sees a `hover` and a `select` for it, but no `openEditor`: unlike a breadcrumb, the button doesn't open the block. While the pointer stays inside it, a click opens that block.
+- **Says how blank blocks are edited** with the `clickToEdit` string, rather than `editInSidePanel`.
+
+The host may ignore `openEditor` and `history` while an overlay opens or closes. These are host rules; the messages stay as they are (ADR 0005).
 
 ## Status
 

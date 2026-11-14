@@ -7,6 +7,9 @@ import { UmbVariantId } from '@umbraco-cms/backoffice/variant';
 import { postRenderSession } from '../api/index.js';
 import { ARJO_VISUAL_MODE_CONTEXT, type ArjoVisualModeContext } from '../visual-mode/visual-mode.context.js';
 import { viewInPath } from '../visual-mode/routes.js';
+import { loadConfiguration } from '../visual-mode/availability.js';
+import { VISUAL_EDITOR_MODE, type VisualEditorMode } from '../visual-mode/constants.js';
+import { UMB_NOTIFICATION_CONTEXT } from '@umbraco-cms/backoffice/notification';
 import {
 	createHostChannel,
 	CANVAS_STRING_KEYS,
@@ -31,6 +34,8 @@ import { locateBlock } from './property-values.js';
 import './visual-editor-block-picker.element.js';
 import '../rich-text/visual-editor-rich-text-editor.element.js';
 import type { ArjoVisualEditorSidePanelElement } from './visual-editor-side-panel.element.js';
+import type { ArjoVisualEditorBlockOverlayElement, BlockOverlayView } from './visual-editor-block-overlay.element.js';
+import './visual-editor-block-overlay.element.js';
 import './visual-editor-toolbar.element.js';
 import './visual-editor-side-panel.element.js';
 import './visual-editor-canvas.element.js';
@@ -48,8 +53,8 @@ const PREVIEW_STORAGE_KEY = 'arjo.visualEditor.preview';
  * The Visual editor: a document workspace view (ADR 0003) laid out as toolbar, canvas and side panel (#14).
  * It renders the document with its *unsaved* workspace values (render sessions, ADR 0001), re-rendering as they
  * change, and talks to the canvas over the protocol (docs/protocol.md). While it is showing, visual mode is active,
- * which hides the section sidebar/tree. The document name, culture switcher and Save / Save & Publish are Umbraco's
- * own workspace header and footer.
+ * which hides the section sidebar/tree unless the user shows it (by default in overlay mode it shows). The document
+ * name, culture switcher and Save / Save & Publish are Umbraco's own workspace header and footer.
  */
 @customElement('arjo-visual-editor-workspace-view')
 export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
@@ -89,6 +94,12 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 	@state() private _readonly = false;
 	@state() private _canUndo = false;
 	@state() private _canRedo = false;
+	/**
+	 * VisualEditor:EditorMode; undefined until the configuration is known, and nothing mode-specific (the side panel,
+	 * hiding the tree) shows before then. Overlay mode: no side panel, the tree shows unless the user hides it, and a
+	 * click on the page opens Umbraco's block overlay (ADR 0005).
+	 */
+	@state() private _editorMode?: VisualEditorMode;
 
 	#documentKey?: string;
 	#culture: string | null = null;
@@ -130,8 +141,15 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 			// switch visual mode off in disconnectedCallback.
 			if (!context) return;
 			this.#visualMode = context;
-			if (this.isConnected) context.setActive(true);
+			this.#activateVisualMode();
 			this.observe(context.showTree, (show) => (this._treeVisible = show), 'arjoShowTree');
+		});
+
+		// The settings are already loaded (the tab's condition waited for them); a failed load means the default.
+		void loadConfiguration().then((configuration) => {
+			this._editorMode = configuration?.editorMode ?? VISUAL_EDITOR_MODE.sidePanel;
+			this.#activateVisualMode();
+			this.#channel?.send({ type: 'setOpenOnClick', open: this.#overlayMode });
 		});
 
 		this.consumeContext(UMB_PROPERTY_DATASET_CONTEXT, (dataset) => {
@@ -168,7 +186,7 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 
 	override connectedCallback() {
 		super.connectedCallback();
-		this.#visualMode?.setActive(true);
+		this.#activateVisualMode();
 		this.#documentBase = viewInPath(location.pathname)?.base;
 		window.addEventListener('keydown', this.#onWindowKeyDown);
 	}
@@ -183,6 +201,52 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 		this.#channel?.close();
 		this.#channel = undefined;
 		super.disconnectedCallback();
+	}
+
+	get #overlayMode() {
+		return this._editorMode === VISUAL_EDITOR_MODE.overlay;
+	}
+
+	/**
+	 * Switches visual mode on (the content tree can be hidden, ADR 0003), once the editor mode is known: it sets the
+	 * tree's default (hidden in side panel mode, shown in overlay mode) before the sidebar reacts. Called wherever its
+	 * conditions may become true (context, connected, configuration), as their order isn't fixed. Never switches it
+	 * off: that's disconnectedCallback's, and another split view pane may still want it on.
+	 */
+	#activateVisualMode() {
+		if (!this.isConnected || !this.#visualMode || !this._editorMode) return;
+		this.#visualMode.setTreeDefault(this.#overlayMode);
+		this.#visualMode.setActive(true);
+	}
+
+	get #blockOverlay() {
+		return this.shadowRoot?.querySelector<ArjoVisualEditorBlockOverlayElement>('arjo-visual-editor-block-overlay');
+	}
+
+	/** Overlay mode: opens a block's overlay; for a property inside a block, that block's. */
+	#openOverlay(blockKey: string, view: BlockOverlayView) {
+		void this.#blockOverlay?.open(blockKey, view);
+	}
+
+	/** Overlay mode: what a click on the page opens. Page properties outside blocks are edited on the Content tab. */
+	async #openInOverlay(target: TargetRef) {
+		if (target.ownerIsBlock) {
+			this.#openOverlay(target.ownerKey, 'content');
+			return;
+		}
+		const notifications = await this.getContext(UMB_NOTIFICATION_CONTEXT);
+		notifications?.peek('default', {
+			data: {
+				headline: target.label ?? target.alias ?? '',
+				message: this.localize.term('arjoVisualEditor_editOnContentTab'),
+			},
+		});
+	}
+
+	/** The overlay closed: back to the page, so the keyboard carries on there (#35). */
+	#onOverlayClosed() {
+		this.#frame?.focus();
+		this.#frame?.contentWindow?.focus();
 	}
 
 	/** The canvas has a new iframe (first render, or after a message replaced it): bind the channel to it. */
@@ -202,6 +266,7 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 				this.#channel?.send({ type: 'setDevice', width: this.#deviceWidth });
 				this.#channel?.send({ type: 'setReadonly', readonly: this._readonly });
 				this.#channel?.send({ type: 'setShowEmpty', show: this._showEmpty });
+				this.#channel?.send({ type: 'setOpenOnClick', open: this.#overlayMode });
 				this.#channel?.send({ type: 'setStrings', strings: this.#canvasStrings() });
 				this.#sendErrors();
 			},
@@ -259,7 +324,9 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 				this.#scheduleRender();
 				break;
 			case 'openEditor':
-				void this.#openEditor(message.target);
+				// Overlay mode: every click on the page asks for this; the overlay ignores repeats while one opens.
+				if (this.#overlayMode) void this.#openInOverlay(message.target);
+				else void this.#openEditor(message.target);
 				break;
 			case 'blockMove':
 				// A block dropped on the canvas (#26); the re-render shows it in its new place, still selected.
@@ -307,10 +374,15 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 	async #onInsert(at: BlockPosition) {
 		const picker = this.shadowRoot?.querySelector('arjo-visual-editor-block-picker');
 		if (!picker) return;
-		const key = await this.#blocks.insert(at, this.#culture, (blocks, groups, clipboardFilter) =>
-			picker.pick(blocks, groups, clipboardFilter),
-		);
+		/** A new block was created (not pasted): in overlay mode it's opened to fill in, as Umbraco does. */
+		let created = false;
+		const key = await this.#blocks.insert(at, this.#culture, async (blocks, groups, clipboardFilter) => {
+			const choice = await picker.pick(blocks, groups, clipboardFilter);
+			created = !!choice && 'create' in choice;
+			return choice;
+		});
 		if (!key) return;
+		if (this.#overlayMode && created) this.#openOverlay(key, 'content');
 		this._selected = this.#blockRef(key);
 		this._blockTab = 'content';
 		if (!this._panelOpen) this.#setPanelOpen(true);
@@ -320,6 +392,10 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 	/** A block toolbar button (#25): settings shows the block's settings; the rest change the document. */
 	async #onBlockAction(blockKey: string, action: BlockAction) {
 		const ref = (key: string) => this.#blockRef(key);
+		if (action === 'settings' && this.#overlayMode) {
+			this.#openOverlay(blockKey, 'settings');
+			return;
+		}
 		if (action === 'settings') {
 			this._selected = ref(blockKey);
 			this._blockTab = 'settings';
@@ -392,7 +468,9 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 
 	/** Undoes or redoes the last change; rich text being edited is finished first, so its edit is a step too. */
 	async #onHistory(action: HistoryAction) {
-		if (this._readonly) return;
+		// An open block overlay holds its own copy of the block: undoing under it would be overwritten, or remove it. So
+		// from the click that opens one until Umbraco has fully closed it (a few seconds after Update / Close).
+		if (this._readonly || this.#blockOverlay?.busy) return;
 		this.#endRichText(false);
 		// Text being edited in place on the page has its own undo.
 		if (this.#inline.editing) return;
@@ -481,19 +559,25 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 		this.#endRichText(false);
 		if (!this._panelOpen) this.#setPanelOpen(true);
 		await this.updateComplete;
-		const panel = this.shadowRoot?.querySelector<ArjoVisualEditorSidePanelElement>('arjo-visual-editor-side-panel');
+		const targetOnPage = (ref: TargetRef | null) =>
+			ref ? (this._targets.find((t) => sameTarget(t, ref)) ?? null) : null;
 		const onPage =
-			panel?.targetOnPage(error.target) ??
+			targetOnPage(error.target) ??
 			[...error.blocks]
 				.reverse()
-				.map((block) => panel?.targetOnPage(block))
+				.map((block) => targetOnPage(block))
 				.find(Boolean) ??
 			null;
 		if (onPage) {
 			this._selected = onPage;
 			this.#channel?.send({ type: 'setSelection', target: onPage, reveal: true });
 		} else if (error.target && !error.target.ownerIsBlock) {
-			panel?.showPageSettings();
+			// Not on the page: under Page settings in the side panel; overlay mode has no panel, so say where it is.
+			if (this.#overlayMode) void this.#openInOverlay(error.target);
+			else
+				this.shadowRoot
+					?.querySelector<ArjoVisualEditorSidePanelElement>('arjo-visual-editor-side-panel')
+					?.showPageSettings();
 		}
 	}
 
@@ -569,6 +653,8 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 	}
 
 	#setPanelOpen(open: boolean) {
+		// Side panel mode only: overlay mode has none, and leaves the side panel mode's remembered choice alone.
+		if (this._editorMode !== VISUAL_EDITOR_MODE.sidePanel) return;
 		this._panelOpen = open;
 		try {
 			localStorage.setItem(PANEL_STORAGE_KEY, String(open));
@@ -669,6 +755,14 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 	override render() {
 		return html`
 			<arjo-visual-editor-block-picker></arjo-visual-editor-block-picker>
+			${
+				this.#overlayMode
+					? html`<arjo-visual-editor-block-overlay
+							.culture=${this.#culture}
+							@closed=${this.#onOverlayClosed}
+						></arjo-visual-editor-block-overlay>`
+					: nothing
+			}
 			<arjo-visual-editor-toolbar
 				.standardEditorHref=${this.#documentBase ? `${this.#documentBase}/view/content` : undefined}
 				.device=${this._device}
@@ -681,6 +775,7 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 				?readonly=${this._readonly}
 				.canUndo=${this._canUndo}
 				.canRedo=${this._canRedo}
+				?overlayMode=${this.#overlayMode}
 				@undo=${() => this.#onHistory('undo')}
 				@redo=${() => this.#onHistory('redo')}
 				@device-change=${this.#onDeviceChange}
@@ -692,7 +787,8 @@ export class ArjoVisualEditorWorkspaceViewElement extends UmbLitElement {
 			<div class="body ${this._resizing ? 'resizing' : ''}">
 				<div class="canvas">${this.#renderCanvas()}${this.#renderRichTextEditor()}</div>
 				${
-					this._panelOpen
+					// Only once the mode is known, so the panel doesn't flash up in overlay mode.
+					this._editorMode === VISUAL_EDITOR_MODE.sidePanel && this._panelOpen
 						? html`<div
 									class="resizer"
 									role="separator"

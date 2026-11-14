@@ -7,6 +7,11 @@
  * - Inline editing of plain text properties (#20, inline-edit.ts): double-click, or Enter on the selection. Rich text
  *   (#57, rich-text-edit.ts) the same way, with the backoffice's own editor mounted on the element. A site can turn both
  *   off (VisualEditor:EnablePropertyLevelEditing, in the manifest): then they open the property in the side panel.
+ * - Overlay mode (VisualEditor:EditorMode Overlay, the host's `setOpenOnClick`): a click (or a breadcrumb, or Enter)
+ *   selects and also asks the host to open the target's editor (`openEditor`: Umbraco's block overlay); nothing is
+ *   edited on the page, and double-click does nothing (the click already opened it). The canvas works per block then
+ *   (represent()): the hovered block gets the toolbar, and a nested block's toolbar has a "parent block" button that
+ *   lifts the hover to the block around it, so a layout covered by its children can still be moved or deleted.
  * - A toolbar on the selected block (#25): move up/down, duplicate, delete, settings (the host changes the document).
  * - Drag and drop of Block List (#26, drag.ts) and Block Grid blocks (#27, grid.ts, into and between areas): a handle
  *   on hovered and selected blocks, a drop line, autoscroll near the edges; Alt+Up/Down moves the selected block from
@@ -70,6 +75,8 @@ export interface CanvasRuntime {
 	setReadonly(readonly: boolean): void;
 	/** Give empty places to add blocks to room on the page (#97), rather than a line on hover. */
 	setShowEmpty(show: boolean): void;
+	/** Overlay mode: clicks also open the target's editor, and nothing is edited on the page. */
+	setOpenOnClick(open: boolean): void;
 	setHighlight(target: TargetRef | null): void;
 	/** The words to use, in the backoffice user's language (#35). */
 	setStrings(strings: Partial<CanvasStrings>): void;
@@ -93,6 +100,8 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 	let highlighted: TargetRef | null = null;
 	let errors: Array<{ target: TargetRef; message: string }> = [];
 	let readonly = false;
+	/** Overlay mode (setOpenOnClick): selecting with the mouse, or Enter, also opens the target's editor in the host. */
+	let openOnClick = false;
 	let strings: CanvasStrings = DEFAULT_CANVAS_STRINGS;
 	/** The render in flight; a newer `render` aborts it. */
 	let pending: AbortController | null = null;
@@ -100,7 +109,11 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 	let deferredRender: string | null = null;
 
 	const overlay = new CanvasOverlay(doc, {
-		onBreadcrumb: (target) => select(target),
+		onBreadcrumb: (target) => {
+			select(target);
+			// Overlay mode: a parent block covered by its children can only be reached this way with the mouse.
+			if (openOnClick) openEditor(target);
+		},
 		strings: () => strings,
 		// A page property that doesn't vary, on a page shown in one of its languages: editing it changes them all (#30).
 		note: (target) =>
@@ -108,6 +121,11 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 				? strings.sharedAcrossLanguages
 				: null,
 		blockTools: (target) => blockTools(target),
+		// Overlay mode: a click opens the block, so its tools must be reachable without selecting it.
+		toolsOnHover: () => openOnClick,
+		// Blocks only (ancestorsOf), nearest first.
+		parentBlock: (target) => index.ancestorsOf(target)[0] ?? null,
+		onParentBlock: (target) => lift(target),
 		onBlockTool: (target, action) => channel?.send({ type: 'blockAction', blockKey: target.ref.ownerKey, action }),
 		draggable: (target) =>
 			!readonly && !editing() && (target.block?.editorAlias === BLOCK_LIST || target.block?.editorAlias === BLOCK_GRID),
@@ -177,7 +195,7 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 		reserved.clear();
 
 		const areas = readonly ? [] : gridContainersOf(index.targets).filter((c) => c.areaOwnerKey && !c.blocks.length);
-		const empty: Array<{ element: Element; at: BlockPosition }> = [
+		const empty: Array<{ element: Element; at: BlockPosition; label?: string }> = [
 			...areas.map((container) => ({
 				element: container.element,
 				at: {
@@ -207,10 +225,14 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 				element.style.minHeight = `${EMPTY_BLOCK_HEIGHT}px`;
 		}
 		overlay.setPlaceholders([
-			...blank.map((target) => ({ element: target.elements[0], label: strings.editInSidePanel })),
-			...empty.map(({ element, at }) => ({
+			...blank.map((target) => ({
+				element: target.elements[0],
+				label: openOnClick ? strings.clickToEdit : strings.editInSidePanel,
+			})),
+			...empty.map(({ element, at, label }) => ({
 				element,
-				label: strings.addBlock,
+				// An empty property says which it is ("Add block to Cards"), as a page can have several; areas don't.
+				label: label ? format(strings.addBlockTo, label) : strings.addBlock,
 				line: !showEmpty,
 				onInsert: () => channel?.send({ type: 'blockInsertRequest', at }),
 			})),
@@ -416,8 +438,14 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 	/** Something is being edited in place: the element, whose events belong to the editor. */
 	const editing = () => inline.element ?? richText.element;
 
-	/** Text and rich text can be edited on the page: not read-only, and not turned off by the site (EnablePropertyLevelEditing). */
-	const editsInPlace = () => !readonly && manifest?.propertyLevelEditing !== false;
+	/**
+	 * Text and rich text can be edited on the page: not read-only, not overlay mode, and not turned off by the site
+	 * (EnablePropertyLevelEditing).
+	 */
+	const editsInPlace = () => !readonly && !openOnClick && manifest?.propertyLevelEditing !== false;
+
+	/** Asks the host to open `target`'s editor: the side panel, or in overlay mode Umbraco's block overlay. */
+	const openEditor = (target: CanvasTarget) => channel?.send({ type: 'openEditor', target: target.ref });
 
 	/** Asks to edit `target` in place; false when it isn't plain text shown as it is stored. */
 	function requestInlineEdit(target: CanvasTarget | null, from?: Node | null) {
@@ -430,7 +458,24 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 	/** The selection the host wants but the page doesn't show yet (e.g. a block just duplicated). */
 	let awaited: TargetRef | null = null;
 
-	function select(target: CanvasTarget | null, notify = true) {
+	/**
+	 * Overlay mode works per block: a property inside a block (its content or its settings) stands for that block, as
+	 * clicking it opens the block's overlay anyway. That way hovering it shows the block's frame and toolbar, so the
+	 * block can be moved or deleted from the page. A property without a Block target around it (e.g. a template that
+	 * prints a block's value without a partial) stands for itself, and so does every property outside overlay mode.
+	 */
+	function represent(target: CanvasTarget | null): CanvasTarget | null {
+		if (!openOnClick || target?.ref.kind !== 'Property' || !target.ref.ownerIsBlock) return target;
+		const key = target.ref.ownerKey;
+		return (
+			index.ancestorsOf(target).find((block) => block.ref.ownerKey === key || block.block?.settingsKey === key) ??
+			target
+		);
+	}
+
+	function select(next: CanvasTarget | null, notify = true) {
+		// Every selection goes through here (mouse, keyboard, host, re-render), so this is the one place to map it.
+		const target = represent(next);
 		const changed = target !== selected;
 		selected = target;
 		awaited = null;
@@ -443,7 +488,35 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 		if (notify) channel?.send({ type: 'select', target: target?.ref ?? null });
 	}
 
-	function hover(target: CanvasTarget | null) {
+	/**
+	 * Overlay mode: the block the hover was lifted to with the toolbar's "parent block" button. Its children are under
+	 * the pointer, but while the pointer stays inside it, it keeps the hover (and the toolbar) and a click opens it.
+	 * Only ever the hovered block: hovering anything else lets go of it (the selection stays).
+	 */
+	let lifted: CanvasTarget | null = null;
+
+	/**
+	 * Lifts the hover from `target` to the block around it, and selects that block (the "parent block" button, "Select
+	 * X"). Selecting it too leaves one block active: otherwise a child selected earlier (the block whose overlay was just
+	 * closed) keeps its selected box next to the lifted parent's. It selects without opening, like Escape; a click inside
+	 * the lifted block opens it.
+	 */
+	function lift(target: CanvasTarget) {
+		const parent = index.ancestorsOf(target)[0];
+		if (!parent) return;
+		lifted = parent;
+		hover(parent);
+		select(parent);
+	}
+
+	/** `target` is the lifted block or inside it: then that block is what the pointer is over. */
+	function inLifted(target: CanvasTarget | null) {
+		return !!lifted && !!target && (target === lifted || index.ancestorsOf(target).includes(lifted));
+	}
+
+	function hover(next: CanvasTarget | null) {
+		const target = represent(next);
+		if (target !== lifted) lifted = null;
 		if (target === hovered) return;
 		hovered = target;
 		overlay.setHover(target);
@@ -462,6 +535,8 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 	 * draggable block around what's hovered; then that block, so its handle stays in reach.
 	 */
 	function hoverTarget(next: CanvasTarget | null, x: number, y: number): CanvasTarget | null {
+		// First, before represent() would map a property to its own (inner) block.
+		if (inLifted(next)) return lifted;
 		if (!hovered || next === hovered) return next;
 		const around = [hovered, ...index.ancestorsOf(hovered)];
 		if (next && !around.includes(next)) return next;
@@ -502,27 +577,43 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 		}
 		// Clicks inside the text being edited place the caret.
 		if (editing()?.contains(event.target as Node)) return;
-		const target = index.targetAt(event.target as Element);
+		const under = index.targetAt(event.target as Element);
+		// While lifted, what's outlined is what opens: the lifted block, not the child under the pointer.
+		const target = inLifted(under) ? lifted : under;
 		if (!target) {
 			// A click on the page outside rich text being edited finishes it (another target just selects that).
 			if (richText.active) {
 				event.preventDefault();
 				richText.finish();
 			}
+			// Anywhere else on the page clears the selection. No preventDefault: links there still work. Not our own overlay
+			// (toolbar, "+", handles): its buttons act on the selection, and this capturing listener runs before theirs.
+			if (selected && event.target !== overlay.host) select(null);
 			return;
 		}
 		// Selecting, not following links or triggering the site's own click handlers.
 		event.preventDefault();
 		event.stopPropagation();
 		select(target);
+		// Overlay mode: read-only users too, Umbraco shows its overlay read-only. What's selected, i.e. the block a
+		// property inside a block stands for.
+		if (openOnClick && selected) openEditor(selected);
 	};
 	const onDoubleClick = (event: MouseEvent) => {
+		if (openOnClick) {
+			// The click before it already opened the editor; a second open would only fight the first.
+			if (index.targetAt(event.target as Element)) {
+				event.preventDefault();
+				event.stopPropagation();
+			}
+			return;
+		}
 		if (readonly || editing()) return;
 		const target = index.targetAt(event.target as Element);
 		if (!editsInPlace()) {
 			// Editing on the page is turned off: a property opens its editor in the side panel instead.
 			if (target?.ref.kind !== 'Property') return;
-			channel?.send({ type: 'openEditor', target: target.ref });
+			openEditor(target);
 		} else if (!requestInlineEdit(target, event.target as Node) && !richText.request(target)) return;
 		event.preventDefault();
 		event.stopPropagation();
@@ -561,7 +652,9 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 
 	/** The page's parts in reading order, leaving out ones that take no space (e.g. a title only in <head>). */
 	function navigable(): CanvasTarget[] {
-		const shown = index.targets.filter((t) => t.elements.some((el) => el.getClientRects().length > 0));
+		const visible = index.targets.filter((t) => t.elements.some((el) => el.getClientRects().length > 0));
+		// Overlay mode: what each part stands for, once each (Tab goes block to block, see represent()).
+		const shown = openOnClick ? [...new Set(visible.map((t) => represent(t)!))] : visible;
 		return shown.sort((a, b) => {
 			const [x, y] = [a.elements[0], b.elements[0]];
 			// A block and a property on the same element: the block first, it's around the property.
@@ -611,6 +704,11 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 	 * read-only) asks the host to take focus to its editor in the side panel.
 	 */
 	function enter(target: CanvasTarget) {
+		// Overlay mode: Enter does what a click does, straight to the editor (the keyboard way to open the overlay).
+		if (openOnClick) {
+			openEditor(target);
+			return;
+		}
 		if (editsInPlace() && (requestInlineEdit(target) || richText.request(target))) return;
 		if (target.ref.kind === 'Block') {
 			const list = navigable();
@@ -620,7 +718,7 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 				return;
 			}
 		}
-		channel?.send({ type: 'openEditor', target: target.ref });
+		openEditor(target);
 	}
 
 	doc.addEventListener('pointerover', onPointerOver, true);
@@ -683,8 +781,11 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 		const found = index.find(selectedRef);
 		select(found, false);
 		if (!found) awaited = selectedRef;
-		hovered = null;
-		overlay.setHover(null);
+		// A lift stays (e.g. after a tool on the lifted block: duplicate, settings); the host already has it as the hover
+		// (and as the selection, unless something else was selected since).
+		lifted = index.find(lifted?.ref ?? null);
+		hovered = lifted;
+		overlay.setHover(lifted);
 		overlay.setHighlight(index.find(highlighted));
 		showErrors();
 		refreshPlaceholders();
@@ -742,6 +843,18 @@ export function createRuntime(doc: Document, channel: Pick<CanvasChannel, 'send'
 			showEmpty = value;
 			refreshPlaceholders();
 		},
+		setOpenOnClick(value) {
+			if (value === openOnClick) return;
+			openOnClick = value;
+			// Lifting is an overlay mode thing (its toolbar's button).
+			if (!openOnClick) lifted = null;
+			// Nothing is edited on the page in overlay mode.
+			if (openOnClick) inline.cancel();
+			// Blank blocks say how their content is edited.
+			refreshPlaceholders();
+			// Redraw the selection: where its toolbar sits depends on it.
+			overlay.setSelection(selected, selected ? index.ancestorsOf(selected) : []);
+		},
 		setHighlight(ref) {
 			highlighted = ref;
 			overlay.setHighlight(index.find(ref));
@@ -786,6 +899,9 @@ export function handleHostMessage(runtime: CanvasRuntime, message: HostMessage) 
 			break;
 		case 'setShowEmpty':
 			runtime.setShowEmpty(message.show);
+			break;
+		case 'setOpenOnClick':
+			runtime.setOpenOnClick(message.open);
 			break;
 		case 'setStrings':
 			runtime.setStrings(message.strings);

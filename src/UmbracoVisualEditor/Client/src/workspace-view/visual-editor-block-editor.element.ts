@@ -15,7 +15,7 @@ import type { UmbDocumentTypeDetailModel } from '@umbraco-cms/backoffice/documen
 import type { UmbPropertyDatasetElement, UmbPropertyValueData } from '@umbraco-cms/backoffice/property';
 import { ArjoBlockEditController } from './block-edit.controller.js';
 import { requestElementType } from './element-type.js';
-import { pageSettings } from './page-settings.js';
+import { pageSettings, type PageSettingsTab } from './page-settings.js';
 import { locateBlock, type BlockData, type BlockDataKind, type LocatedBlock } from './property-values.js';
 
 /** Element types, by key: shared by every block editor, as blocks of one type come up again and again. */
@@ -34,6 +34,11 @@ export class ArjoVisualEditorBlockEditorElement extends UmbLitElement {
 	@property({ attribute: false }) culture: string | null = null;
 	/** The tab to show; the canvas toolbar's settings button asks for 'settings'. */
 	@property() tab: 'content' | 'settings' = 'content';
+	/**
+	 * Only this content property, with no tabs or headings: the overlay mode's hidden host for a nested block editor
+	 * (arjo-visual-editor-block-overlay), which needs just the property holding the block to open.
+	 */
+	@property() onlyAlias?: string;
 
 	@state() private _block?: LocatedBlock | null;
 	@state() private _contentType?: UmbDocumentTypeDetailModel;
@@ -110,7 +115,12 @@ export class ArjoVisualEditorBlockEditorElement extends UmbLitElement {
 			value: entry.values.find((v) => v.alias === p.alias && (v.culture ?? null) === this.#cultureOf(type, p.alias))
 				?.value,
 		}));
-		const tabs = pageSettings(type.containers, type.properties);
+		// One property only: a single unnamed tab and group, so no headings.
+		const tabs: PageSettingsTab[] = this.onlyAlias
+			? byAlias.has(this.onlyAlias)
+				? [{ name: null, groups: [{ name: null, aliases: [this.onlyAlias] }] }]
+				: []
+			: pageSettings(type.containers, type.properties);
 		if (!tabs.length) return html`<p class="hint">${this.localize.term('arjoVisualEditor_noProperties')}</p>`;
 
 		return html`
@@ -145,7 +155,8 @@ export class ArjoVisualEditorBlockEditorElement extends UmbLitElement {
 	override render() {
 		if (this._block === undefined) return nothing;
 		if (this._block === null) return html`<p class="hint">${this.localize.term('arjoVisualEditor_blockGone')}</p>`;
-		const hasSettings = !!this._block.settings;
+		// Nested block editors are content properties; the settings tab is left out with `onlyAlias`.
+		const hasSettings = !!this._block.settings && !this.onlyAlias;
 		const tab = hasSettings ? this._tab : 'content';
 		return html`
 			${

@@ -90,6 +90,9 @@ The site is the [Clean starter kit](https://github.com/prjseal/Clean-Starter-Kit
 | Single Block | Playground `hero` (`[SingleBlock] Playground Hero`) |
 | Block List | Playground `blocks` (Clean's `[BlockList] Main Content`), and Clean's `contentRows` on most pages |
 | Block Grid, nested areas | Playground `grid` (`[BlockGrid] Playground`): a two-column layout block with `left`/`right` areas |
+| Blocks inside a block's property | Playground `grid`: a `Playground Nested` block, with a callout in its Block List `items` (`[BlockList] Playground Nested`) and one in its rich text `text` |
+| Rich text blocks | Playground `body` (`[RichText] Playground`, with the block picker): a `Playground Callout` block, and the one in `Playground Nested` above |
+| A block with only settings | Playground `grid` (en-US): a `Playground Divider` block, with no content properties and Clean's Rich Text Row Settings. In Overlay mode its overlay opens on Settings. |
 | Culture variants | Languages `en-US` (default) and `da-DK`. Home has the domains `/` (en-US) and `/da` (da-DK). |
 | Properties not shown on the page | Playground's SEO and Visibility compositions |
 

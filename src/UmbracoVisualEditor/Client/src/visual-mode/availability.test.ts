@@ -1,10 +1,14 @@
 import { expect } from '@open-wc/testing';
+import type { VisualEditorConfigurationResponseModel } from '../api/index.js';
 import { isEnabledFor } from './availability.js';
 
-const settings = (overrides = {}) => ({
+const settings = (
+	overrides: Partial<VisualEditorConfigurationResponseModel> = {},
+): VisualEditorConfigurationResponseModel => ({
 	enabled: true,
-	allowedDocumentTypes: [] as Array<string>,
-	excludedDocumentTypes: [] as Array<string>,
+	allowedDocumentTypes: [],
+	excludedDocumentTypes: [],
+	editorMode: 'SidePanel',
 	...overrides,
 });
 

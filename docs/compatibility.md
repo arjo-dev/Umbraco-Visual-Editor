@@ -80,7 +80,7 @@ Without it, the block's text can still be edited in place (its values are marked
 
 Umbraco's `GetBlockListHtml` and `GetBlockGridHtml` (and their async versions) write nothing at all for an empty Block List or Block Grid. They don't even run its partial, so on its own the page has nothing to show where the first block would go.
 
-The package has its own versions of those helpers in the `UmbracoVisualEditor.Extensions` namespace. They take the same arguments, call Umbraco's and write the same output. In the Visual editor, they also mark where an empty one would be: an element with no height, so the page's layout doesn't change. Hovering over that spot shows a line with an **Add block** button. The toolbar's **Show empty block areas** toggle gives these spots, and empty grid areas, room on the page.
+The package has its own versions of those helpers in the `UmbracoVisualEditor.Extensions` namespace. They take the same arguments, call Umbraco's and write the same output. In the Visual editor, they also mark where an empty one would be: an element with no height, so the page's layout doesn't change. Hovering over that spot shows a line with an **Add block** button, which names the property ("Add block to Cards"), as a page can have several empty ones. The name is the property's name on its document or element type. A name that is a dictionary key (`#cardsTitle`) shows as it is, like the other labels on the page. The toolbar's **Show empty block areas** toggle gives these spots, and empty grid areas, room on the page.
 
 Views use them instead of Umbraco's once they import that namespace. Nothing else in the template changes, because a view's `Html` matches them more closely than Umbraco's.
 
@@ -186,6 +186,23 @@ Both files are loaded with a version from their content (`?v=…`), so browsers 
 - **Scripts that build markup after the page loads** (a carousel, a code highlighter) aren't run again when an edit is patched into the page (#18). What they add may be missing until the page is reloaded. They can set themselves up again on the [re-render events](#scripts-for-the-visual-editor-only-and-re-render-events), and a [stylesheet for the Visual editor](#styles-for-the-visual-editor-only) can make up for what they'd show or hide.
 - **Output caching and publishing.** Render sessions are never output-cached, but the site's own pages are, as the site configures them. After publishing from the Visual editor, visitors see the change once the cached page expires or is evicted, exactly as when publishing from the Content tab.
 - **Strict Content Security Policies** need to allow the canvas script (see [security.md](security.md)).
+
+### Overlay mode
+
+In Overlay mode (`VisualEditor:EditorMode: Overlay`), blocks are edited in Umbraco's own block overlay. To open one, the Visual editor mounts the property holding the block, hidden, and asks the block's own entry to open it, as a click on the Content tab would ([ADR 0005](adr/0005-block-overlay-mode.md)). That brings some limits:
+
+- **Nothing is edited on the page itself.** There's no inline editing, no **Page settings** list and no error list. The document's own properties (outside blocks) are edited on the **Content** tab.
+- **A block with nothing to edit doesn't open.** As on the Content tab, a block without content or settings properties (a divider, or a layout block that only has areas) has no overlay. It can still be moved, duplicated or deleted from its toolbar.
+- **Server validation errors don't show in the overlay of a nested block** (a block inside another block's property). They're still marked on the page, and in the overlay of a top-level block.
+- **Custom Block Grid views** must render their areas with `<umb-block-grid-areas-container>`, or the blocks in those areas can't be opened.
+- **Not supported:** blocks nested in a block's *settings*, and segments.
+- **Rich text blocks inside a block.** A block in rich text that is itself in a block (a Rich Text property of a nested block) opens the overlay of the block around the rich text, not its own.
+- **A click in an empty grid area's box** opens the block the area belongs to. Its **Add block** button adds a block to the area.
+- **The overlay takes a moment to show and to go.** Umbraco shows a block's overlay a few seconds after the click, and removes it a few seconds after **Update** or **Close**. On the Content tab that's about 2.5 s on a local site, and a little longer in the Visual editor.
+  - While it's on its way, a click on another block is ignored.
+  - Until it has gone, Umbraco's backdrop still covers the page, so a click there does nothing (as on the Content tab).
+  - Undo and redo (Ctrl+Z) do nothing until it has gone.
+- **Closing the overlay of a block just added keeps the block.** The block is added first and its overlay opens afterwards, so **Close** leaves it in place, unlike Umbraco's own create flow. Undo removes it.
 
 ## Output caching and render sessions
 
