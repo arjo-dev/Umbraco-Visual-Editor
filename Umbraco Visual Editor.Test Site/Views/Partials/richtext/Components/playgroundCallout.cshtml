@@ -1,0 +1,12 @@
+@inherits UmbracoViewPage<RichTextBlockItem>
+@using Umbraco.Cms.Core.Models.Blocks
+@*
+    A callout placed as a block in rich text: Playground body, and the text of Playground Nested.
+*@
+@{
+    var text = Model.Content.Value<string>("text");
+}
+
+<aside class="playground-callout my-2 p-3 bg-light border-start border-4 border-primary">
+    @text
+</aside>

@@ -135,12 +135,16 @@ export function resolveMarkers(manifest: MarkerManifest, root: Document = docume
 
 /**
  * Empty Block Lists and Grids a template marks with `Html.VisualEditorEmptyBlocks` (#97): Umbraco writes nothing for
- * an empty one, so the helper writes an element with no height where it would be. Where a block added there goes.
+ * an empty one, so the helper writes an element with no height where it would be. Where a block added there goes, and
+ * the property's name (`label`, for its "Add block" button) when the server knows it. The label isn't part of `at`,
+ * which goes to the host as it is.
  */
-export function readEmptyBlockSpots(root: Document = document): Array<{ element: Element; at: BlockPosition }> {
-	const spots: Array<{ element: Element; at: BlockPosition }> = [];
+export function readEmptyBlockSpots(
+	root: Document = document,
+): Array<{ element: Element; at: BlockPosition; label?: string }> {
+	const spots: Array<{ element: Element; at: BlockPosition; label?: string }> = [];
 	for (const element of root.querySelectorAll('[data-uve-empty-blocks]')) {
-		let spot: { ownerKey?: unknown; propertyAlias?: unknown; editorAlias?: unknown };
+		let spot: { ownerKey?: unknown; propertyAlias?: unknown; editorAlias?: unknown; label?: unknown };
 		try {
 			spot = JSON.parse(element.getAttribute('data-uve-empty-blocks')!);
 		} catch {
@@ -150,7 +154,7 @@ export function readEmptyBlockSpots(root: Document = document): Array<{ element:
 		const at: BlockPosition = { ownerKey: spot.ownerKey, propertyAlias: spot.propertyAlias, areaKey: null, index: 0 };
 		// The host tells grid positions by `areaOwnerKey` being there: null for the grid's root.
 		if (spot.editorAlias === 'Umbraco.BlockGrid') Object.assign(at, { areaOwnerKey: null, areaAlias: null });
-		spots.push({ element, at });
+		spots.push(typeof spot.label === 'string' && spot.label ? { element, at, label: spot.label } : { element, at });
 	}
 	return spots;
 }

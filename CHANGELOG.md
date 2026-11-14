@@ -10,7 +10,7 @@ The first release.
 
 ### Added
 
-- **The Visual editor:** a tab on documents with a template, showing the page as your site renders it, with changes that aren't saved yet. Umbraco's own header, culture switcher and Save / Save and publish stay as they are. While it's open, the content tree is hidden to give the page room. There's a toggle to show it again.
+- **The Visual editor:** a tab on documents with a template, showing the page as your site renders it, with changes that aren't saved yet. Umbraco's own header, culture switcher and Save / Save and publish stay as they are. While it's open, the content tree is hidden to give the page room (in Overlay mode it shows by default). There's a toggle to show or hide it.
 - **Live preview:** the page is rendered again, and patched in without reloading, as values change. Scroll position and focus are kept.
 - **Editing in place:**
   - Textstring and Textarea text can be edited in place on the page.
@@ -31,9 +31,10 @@ The first release.
 - **Keyboard navigation** on the page (Tab, the arrow keys, Enter and Escape), screen reader announcements, and backoffice localisation (English).
 - **Configuration:** a `VisualEditor` appsettings section (`Enabled`, `AllowedDocumentTypes`, `ExcludedDocumentTypes`, and `EnablePropertyLevelEditing` to turn off editing text and rich text on the page), validated at startup and included in the appsettings JSON schema.
 - **Blocks are recognised by their views**, whether a view gets the block or just its content element. **`Html.VisualEditorBlock`** marks markup a loop writes itself. **Empty Block Lists and Block Grids** can have their first block added on the page: the package's own `GetBlockListHtml` and `GetBlockGridHtml` (namespace `UmbracoVisualEditor.Extensions`, added as a global using, or in `_ViewImports.cshtml` for runtime-compiled views) mark where they'd be, and `Html.VisualEditorEmptyBlocks` does for other markup. `VisualEditor:AutoMarkEmptyBlocks` and the `VisualEditorGlobalUsing` MSBuild property turn it off.
-- **Empty places to add blocks to** (empty grid areas, and empty block properties) leave the page's layout alone, and show a line with "Add block" on hover. A toolbar toggle, **Show empty block areas**, gives them room on the page instead.
+- **Empty places to add blocks to** (empty grid areas, and empty block properties) leave the page's layout alone, and show a line with "Add block" on hover. For an empty block property, the button names it ("Add block to Cards"). A toolbar toggle, **Show empty block areas**, gives them room on the page instead.
 - **Styles and scripts for the Visual editor only:** a site's `wwwroot/App_Plugins/ArjoVisualEditor/backoffice-render.css` and `backoffice-render.js`, if it has them, are loaded into its pages in the Visual editor, and never on the live site.
 - **Re-render events:** `visual-editor:before-render` and `visual-editor:rendered` on the page's `document`, so scripts can set themselves up again after an edit is patched in.
+- **Overlay mode** (`VisualEditor:EditorMode: Overlay`): no side panel, and clicking a block opens Umbraco's own block overlay, nested blocks included. The page works per block, with a hovered block's toolbar inside its corner and a **parent block** button on nested blocks. Document properties are edited on the Content tab. The content tree shows by default in this mode. `SidePanel` stays the default.
 - **Support for Umbraco 17 and 18.**
 
 ### Security

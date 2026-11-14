@@ -78,6 +78,7 @@ describe('parseHostMessage', () => {
 		{ type: 'setErrors', errors: [] },
 		{ type: 'setReadonly', readonly: false },
 		{ type: 'setShowEmpty', show: true },
+		{ type: 'setOpenOnClick', open: true },
 		{ type: 'richTextEditing', target: title, active: true },
 		{ type: 'beginInlineEdit', target: title, maxLength: 512, multiline: false },
 		{ type: 'beginInlineEdit', target: title, maxLength: null, multiline: true },
@@ -104,6 +105,7 @@ describe('parseHostMessage', () => {
 		['setErrors with a malformed target', { type: 'setErrors', errors: [{ target: { kind: 'Page' }, message: 'x' }] }],
 		['setErrors without messages', { type: 'setErrors', errors: [{ target: title }] }],
 		['setReadonly with a string', { type: 'setReadonly', readonly: 'true' }],
+		['setOpenOnClick without a value', { type: 'setOpenOnClick' }],
 		['setDevice with zero width', { type: 'setDevice', width: 0 }],
 		['setDevice with a string width', { type: 'setDevice', width: '375px' }],
 	];

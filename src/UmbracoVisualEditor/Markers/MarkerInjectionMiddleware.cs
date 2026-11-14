@@ -68,7 +68,7 @@ internal sealed class MarkerInjectionMiddleware(RequestDelegate next)
                 ? m with { Label = type.Name, Block = m.Block is null ? null : m.Block with { ContentTypeAlias = type.Alias } }
                 : m with
                 {
-                    Label = type.CompositionPropertyTypes.FirstOrDefault(p => p.Alias == m.Alias)?.Name ?? m.Alias,
+                    Label = PropertyNames.Of(type, m.Alias) ?? m.Alias,
                     OwnerLabel = m.OwnerIsBlock ? type.Name : null,
                 };
         }).ToList();

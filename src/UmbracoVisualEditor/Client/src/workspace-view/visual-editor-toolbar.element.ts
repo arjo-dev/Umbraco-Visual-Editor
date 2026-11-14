@@ -37,6 +37,11 @@ export class ArjoVisualEditorToolbarElement extends UmbLitElement {
 	/** There are changes to undo / redo (#33). */
 	@property({ type: Boolean }) canUndo = false;
 	@property({ type: Boolean }) canRedo = false;
+	/**
+	 * Overlay mode (VisualEditor:EditorMode Overlay): there's no side panel, so its toggle is left out, and so is the
+	 * "Standard editor" link, as the Content tab shows beside the view (not just hidden, so the keyboard can't reach them).
+	 */
+	@property({ type: Boolean }) overlayMode = false;
 
 	#chooseDevice(alias: VisualEditorDeviceAlias) {
 		this.dispatchEvent(new CustomEvent<VisualEditorDeviceAlias>('device-change', { detail: alias }));
@@ -88,15 +93,21 @@ export class ArjoVisualEditorToolbarElement extends UmbLitElement {
 	override render() {
 		return html`
 			<div class="group">
+				${
+					// Overlay mode keeps the backoffice as it is: the Content tab is right there in the view tabs.
+					this.overlayMode
+						? nothing
+						: html`<uui-button
+								look="secondary"
+								compact
+								label=${this.localize.term('arjoVisualEditor_standardEditor')}
+								href=${this.standardEditorHref ?? nothing}
+							>
+								<uui-icon name="icon-arrow-left"></uui-icon> ${this.localize.term('arjoVisualEditor_standardEditor')}
+							</uui-button>`
+				}
 				<uui-button
-					look="secondary"
-					compact
-					label=${this.localize.term('arjoVisualEditor_standardEditor')}
-					href=${this.standardEditorHref ?? nothing}
-				>
-					<uui-icon name="icon-arrow-left"></uui-icon> ${this.localize.term('arjoVisualEditor_standardEditor')}
-				</uui-button>
-				<uui-button
+					class="round"
 					compact
 					look=${this.treeVisible ? 'primary' : 'secondary'}
 					label=${this.#treeLabel}
@@ -110,6 +121,7 @@ export class ArjoVisualEditorToolbarElement extends UmbLitElement {
 
 			<div class="group" role="group" aria-label=${this.localize.term('arjoVisualEditor_history')}>
 				<uui-button
+					class="round"
 					compact
 					look="secondary"
 					label=${this.localize.term('arjoVisualEditor_undo')}
@@ -120,6 +132,7 @@ export class ArjoVisualEditorToolbarElement extends UmbLitElement {
 					<uui-icon name="icon-undo"></uui-icon>
 				</uui-button>
 				<uui-button
+					class="round"
 					compact
 					look="secondary"
 					label=${this.localize.term('arjoVisualEditor_redo')}
@@ -173,6 +186,7 @@ export class ArjoVisualEditorToolbarElement extends UmbLitElement {
 					?hidden=${!this.rendering}
 				></uui-loader-circle>
 				<uui-button
+					class="round"
 					compact
 					look=${this.showEmpty ? 'primary' : 'secondary'}
 					label=${this.#emptyLabel}
@@ -187,16 +201,20 @@ export class ArjoVisualEditorToolbarElement extends UmbLitElement {
 						<path d="M12 9.75v4.5M9.75 12h4.5" />
 					</svg>
 				</uui-button>
-				<uui-button
-					compact
-					look=${this.panelOpen ? 'primary' : 'secondary'}
-					label=${this.#panelLabel}
-					title=${this.#panelLabel}
-					aria-pressed=${this.panelOpen}
-					@click=${() => this.dispatchEvent(new CustomEvent('toggle-panel'))}
-				>
-					<uui-icon name="icon-panel-show"></uui-icon>
-				</uui-button>
+				${
+					this.overlayMode
+						? nothing
+						: html`<uui-button
+								compact
+								look=${this.panelOpen ? 'primary' : 'secondary'}
+								label=${this.#panelLabel}
+								title=${this.#panelLabel}
+								aria-pressed=${this.panelOpen}
+								@click=${() => this.dispatchEvent(new CustomEvent('toggle-panel'))}
+							>
+								<uui-icon name="icon-panel-show"></uui-icon>
+							</uui-button>`
+				}
 			</div>
 		`;
 	}
@@ -266,6 +284,13 @@ export class ArjoVisualEditorToolbarElement extends UmbLitElement {
 			stroke-width: 1.75;
 			stroke-linecap: round;
 			stroke-linejoin: round;
+		}
+
+		/* Icon-only buttons (tree, undo/redo, empty areas): round, a square box with a 50% radius. */
+		uui-button.round {
+			--uui-button-border-radius: 50%;
+			--uui-button-height: 32px;
+			width: 32px;
 		}
 
 		uui-loader-circle {

@@ -91,6 +91,12 @@ export type HostMessage =
 	 * them room on the page with a dashed box; otherwise they leave the layout alone and show a line on hover.
 	 */
 	| { type: 'setShowEmpty'; show: boolean }
+	/**
+	 * Overlay mode (VisualEditor:EditorMode): a click, a breadcrumb or Enter also asks the host to open the target's
+	 * editor (`openEditor`, Umbraco's block overlay), and nothing is edited on the page. Additive: an older canvas drops
+	 * it (unknown type), so the protocol version stays.
+	 */
+	| { type: 'setOpenOnClick'; open: boolean }
 	/** Rich text is (or is no longer) being edited in place: the canvas leaves that element alone meanwhile. */
 	| { type: 'richTextEditing'; target: TargetRef; active: boolean }
 	/** Go ahead with an `inlineEditStart`. Not sent when it can't be edited in place (the side panel is used instead). */
@@ -169,6 +175,7 @@ const hostValidators: Record<HostMessageType, (m: Obj) => boolean> = {
 		Array.isArray(m.errors) && m.errors.every((e) => isObj(e) && isTargetRef(e.target) && isStr(e.message)),
 	setReadonly: (m) => typeof m.readonly === 'boolean',
 	setShowEmpty: (m) => typeof m.show === 'boolean',
+	setOpenOnClick: (m) => typeof m.open === 'boolean',
 	richTextEditing: (m) => isTargetRef(m.target) && typeof m.active === 'boolean',
 	beginInlineEdit: (m) =>
 		isTargetRef(m.target) &&

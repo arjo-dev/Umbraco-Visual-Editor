@@ -71,22 +71,29 @@ const manifest = {
 	],
 };
 
-/** A render-session-like page: manifest, a marked title and a nested block with a caption. */
+type TestMarker = (typeof manifest.markers)[number] | Record<string, unknown>;
+
+/**
+ * A render-session-like page: manifest, a marked title and a nested block with a caption. `inner` adds markup inside
+ * the inner block, `after` at the end of the page; `markers` replaces the manifest's markers.
+ */
 const pageHtml = ({
 	title = 'Hello',
 	caption = 'A caption',
+	inner = '',
 	after = '',
+	markers = manifest.markers as TestMarker[],
 	propertyLevelEditing = undefined as boolean | undefined,
 } = {}) => `<!doctype html><body style="margin:0">
 		<h1 id="title" style="margin:40px 0 0">${stega(1)}${title}</h1>
 		<!--uve:b:2--><div id="outer" style="padding:20px"><!--uve:b:3--><div id="inner" style="padding:20px">
-			<p id="caption">${stega(4)}${caption}</p>
+			<p id="caption">${stega(4)}${caption}</p>${inner}
 		</div><!--/uve:b:3--></div><!--/uve:b:2-->
 		<p id="plain">Not editable</p>
 		<input id="field">
 		<div style="height:2000px"></div>
 		${after}
-		<script type="application/json" id="uve-markers">${JSON.stringify({ ...manifest, propertyLevelEditing })}</script>
+		<script type="application/json" id="uve-markers">${JSON.stringify({ ...manifest, markers, propertyLevelEditing })}</script>
 	</body>`;
 
 /** The page in a same-origin frame. */
@@ -296,6 +303,23 @@ describe('canvas runtime', () => {
 		expect(lastSelect()).to.equal(undefined);
 	});
 
+	it('clears the selection on a click outside any target, without blocking that click', () => {
+		click(doc, 'caption');
+		const win = doc.defaultView as typeof window;
+		const event = new win.MouseEvent('click', { bubbles: true, cancelable: true, button: 0 });
+		doc.getElementById('plain')!.dispatchEvent(event);
+		expect(lastSelect()?.type === 'select' && lastSelect()).to.include({ target: null });
+		expect(event.defaultPrevented).to.equal(false);
+		expect(runtime.overlay.host.shadowRoot!.querySelector('.box.selected')).to.equal(null);
+	});
+
+	it('keeps the selection on a click on its own overlay (toolbar, "+")', () => {
+		click(doc, 'caption');
+		const win = doc.defaultView as typeof window;
+		runtime.overlay.host.dispatchEvent(new win.MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
+		expect(lastSelect()?.type === 'select' && lastSelect()).to.have.nested.include({ 'target.alias': 'caption' });
+	});
+
 	it('reports hover changes once each', () => {
 		pointerOver(doc, 'title');
 		pointerOver(doc, 'title');
@@ -304,6 +328,14 @@ describe('canvas runtime', () => {
 			'title',
 			'caption',
 		]);
+	});
+
+	it('keeps the block toolbar for the selection in side panel mode, not on hover', () => {
+		pointerOver(doc, 'inner');
+		expect(runtime.overlay.host.shadowRoot!.querySelector('.box.hover [role="toolbar"]')).to.equal(null);
+		pointerOver(doc, 'caption');
+		const hover = [...sent].reverse().find((m) => m.type === 'hover');
+		expect(hover?.type === 'hover' && hover.target).to.include({ kind: 'Property', alias: 'caption' });
 	});
 
 	it("shows the host's selection without echoing it back", () => {
@@ -342,6 +374,292 @@ describe('canvas runtime', () => {
 		expect(
 			sent.filter((m) => m.type === 'openEditor').map((m) => m.type === 'openEditor' && m.target.alias),
 		).to.deep.equal(['title', 'caption']);
+	});
+
+	describe('overlay mode (setOpenOnClick)', () => {
+		const opened = () => sent.filter((m) => m.type === 'openEditor').map((m) => m.type === 'openEditor' && m.target);
+		const dblclick = (id: string) => {
+			const win = doc.defaultView as typeof window;
+			doc.getElementById(id)!.dispatchEvent(new win.MouseEvent('dblclick', { bubbles: true, cancelable: true }));
+		};
+
+		const toolbars = () => [...runtime.overlay.host.shadowRoot!.querySelectorAll('[role="toolbar"]')];
+		const markerOf = (id: number) => manifest.markers.find((m) => m.id === id)!;
+		const innerPlacement = markerOf(3).block!;
+		/** Starts the runtime again on another page, in overlay mode. */
+		async function restart(options: Parameters<typeof pageHtml>[0]) {
+			runtime.destroy();
+			frame.remove();
+			({ frame, doc } = await page(pageHtml(options)));
+			sent = [];
+			runtime = createRuntime(doc, { send: (m) => sent.push(m) })!;
+			handleHostMessage(runtime, { type: 'setOpenOnClick', open: true });
+		}
+
+		beforeEach(() => handleHostMessage(runtime, { type: 'setOpenOnClick', open: true }));
+
+		it('works per block: a property inside a block selects and opens that block', () => {
+			click(doc, 'caption');
+			expect(lastSelect()?.type === 'select' && lastSelect()).to.have.nested.include({
+				'target.kind': 'Block',
+				'target.ownerKey': 'inner',
+			});
+			expect(opened()).to.have.length(1);
+			expect(opened()[0]).to.include({ kind: 'Block', ownerKey: 'inner' });
+		});
+
+		it('keeps page properties as they are', () => {
+			click(doc, 'title');
+			expect(opened()[0]).to.include({ kind: 'Property', alias: 'title' });
+		});
+
+		it('hovers the block a property inside it stands for, with the block toolbar inside its corner', () => {
+			pointerOver(doc, 'caption');
+			const hover = [...sent].reverse().find((m) => m.type === 'hover');
+			expect(hover?.type === 'hover' && hover.target).to.include({ kind: 'Block', ownerKey: 'inner' });
+			const bars = toolbars();
+			expect(bars).to.have.length(1);
+			expect(bars[0].closest('.box')!.classList.contains('hover')).to.equal(true);
+			expect(bars[0].classList.contains('inside')).to.equal(true);
+		});
+
+		it('maps a property of a block’s settings to that block', async () => {
+			await restart({
+				inner: `<span id="theme">${stega(5)}Dark</span>`,
+				markers: [
+					...manifest.markers.map((m) =>
+						m.id === 3 ? { ...m, block: { ...innerPlacement, settingsKey: 'inner-settings' } } : m,
+					),
+					{ ...markerOf(4), id: 5, ownerKey: 'inner-settings', alias: 'theme', label: 'Theme' },
+				],
+			});
+			click(doc, 'theme');
+			expect(opened()[0]).to.include({ kind: 'Block', ownerKey: 'inner' });
+		});
+
+		it('maps a selection the host asks for too, e.g. an error revealed on the page', () => {
+			handleHostMessage(runtime, {
+				type: 'setSelection',
+				target: runtime.index.targets.find((t) => t.ref.alias === 'caption')!.ref,
+				reveal: true,
+			});
+			expect(selectionLabel(runtime).name).to.equal('Image Row');
+		});
+
+		it('tabs from block to block, still reaching a property with no block around it', async () => {
+			await restart({
+				after: `<p id="orphan">${stega(6)}Printed without a partial</p>`,
+				markers: [...manifest.markers, { ...markerOf(4), id: 6, ownerKey: 'orphan', alias: 'orphan' }],
+			});
+			const win = doc.defaultView as typeof window;
+			const order: Array<string | undefined> = [];
+			for (let i = 0; i < 4; i++) {
+				doc.body.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+				const msg = lastSelect();
+				order.push(msg?.type === 'select' ? `${msg.target?.kind}:${msg.target?.alias ?? msg.target?.ownerKey}` : '');
+			}
+			expect(order).to.deep.equal(['Property:title', 'Block:outer', 'Block:inner', 'Property:orphan']);
+		});
+
+		it('shows one toolbar at a time: on the hovered block, otherwise on the selected one', async () => {
+			// The outer block gets a placement too, so it has tools of its own.
+			await restart({
+				markers: manifest.markers.map((m) =>
+					m.id === 2
+						? {
+								...m,
+								block: { ...innerPlacement, propertyAlias: 'blocks', ownerKey: 'doc', ownerIsBlock: false, path: [] },
+							}
+						: m,
+				),
+			});
+			handleHostMessage(runtime, {
+				type: 'setSelection',
+				target: runtime.index.targets.find((t) => t.ref.ownerKey === 'outer')!.ref,
+			});
+			pointerOver(doc, 'title');
+			expect(toolbars().map((bar) => bar.closest('.box')!.classList.contains('selected'))).to.deep.equal([true]);
+			pointerOver(doc, 'inner');
+			expect(toolbars().map((bar) => bar.closest('.box')!.classList.contains('hover'))).to.deep.equal([true]);
+		});
+
+		it('opens a nested block directly', () => {
+			click(doc, 'inner');
+			expect(opened()[0]).to.include({ kind: 'Block', ownerKey: 'inner' });
+		});
+
+		it('edits nothing on the page, and a double-click opens nothing more', () => {
+			click(doc, 'title');
+			dblclick('title');
+			expect(sent.some((m) => m.type === 'inlineEditStart' || m.type === 'richTextEditStart')).to.equal(false);
+			expect(opened()).to.have.length(1);
+		});
+
+		it('opens a parent block from the breadcrumb', () => {
+			click(doc, 'caption');
+			(runtime.overlay.host.shadowRoot!.querySelector('.crumb') as HTMLButtonElement).click();
+			expect(opened().map((t) => t && t.ownerKey)).to.deep.equal(['inner', 'outer']);
+		});
+
+		it('opens the selection on Enter, rather than going into the block', () => {
+			const win = doc.defaultView as typeof window;
+			handleHostMessage(runtime, {
+				type: 'setSelection',
+				target: runtime.index.targets.find((t) => t.ref.ownerKey === 'outer')!.ref,
+			});
+			doc.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Enter' }));
+			expect(opened()[0]).to.include({ kind: 'Block', ownerKey: 'outer' });
+		});
+
+		it('only selects while navigating with the keyboard', () => {
+			const win = doc.defaultView as typeof window;
+			click(doc, 'caption');
+			doc.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Escape' }));
+			doc.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'ArrowDown' }));
+			expect(opened()).to.have.length(1);
+		});
+
+		it('still opens for read-only users: the overlay shows read-only', () => {
+			handleHostMessage(runtime, { type: 'setReadonly', readonly: true });
+			click(doc, 'inner');
+			expect(opened()).to.have.length(1);
+		});
+
+		describe('"parent block" button (nested blocks)', () => {
+			/** The outer block placed too (a layout in the page's blocks), so it has tools of its own. */
+			const outerPlaced = () =>
+				manifest.markers.map((m) =>
+					m.id === 2
+						? {
+								...m,
+								block: { ...innerPlacement, propertyAlias: 'blocks', ownerKey: 'doc', ownerIsBlock: false, path: [] },
+							}
+						: m,
+				);
+			/** What the host was last told is hovered, as "Kind:alias-or-owner". */
+			const hovered = () => {
+				const msg = [...sent].reverse().find((m) => m.type === 'hover');
+				const target = msg?.type === 'hover' ? msg.target : undefined;
+				// null: told nothing is hovered; undefined: never told.
+				return target ? `${target.kind}:${target.alias ?? target.ownerKey}` : target;
+			};
+			const parentButton = () => runtime.overlay.host.shadowRoot!.querySelector<HTMLButtonElement>('.tool.parent');
+			const boxes = (kind: 'hover' | 'selected') => runtime.overlay.host.shadowRoot!.querySelectorAll(`.box.${kind}`);
+
+			beforeEach(() => restart({ markers: outerPlaced() }));
+
+			it("comes first on a nested block's toolbar, and not on the outermost block's", () => {
+				pointerOver(doc, 'inner');
+				expect(toolbars()).to.have.length(1);
+				const first = toolbars()[0].querySelector('.tool')!;
+				expect(first.classList.contains('parent')).to.equal(true);
+				expect(first.getAttribute('aria-label')).to.equal('Select Two Column');
+
+				pointerOver(doc, 'outer');
+				expect(hovered()).to.equal('Block:outer');
+				expect(toolbars()).to.have.length(1);
+				expect(parentButton()).to.equal(null);
+			});
+
+			it('lifts the hover to the parent block and selects it, with its toolbar, without a block action', () => {
+				pointerOver(doc, 'caption');
+				sent = [];
+				parentButton()!.click();
+				expect(hovered()).to.equal('Block:outer');
+				const msg = lastSelect();
+				expect(msg?.type === 'select' && msg.target).to.include({ kind: 'Block', ownerKey: 'outer' });
+				expect(selectionLabel(runtime).name).to.equal('Two Column');
+				expect(toolbars()).to.have.length(1);
+				expect(toolbars()[0].closest('.box')!.classList.contains('selected')).to.equal(true);
+				expect(sent.some((m) => m.type === 'blockAction')).to.equal(false);
+				// Selected, not opened: a click inside it opens it.
+				expect(opened()).to.have.length(0);
+			});
+
+			it('leaves only the parent active when the child was selected (its overlay just closed)', () => {
+				click(doc, 'caption');
+				expect(opened().slice(-1)[0]).to.include({ kind: 'Block', ownerKey: 'inner' });
+				pointerOver(doc, 'caption');
+				parentButton()!.click();
+
+				expect(boxes('selected')).to.have.length(1);
+				expect(boxes('hover')).to.have.length(0);
+				expect(selectionLabel(runtime).name).to.equal('Two Column');
+				// Two Column is the outermost block here, so its toolbar has no parent button of its own.
+				expect(parentButton()).to.equal(null);
+
+				click(doc, 'caption');
+				expect(opened().slice(-1)[0]).to.include({ kind: 'Block', ownerKey: 'outer' });
+			});
+
+			it('keeps the lift while the pointer is inside the parent, and lets go outside it', () => {
+				pointerOver(doc, 'inner');
+				parentButton()!.click();
+				pointerOver(doc, 'caption');
+				expect(hovered()).to.equal('Block:outer');
+				pointerOver(doc, 'inner');
+				expect(hovered()).to.equal('Block:outer');
+
+				pointerOver(doc, 'title');
+				expect(hovered()).to.equal('Property:title');
+				// Let go: the children hover again.
+				pointerOver(doc, 'inner');
+				expect(hovered()).to.equal('Block:inner');
+			});
+
+			it('opens the lifted block on a click inside it', () => {
+				pointerOver(doc, 'caption');
+				parentButton()!.click();
+				click(doc, 'caption');
+				expect(opened()).to.have.length(1);
+				expect(opened()[0]).to.include({ kind: 'Block', ownerKey: 'outer' });
+			});
+
+			it('keeps the lift through a re-render, and drops it when the pointer leaves the page', async () => {
+				const realFetch = window.fetch;
+				const html = pageHtml({ markers: outerPlaced(), title: 'Hello again' });
+				window.fetch = (async () => new Response(html, { headers: { 'content-type': 'text/html' } })) as typeof fetch;
+				try {
+					pointerOver(doc, 'inner');
+					parentButton()!.click();
+					await runtime.render('/__visual-editor/render/2');
+					pointerOver(doc, 'caption');
+					expect(hovered()).to.equal('Block:outer');
+					expect(selectionLabel(runtime).name).to.equal('Two Column');
+				} finally {
+					window.fetch = realFetch;
+				}
+
+				const win = doc.defaultView as typeof window;
+				doc.documentElement.dispatchEvent(new win.PointerEvent('pointerleave'));
+				expect(hovered()).to.equal(null);
+				pointerOver(doc, 'caption');
+				expect(hovered()).to.equal('Block:inner');
+			});
+
+			it('ignores the second click of a double-click', () => {
+				pointerOver(doc, 'inner');
+				const win = doc.defaultView as typeof window;
+				parentButton()!.dispatchEvent(new win.MouseEvent('click', { detail: 2, bubbles: true, cancelable: true }));
+				expect(hovered()).to.equal('Block:inner');
+			});
+
+			it('leaves no toolbar on a parent without tools or a parent of its own', async () => {
+				await restart({});
+				pointerOver(doc, 'inner');
+				parentButton()!.click();
+				expect(hovered()).to.equal('Block:outer');
+				expect(toolbars()).to.have.length(0);
+			});
+
+			it('is not there in side panel mode', () => {
+				handleHostMessage(runtime, { type: 'setOpenOnClick', open: false });
+				click(doc, 'inner');
+				pointerOver(doc, 'inner');
+				expect(toolbars()).to.have.length(1);
+				expect(parentButton()).to.equal(null);
+			});
+		});
 	});
 
 	it('draws the selection box over the element', async () => {
@@ -794,14 +1112,15 @@ describe('canvas runtime', () => {
 		});
 
 		describe('empty block properties a template marks (#97)', () => {
-			const spot = (editorAlias: string) =>
-				`<div id="empty" data-uve-empty-blocks='${JSON.stringify({ ownerKey: 'doc', ownerIsBlock: false, propertyAlias: 'grid', editorAlias })}' style="display:block;height:0"></div>`;
+			const spot = (editorAlias: string, label: string | null = null) =>
+				`<div id="empty" data-uve-empty-blocks='${JSON.stringify({ ownerKey: 'doc', ownerIsBlock: false, propertyAlias: 'grid', editorAlias, label })}' style="display:block;height:0"></div>`;
 			const placeholder = () => runtime.overlay.host.shadowRoot!.querySelector<HTMLElement>('.placeholder');
+			const addButton = () => placeholder()!.querySelector<HTMLButtonElement>('.placeholder-add')!;
 
-			async function load(editorAlias = 'Umbraco.BlockGrid') {
+			async function load(editorAlias = 'Umbraco.BlockGrid', label: string | null = null) {
 				runtime.destroy();
 				frame.remove();
-				({ frame, doc } = await page(pageHtml({ after: spot(editorAlias) })));
+				({ frame, doc } = await page(pageHtml({ after: spot(editorAlias, label) })));
 				runtime = createRuntime(doc, { send: (m) => sent.push(m) })!;
 				sent = [];
 			}
@@ -824,6 +1143,29 @@ describe('canvas runtime', () => {
 						},
 					},
 				]);
+			});
+
+			it("names the property on its button, when the server knows the name, and doesn't send it on", async () => {
+				await load('Umbraco.BlockList', 'Featured articles');
+				expect(addButton().textContent).to.equal('+ Add block to Featured articles');
+				expect(addButton().title).to.equal('Add block to Featured articles');
+				addButton().click();
+				expect(sent).to.deep.equal([
+					{ type: 'blockInsertRequest', at: { ownerKey: 'doc', propertyAlias: 'grid', areaKey: null, index: 0 } },
+				]);
+			});
+
+			it('just says "Add block" without a name', async () => {
+				await load('Umbraco.BlockList');
+				expect(addButton().textContent).to.equal('+ Add block');
+			});
+
+			it('keeps a long name on one line, within its box', async () => {
+				await load('Umbraco.BlockList', 'A very long property name '.repeat(20));
+				handleHostMessage(runtime, { type: 'setShowEmpty', show: true });
+				const button = addButton();
+				expect(button.getBoundingClientRect().height).to.be.below(40);
+				expect(button.getBoundingClientRect().width).to.be.at.most(placeholder()!.getBoundingClientRect().width);
 			});
 
 			it('asks for a list position for a Block List', async () => {

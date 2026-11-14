@@ -55,10 +55,23 @@ The editor is offered on every document type that has a template. To narrow that
 | `Enabled` | `true` | Turns the Visual editor on or off everywhere. |
 | `AllowedDocumentTypes` | `[]` | Document type aliases to offer it for. Empty means all of them. |
 | `ExcludedDocumentTypes` | `[]` | Document type aliases never to offer it for. |
-| `EnablePropertyLevelEditing` | `true` | Whether text and rich text can be edited on the page itself. When `false`, double-clicking them (or pressing Enter) opens them in the side panel instead. Blocks can still be selected, moved, added and deleted on the page. |
+| `EnablePropertyLevelEditing` | `true` | Whether text and rich text can be edited on the page itself. When `false`, double-clicking them (or pressing Enter) opens them in the side panel instead. Blocks can still be selected, moved, added and deleted on the page. Ignored in `Overlay` mode. |
+| `EditorMode` | `SidePanel` | How things on the page are edited: in the side panel beside the page (`SidePanel`), or in Umbraco's own block overlay (`Overlay`). See [Overlay mode](#overlay-mode). |
 | `AutoMarkEmptyBlocks` | `true` | Whether `GetBlockListHtml` and `GetBlockGridHtml` mark where an empty Block List or Block Grid would be, so its first block can be added on the page. See [docs/compatibility.md](docs/compatibility.md#empty-block-lists-and-block-grids). |
 
 Aliases are case-insensitive. The site fails to start if an alias is blank or appears in both lists. The Visual tab is hidden where the editor isn't offered, and the render endpoint refuses those documents with a 403.
+
+### Overlay mode
+
+With `"EditorMode": "Overlay"`, the Visual editor has no side panel: the page takes the full width, and blocks are edited the way they are on the Content tab.
+
+- Clicking a block opens Umbraco's own block overlay, at the size set for its block type. A nested block opens its own overlay straight away, not its parent's.
+- The page works per block. Hovering a block's text outlines the block, with its toolbar (move, duplicate, copy, settings, delete) inside its top-right corner. A nested block's toolbar has a **parent block** button, which selects the block around it and moves the outline and toolbar there, so a layout covered by its children can still be moved or deleted. It doesn't open that block; a click on it does.
+- Nothing is edited on the page itself, so `EnablePropertyLevelEditing` doesn't apply.
+- The document's own properties (outside blocks) are edited on the **Content** tab. Clicking one on the page says so, with a link. There's no **Page settings** list or error list: validation errors are marked on the page, and ones that aren't on the page show as a notification.
+- The content tree shows by default. The toolbar's toggle hides it, and the choice is remembered.
+
+The mode is site-wide. The limitations are in [docs/compatibility.md](docs/compatibility.md#overlay-mode).
 
 ## Templates, helpers and limitations
 
@@ -79,7 +92,7 @@ The Visual editor recognises content however templates write it: models (ModelsB
 
 ### Empty Block Lists and Block Grids
 
-Umbraco's `GetBlockListHtml` and `GetBlockGridHtml` (and their async versions) write nothing at all for an empty Block List or Block Grid, so the page has nothing to show where its first block would go. The package has its own versions of those helpers, which write the same output and, in the Visual editor only, mark that spot. Hovering over it shows a line with an **Add block** button.
+Umbraco's `GetBlockListHtml` and `GetBlockGridHtml` (and their async versions) write nothing at all for an empty Block List or Block Grid, so the page has nothing to show where its first block would go. The package has its own versions of those helpers, which write the same output and, in the Visual editor only, mark that spot. Hovering over it shows a line with an **Add block** button that names the property ("Add block to Cards").
 
 Your views use the package's versions once they import its namespace, so you need this in `Views/_ViewImports.cshtml`:
 

@@ -24,8 +24,15 @@ public sealed class VisualEditorOptions
     /// <summary>
     /// Whether text and rich text can be edited on the page itself. When false, double-clicking them (or Enter) opens
     /// them in the side panel instead; blocks can still be selected, moved, added and deleted. Default: true.
+    /// Ignored when <see cref="EditorMode"/> is <see cref="VisualEditorMode.Overlay"/>: nothing is edited on the page then.
     /// </summary>
     public bool EnablePropertyLevelEditing { get; set; } = true;
+
+    /// <summary>
+    /// How things on the page are edited: in the side panel (the default), or in Umbraco's own block overlay with no side
+    /// panel (<see cref="VisualEditorMode.Overlay"/>). Default: <see cref="VisualEditorMode.SidePanel"/>.
+    /// </summary>
+    public VisualEditorMode EditorMode { get; set; } = VisualEditorMode.SidePanel;
 
     /// <summary>
     /// Whether Umbraco's <c>GetBlockListHtml</c> and <c>GetBlockGridHtml</c> (and their async versions) mark where an

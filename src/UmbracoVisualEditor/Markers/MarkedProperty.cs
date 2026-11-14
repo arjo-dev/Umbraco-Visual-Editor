@@ -84,7 +84,9 @@ internal sealed class MarkedProperty(
 
     private object EmptyBlocks(object value, bool isGrid)
     {
-        registry.RegisterEmptyBlocks(value, new EmptyBlocksSpot(ownerKey, ownerIsBlock, Alias, isGrid));
+        registry.RegisterEmptyBlocks(
+            value,
+            new EmptyBlocksSpot(ownerKey, ownerIsBlock, Alias, isGrid, PropertyType.ContentType?.Key));
         return value;
     }
 

@@ -3,7 +3,9 @@ using System.Text.Json;
 using UmbracoVisualEditor.Markers;
 using Microsoft.AspNetCore.Html;
 using Microsoft.AspNetCore.Mvc.Rendering;
+using Microsoft.Extensions.DependencyInjection;
 using Umbraco.Cms.Core.Models.Blocks;
+using Umbraco.Cms.Core.Services;
 using Umbraco.Cms.Core.Models.PublishedContent;
 
 namespace UmbracoVisualEditor.Extensions;
@@ -112,6 +114,11 @@ public static class VisualEditorHtmlHelperExtensions
             editorAlias = spot.IsGrid
                 ? Umbraco.Cms.Core.Constants.PropertyEditors.Aliases.BlockGrid
                 : Umbraco.Cms.Core.Constants.PropertyEditors.Aliases.BlockList,
+            // The property's name for the "Add block" button ("Add block to Cards"); null when it can't be found.
+            label = PropertyNames.Find(
+                html.ViewContext.HttpContext.RequestServices.GetService<IContentTypeService>(),
+                spot.ContentTypeKey,
+                spot.PropertyAlias),
         });
         return new HtmlString(
             $"<div data-uve-empty-blocks=\"{HtmlEncoder.Default.Encode(json)}\" " +

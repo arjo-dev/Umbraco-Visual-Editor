@@ -9,10 +9,12 @@ namespace UmbracoVisualEditor.Controllers;
 /// <param name="Enabled">Whether the Visual editor is offered at all.</param>
 /// <param name="AllowedDocumentTypes">Document type aliases to offer it for; empty means all.</param>
 /// <param name="ExcludedDocumentTypes">Document type aliases never to offer it for.</param>
+/// <param name="EditorMode">How things on the page are edited: the side panel, or Umbraco's block overlay.</param>
 public sealed record VisualEditorConfigurationResponseModel(
     bool Enabled,
     IReadOnlyList<string> AllowedDocumentTypes,
-    IReadOnlyList<string> ExcludedDocumentTypes);
+    IReadOnlyList<string> ExcludedDocumentTypes,
+    VisualEditorMode EditorMode);
 
 /// <summary>The Visual editor's settings (#32), for the backoffice to decide where to offer it.</summary>
 [ApiVersion("1.0")]
@@ -27,6 +29,7 @@ public sealed class ConfigurationController(IOptionsMonitor<VisualEditorOptions>
         return Ok(new VisualEditorConfigurationResponseModel(
             current.Enabled,
             current.AllowedDocumentTypes,
-            current.ExcludedDocumentTypes));
+            current.ExcludedDocumentTypes,
+            current.EditorMode));
     }
 }

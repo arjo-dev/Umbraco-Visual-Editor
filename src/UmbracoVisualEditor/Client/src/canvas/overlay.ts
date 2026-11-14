@@ -20,6 +20,19 @@ export interface OverlayOptions {
 	blockTools?: (target: CanvasTarget) => BlockTool[] | null;
 	/** A block toolbar button was pressed. */
 	onBlockTool?: (target: CanvasTarget, action: BlockAction) => void;
+	/**
+	 * Whether a hovered block gets the block toolbar too (overlay mode, where a click opens the block rather than
+	 * selecting it). There's one toolbar at a time then: on the hovered block, otherwise on the selected one. It sits
+	 * inside the block's top-right corner, so the pointer never leaves the block on its way there. A nested block's
+	 * corner can sit where its parent's toolbar would be, so the hovered block's toolbar starts with a "parent block"
+	 * button (`parentBlock`, `onParentBlock`) that moves the hover, and with it the toolbar, one level up (the runtime
+	 * selects that block too).
+	 */
+	toolsOnHover?: () => boolean;
+	/** The nearest block around `target` (for the "parent block" button with `toolsOnHover`); null for none. */
+	parentBlock?: (target: CanvasTarget) => CanvasTarget | null;
+	/** The "parent block" button on `target`'s toolbar was pressed. */
+	onParentBlock?: (target: CanvasTarget) => void;
 	/** Whether a hovered or selected block gets a drag handle (#26). */
 	draggable?: (target: CanvasTarget) => boolean;
 	/** A note for a selected target's label, e.g. "Shared across languages" (#30); null for none. */
@@ -249,8 +262,20 @@ export class CanvasOverlay {
 		}
 
 		if (this.#highlight) layer.append(this.#box(this.#highlight, 'highlight'));
-		if (this.#hover && this.#hover !== this.#selection?.target) layer.append(this.#box(this.#hover, 'hover'));
-		if (this.#selection) layer.append(this.#box(this.#selection.target, 'selected', this.#selection.ancestors));
+		const tools = this.#toolsTarget();
+		if (this.#hover && this.#hover !== this.#selection?.target)
+			layer.append(this.#box(this.#hover, 'hover', [], this.#hover === tools));
+		if (this.#selection)
+			layer.append(
+				this.#box(this.#selection.target, 'selected', this.#selection.ancestors, this.#selection.target === tools),
+			);
+	}
+
+	/** The block that gets the block toolbar: the selected one, or with `toolsOnHover` the hovered one first. */
+	#toolsTarget(): CanvasTarget | null {
+		const selected = this.#selection?.target ?? null;
+		if (!this.#options.toolsOnHover?.()) return selected;
+		return this.#hover?.ref.kind === 'Block' ? this.#hover : selected;
 	}
 
 	#errorBox(target: CanvasTarget, message: string) {
@@ -282,7 +307,8 @@ export class CanvasOverlay {
 		button.className = `add ${where}`;
 		button.title = where === 'before' ? this.#strings.addBefore : this.#strings.addAfter;
 		button.setAttribute('aria-label', button.title);
-		button.textContent = '+';
+		// Drawn, not the text "+": a glyph sits off-centre by a different amount in every font.
+		button.innerHTML = PLUS_ICON;
 		button.addEventListener('pointerdown', (event) => event.stopPropagation());
 		button.addEventListener('click', (event) => {
 			event.preventDefault();
@@ -318,6 +344,8 @@ export class CanvasOverlay {
 		button.type = 'button';
 		button.className = 'placeholder-add';
 		button.textContent = `+ ${label}`;
+		// The full text, for when a long property name is cut short (see .placeholder-add).
+		button.title = label;
 		button.addEventListener('pointerdown', (event) => event.stopPropagation());
 		button.addEventListener('click', (event) => {
 			event.preventDefault();
@@ -370,30 +398,56 @@ export class CanvasOverlay {
 		return grip;
 	}
 
-	#toolbar(target: CanvasTarget, tools: BlockTool[], inside: boolean) {
+	/**
+	 * The block toolbar: the host's tools, after a "parent block" button when `parent` is given. `top` places a toolbar
+	 * inside the block (null: above it).
+	 */
+	#toolbar(target: CanvasTarget, tools: BlockTool[], top: number | null, parent: CanvasTarget | null) {
 		const bar = this.#doc.createElement('div');
-		bar.className = `tools${inside ? ' inside' : ''}`;
+		bar.className = `tools${top !== null ? ' inside' : ''}`;
+		if (top !== null) bar.style.top = `${top}px`;
 		bar.setAttribute('role', 'toolbar');
 		bar.setAttribute('aria-label', format(this.#strings.actions, this.#label(target)));
-		for (const tool of tools) {
-			const button = this.#doc.createElement('button');
-			button.type = 'button';
-			button.className = `tool ${tool.action}`;
-			button.title = tool.label;
-			button.setAttribute('aria-label', tool.label);
-			button.disabled = !!tool.disabled;
-			button.innerHTML = ICONS[tool.action];
-			button.addEventListener('click', (event) => {
+		const button = (className: string, label: string, icon: string, press: () => void, disabled = false) => {
+			const el = this.#doc.createElement('button');
+			el.type = 'button';
+			el.className = `tool ${className}`;
+			el.title = label;
+			el.setAttribute('aria-label', label);
+			el.disabled = disabled;
+			el.innerHTML = icon;
+			el.addEventListener('click', (event) => {
 				event.preventDefault();
 				event.stopPropagation();
-				this.#options.onBlockTool?.(target, tool.action);
+				// The second click of a double-click: after "parent block" the toolbar is redrawn with other buttons under
+				// the pointer, which this click wasn't aimed at.
+				if (event.detail > 1) return;
+				press();
 			});
-			bar.append(button);
-		}
+			bar.append(el);
+		};
+		// Its own button, not a BlockTool: it isn't a blockAction for the host (the host only hears a hover and a select).
+		if (parent)
+			button('parent', format(this.#strings.selectParent, this.#label(parent)), PARENT_ICON, () =>
+				this.#options.onParentBlock?.(target),
+			);
+		for (const tool of tools)
+			button(
+				tool.action,
+				tool.label,
+				ICONS[tool.action],
+				() => this.#options.onBlockTool?.(target, tool.action),
+				!!tool.disabled,
+			);
 		return bar;
 	}
 
-	#box(target: CanvasTarget, kind: 'hover' | 'selected' | 'highlight' | 'dragging', ancestors: CanvasTarget[] = []) {
+	#box(
+		target: CanvasTarget,
+		kind: 'hover' | 'selected' | 'highlight' | 'dragging',
+		ancestors: CanvasTarget[] = [],
+		withTools = false,
+	) {
 		const rect = unionRect(target.elements);
 		const box = this.#doc.createElement('div');
 		box.className = `box ${kind} ${target.ref.kind === 'Block' ? 'block' : 'property'}`;
@@ -433,9 +487,18 @@ export class CanvasOverlay {
 				label.append(crumb, this.#doc.createTextNode(' › '));
 			}
 		}
-		if (kind === 'selected' && target.ref.kind === 'Block') {
-			const tools = this.#options.blockTools?.(target);
-			if (tools?.length) box.append(this.#toolbar(target, tools, rect.top < 24));
+		if (withTools && target.ref.kind === 'Block') {
+			const tools = this.#options.blockTools?.(target) ?? [];
+			const onHover = !!this.#options.toolsOnHover?.();
+			// Only on the hovered block's toolbar (overlay mode), not on a selection's that isn't hovered: the button
+			// moves the hover (and the selection) one level up from the block under the pointer.
+			const parent = onHover && target === this.#hover ? (this.#options.parentBlock?.(target) ?? null) : null;
+			// With toolsOnHover always inside: above the block it would cover the block above, and the pointer would
+			// cross that block (and hover it) on its way up. Inside, it stays on screen while the block's top is scrolled
+			// out of view (a tall layout just lifted to), but within the block.
+			const top =
+				rect.top < 24 || onHover ? Math.max(4, Math.min(-rect.top + 4, rect.height - TOOLBAR_HEIGHT - 4)) : null;
+			if (parent || tools.length) box.append(this.#toolbar(target, tools, top, parent));
 		}
 
 		const name = this.#doc.createElement('span');
@@ -487,6 +550,14 @@ const ICONS: Record<BlockAction, string> = {
 	),
 };
 
+const PLUS_ICON = svg('M7 3h2v4h4v2H9v4H7V9H3V7h4z');
+
+/** "Parent block": a level-up arrow (↰), unlike Move up's straight one. */
+const PARENT_ICON = svg('M6 1.5 10.5 6 9.1 7.4 7 5.3V11h7v2H5V5.3L2.9 7.4 1.5 6z');
+
+/** Height of the block toolbar: a 20px button plus 1px padding above and below (see `.tools`, `.tool`). */
+const TOOLBAR_HEIGHT = 22;
+
 const GRIP_ICON =
 	'<svg viewBox="0 0 12 16" aria-hidden="true"><circle cx="3.5" cy="3" r="1.5"/><circle cx="8.5" cy="3" r="1.5"/><circle cx="3.5" cy="8" r="1.5"/><circle cx="8.5" cy="8" r="1.5"/><circle cx="3.5" cy="13" r="1.5"/><circle cx="8.5" cy="13" r="1.5"/></svg>';
 
@@ -522,15 +593,22 @@ const STYLES = `
 		display: grid; place-items: center; font: 700 15px/1 system-ui, sans-serif; cursor: pointer; pointer-events: auto;
 		color: #fff; background: ${PROPERTY_COLOR}; box-shadow: 0 1px 3px rgb(0 0 0 / 0.3);
 	}
+	.add svg { width: 12px; height: 12px; fill: currentColor; }
 	.add.before { top: -10px; }
 	.add.after { bottom: -10px; }
+	/* A block's outline sits 3px outside it (outline-offset) and is up to 2px wide, so its middle is 4px out: centre the
+	   20px button on that line rather than on the block's own edge. */
+	.block > .add.before { top: -14px; }
+	.block > .add.after { bottom: -14px; }
 	.add:hover, .add:focus-visible { transform: scale(1.12); }
 	.placeholder {
 		position: fixed; box-sizing: border-box; display: grid; place-items: center; border-radius: 3px;
 		outline: 1px dashed ${PROPERTY_COLOR}; outline-offset: -1px; background: color-mix(in srgb, ${PROPERTY_COLOR} 6%, transparent);
 	}
+	/* One line, within its box: a long property name ("Add block to …") is cut short rather than wrapping over the page. */
 	.placeholder-add {
-		all: unset; padding: 4px 10px; border-radius: 3px; cursor: pointer; pointer-events: auto; color: #fff;
+		all: unset; box-sizing: border-box; max-width: calc(100% - 8px); padding: 4px 10px; border-radius: 3px;
+		white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; pointer-events: auto; color: #fff;
 		background: ${PROPERTY_COLOR}; font-weight: 600;
 	}
 	.placeholder-add:hover, .placeholder-add:focus-visible { filter: brightness(1.15); }

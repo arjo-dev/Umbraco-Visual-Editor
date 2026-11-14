@@ -95,6 +95,11 @@ export default {
 		areaDisallows: 'The {0} area doesn’t allow this type of block.',
 		areaFull: 'The {0} area is full: it allows at most {1} blocks.',
 		tooWide: 'This block is too wide to go there.',
+
+		// Overlay mode (VisualEditor:EditorMode Overlay)
+		overlayFailed: 'This block couldn’t be opened here',
+		overlayFailedHint: 'Edit it on the Content tab instead.',
+		editOnContentTab: 'This is a page property: edit it on the Content tab.',
 	},
 	/** Sent to the canvas (setStrings). */
 	arjoVisualEditorCanvas: { ...DEFAULT_CANVAS_STRINGS },

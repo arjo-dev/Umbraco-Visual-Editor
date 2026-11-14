@@ -1,0 +1,21 @@
+@inherits UmbracoViewPage<BlockGridItem>
+@using Umbraco.Cms.Core.Models.Blocks
+@using Umbraco.Cms.Core.Strings
+@*
+    Blocks inside a block: a Block List and rich text with blocks, both properties of this block. The Visual editor
+    opens these through the block's own editor (the nested case), unlike blocks in grid areas, which belong to the grid.
+*@
+@{
+    var items = Model.Content.Value<BlockListModel>("items");
+    var text = Model.Content.Value<IHtmlEncodedString>("text");
+}
+
+<section class="playground-nested my-4 p-4 border rounded">
+    @await Html.GetBlockListHtmlAsync(items)
+    @if (text is not null)
+    {
+        <div class="richtext">
+            @text
+        </div>
+    }
+</section>

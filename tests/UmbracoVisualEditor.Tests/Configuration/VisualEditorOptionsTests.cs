@@ -13,6 +13,14 @@ public class VisualEditorOptionsTests
         => Assert.True(new VisualEditorOptions().EnablePropertyLevelEditing);
 
     [Fact]
+    public void ByDefault_TheSidePanelIsUsed()
+        => Assert.Equal(VisualEditorMode.SidePanel, new VisualEditorOptions().EditorMode);
+
+    [Fact]
+    public void EditorMode_IsSerializedByName()
+        => Assert.Equal("\"Overlay\"", System.Text.Json.JsonSerializer.Serialize(VisualEditorMode.Overlay));
+
+    [Fact]
     public void Disabled_TurnsItOffEverywhere()
         => Assert.False(new VisualEditorOptions { Enabled = false }.IsEnabledFor("home"));
 

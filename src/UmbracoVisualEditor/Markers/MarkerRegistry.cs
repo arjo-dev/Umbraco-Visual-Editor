@@ -34,9 +34,15 @@ public sealed record MarkerInfo(
 
 /// <summary>
 /// Whose empty Block List or Block Grid a converted value is (#97): where a block added to it on the page goes.
-/// <see cref="IsGrid"/> says which, from the value's type.
+/// <see cref="IsGrid"/> says which, from the value's type. <see cref="ContentTypeKey"/> is the owner's content type (the
+/// page's, or the block element's), for the property's display name on the page's "Add block" button.
 /// </summary>
-internal sealed record EmptyBlocksSpot(Guid OwnerKey, bool OwnerIsBlock, string PropertyAlias, bool IsGrid);
+internal sealed record EmptyBlocksSpot(
+    Guid OwnerKey,
+    bool OwnerIsBlock,
+    string PropertyAlias,
+    bool IsGrid,
+    Guid? ContentTypeKey = null);
 
 /// <summary>Assigns small integer ids to marker targets during one render; each target gets one id.</summary>
 public sealed class MarkerRegistry
